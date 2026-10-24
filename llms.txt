@@ -1,0 +1,261 @@
+# Echo AI Toolkit — LLM Context Bundle
+
+Paste this file as context when using GPT-4o, Gemini, local models, or any LLM that doesn't
+load the full repo. It is a compressed single-file reference for the Echo Universal API.
+
+Source: https://github.com/NetVar1337/echo-ai-toolkit
+Full API: https://echo-23.gitbook.io/angel/llms-full.txt
+
+---
+
+## What is Echo?
+
+Echo is an external scripting platform for Windows games. Scripts are written in AngelScript
+and run outside the game process. Echo provides:
+- External process memory read (no injection, no writes)
+- Discord overlay rendering (renderer namespace)
+- Zydis disassembler (proc.disasm_range)
+- Unicorn CPU emulator (emulator@)
+- JSON, HTTP, WebSocket, file I/O
+- Menu system with config persistence
+
+Scripts are placed in `%AppData%\Roaming\scripts\`. No compile step — reload from the in-game menu.
+
+---
+
+## AngelScript type rules (get these wrong → script crash)
+
+- Addresses are ALWAYS `uint64`. Never `uint32` — it silently truncates 64-bit pointers.
+- Null check: `if (ptr is null)` NOT `if (ptr == null)`
+- Array length: `arr.length()` NOT `arr.size()`
+- Float literals MUST have `f` suffix: `1.5f` not `1.5`
+- No try/catch — check return values; `proc.read` returns 0 on failure
+- No `auto` keyword — always explicit type: `uint64 x = proc.read<uint64>(addr);`
+- String format: `fmt("val: {}", x)` not `"val: " + x`
+- `nullptr` → `null`
+
+---
+
+## Script structure
+
+```angelscript
+void main() {
+    proc.attach("game.exe");
+    if (!proc.is_running()) return;
+    // scan patterns once here
+    create_thread(64, function() {
+        while (proc.is_running()) { tick(); sleep(1); }
+    });
+}
+void on_unload() { proc.detach(); }
+void on_render() { /* draw calls here — runs every frame */ }
+```
+
+---
+
+## Process / memory namespace
+
+```
+proc.attach(name)                        → void
+proc.detach()                            → void
+proc.is_running()                        → bool
+proc.read<T>(addr)                       → T  (T: uint8/16/32/64, float, double, bool, vec2/3/4)
+proc.write<T>(addr, val)                 → void  ⚠ triggers AC on kernel-protected games
+proc.scan_ida(pattern, module)           → uint64  (0 on fail)
+proc.resolve_rip(instr_addr, op_off, instr_len) → uint64  (resolves RIP-relative LEA/MOV)
+proc.get_module(name)                    → module_info@  (null if not found)
+proc.get_modules()                       → array<module_info>
+proc.disasm_range(addr, size)            → array<instruction>
+proc.query_regions()                     → array<region_info>
+```
+
+module_info fields: `.base`, `.size`, `.name`
+
+---
+
+## Renderer namespace (call only inside on_render)
+
+```
+renderer.draw_rect_filled(x,y,w,h, col)
+renderer.draw_rect_outlined(x,y,w,h, thick, col)
+renderer.draw_rect_gradient(x,y,w,h, tl,tr,bl,br)
+renderer.draw_line(x1,y1, x2,y2, col, thick)
+renderer.draw_circle(cx,cy,r, segs, col, thick)
+renderer.draw_circle_filled(cx,cy,r, segs, col)
+renderer.text(x,y, text, col, font)
+renderer.text_outlined(x,y, text, col, outline_col, font)
+renderer.measure_text(text, font)        → vec2
+renderer.load_font(family, size, bold)   → font_handle@
+renderer.width()                         → uint
+renderer.height()                        → uint
+```
+
+`color_t(r,g,b,a)` — all 0–255.
+
+---
+
+## W2S built-ins (world-to-screen)
+
+```
+source2.w2s(proc, vm_addr, world_pos, sx, sy)  → bool  (CS2, Deadlock)
+unreal.w2s(proc, vm_addr, world_pos, sx, sy)   → bool  (UE4/UE5)
+unity.w2s(proc, vm_addr, world_pos, sx, sy)    → bool  (Unity)
+source.w2s(proc, vm_addr, world_pos, sx, sy)   → bool  (CS:GO, TF2)
+```
+
+Always check the bool return — returns false when point is behind camera.
+
+---
+
+## Input namespace
+
+```
+input.key_down(vk)       → bool   (held)
+input.key_pressed(vk)    → bool   (one frame)
+mouse.move(dx, dy)       → void
+mouse.move_to(x, y)      → void
+mouse.click(btn)         → void   (0=left,1=right,2=middle)
+input.mouse_pos()        → vec2
+```
+
+Common VK codes: VK_INSERT=0x2D, VK_DELETE=0x2E, VK_HOME=0x24, VK_F1–F12=0x70–0x7B
+
+---
+
+## Menu namespace
+
+```angelscript
+menu_checkbox@ cb = menu.checkbox("Enable", false);
+menu_slider_float@ sl = menu.slider_float("Smooth", 0.0f, 1.0f, 0.08f);
+menu_color_picker@ cp = menu.color_picker("Color", color_t(255,0,0,200));
+menu_combo@ co = menu.combo("Mode", {"Off","Low","High"}, 0);
+menu_button@ bt = menu.button("Reset");
+menu_input_text@ it = menu.input_text("Name", "default");
+menu_keybind@ kb = menu.keybind("Aim key", 0x02);
+
+bool on      = cb.get();
+float val    = sl.get();
+color_t col  = cp.get();
+int idx      = co.get();
+bool clicked = bt.get();
+string text  = it.get();
+int vk       = kb.get();
+
+menu.save_config("mymod");
+menu.load_config("mymod");
+```
+
+---
+
+## Math helpers
+
+```
+math.rad_to_deg(r)   math.deg_to_rad(d)
+math.lerp(a,b,t)     math.clamp(v,lo,hi)
+math.abs(v)          math.sqrt(v)
+math.sin(r)  math.cos(r)  math.atan2(y,x)
+math.normalize_angle(a)   // wraps to [-180,180]
+math.calc_fov(src, tgt, view_angles) → float
+```
+
+vec3: `.length()`, `.normalized()`, `.dot(b)`, `.cross(b)`, `+`, `-`, `* float`
+
+---
+
+## Threading
+
+```angelscript
+create_thread(tps, callback)   // tps=0 = unlimited — always use >=1
+sleep(ms)
+mutex@ mtx = mutex();
+mtx.lock();  mtx.unlock();
+mtx.lock_shared();  mtx.unlock_shared();
+```
+
+Build into local tmp array, swap under mutex — never resize shared array mid-render.
+
+---
+
+## Unicorn emulator
+
+```angelscript
+emulator@ emu = emulator.create(UC_ARCH_X86, UC_MODE_64);
+emu.mem_map(addr, size, UC_PROT_ALL);
+emu.mem_write(addr, bytes);
+emu.reg_write(UC_X86_REG_RAX, val);
+emu.emu_start(start_addr, end_addr, timeout_us, max_insn);
+uint64 result = emu.reg_read(UC_X86_REG_RAX);
+```
+
+UC_PROT_NONE=0, READ=1, WRITE=2, EXEC=4, ALL=7
+
+---
+
+## Common patterns
+
+**Scan + RIP resolve:**
+```angelscript
+uint64 instr = proc.scan_ida("48 8B 05 ? ? ? ?", "client.dll");
+if (instr == 0) { alert("pattern failed"); return; }
+uint64 ptr = proc.resolve_rip(instr, 3, 7);
+uint64 list = proc.read<uint64>(ptr);
+```
+
+**FTransform bone read (UE4/UE5 — stride is 48 bytes):**
+```angelscript
+uint64 entry = bone_base + uint64(idx) * 48;
+float bx = proc.read<float>(entry + 16);  // translation.x
+float by = proc.read<float>(entry + 20);
+float bz = proc.read<float>(entry + 24);
+```
+
+**Cornered box:**
+```angelscript
+void draw_cornered_box(float x,float y,float w,float h, color_t col) {
+    float c = w*0.22f; float t = 1.5f;
+    renderer.draw_line(x,y, x+c,y, col,t);    renderer.draw_line(x,y, x,y+c, col,t);
+    renderer.draw_line(x+w,y, x+w-c,y, col,t); renderer.draw_line(x+w,y, x+w,y+c, col,t);
+    renderer.draw_line(x,y+h, x+c,y+h, col,t); renderer.draw_line(x,y+h, x,y+h-c, col,t);
+    renderer.draw_line(x+w,y+h, x+w-c,y+h, col,t); renderer.draw_line(x+w,y+h, x+w,y+h-c, col,t);
+}
+```
+
+---
+
+## Top crash causes
+
+1. `uint32` for addresses — use `uint64`
+2. No null check after pointer read — `if (ptr == 0) continue;`
+3. No null check after pattern scan — `if (addr == 0) return;`
+4. `arr.size()` → `arr.length()`
+5. `if (h == null)` → `if (h is null)`
+6. FTransform stride 16 instead of 48
+7. `proc.read` before `proc.attach`
+8. Pattern scan inside the tick loop (scan once in main)
+
+---
+
+## Templates in this repo
+
+| File | What it shows |
+|------|--------------|
+| `templates/basic.as` | Minimal main + on_unload |
+| `templates/render.as` | ESP box + color picker |
+| `templates/menu.as` | All menu element types |
+| `templates/memory.as` | Attach + scan + RIP resolve + tick loop |
+| `templates/esp-bones.as` | Full CS2 ESP: box, skeleton, health bar |
+| `templates/aimbot.as` | CS2 aimbot: FOV, smooth, predict, recoil |
+| `templates/ue5-sdk.as` | UE5 GWorld traversal from Dumper-7 SDK |
+| `templates/unity-il2cpp.as` | Unity IL2CPP ESP |
+| `templates/valorant.as` | Valorant ESP (VGK external) |
+| `templates/fortnite.as` | Fortnite ESP (UE5/EAC) |
+
+---
+
+## Anti-cheat surface
+
+Echo is external and read-only by design:
+- Never `proc.write` to game memory on EAC/BattlEye/Vanguard targets
+- Never jump cursor directly to target — use smooth lerp per tick
+- Use `create_thread(64, ...)` not `create_thread(0, ...)`
+- Add `sleep(uint(random.int(0, 4)))` in aim loop for timing variance

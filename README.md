@@ -46,7 +46,7 @@ Open with `Agent: <name> — <request>` in Claude Code, or just describe your ta
 
 ---
 
-## Skills (15 reference documents)
+## Skills (16 reference documents)
 
 Loaded automatically when relevant agents need them. Also readable directly.
 
@@ -67,6 +67,7 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `skills/angelscript-patterns.md` | Mutex entity buffer, thread-safe tick/render, safe deref chain, rate limiter, scan fallback, W2S null check |
 | `skills/offset-update-workflow.md` | Post-patch offset recovery: binary diff, function reacquisition, IDA pattern update, live offset sources |
 | `skills/ponytail.md` | Lazy senior dev philosophy: minimum code rules, shortcut comment convention, what to cut vs. never cut |
+| `skills/angelscript-types.md` | AngelScript 2.x type system: `@` handles, `array<T>` semantics, closures, casting, no-exceptions — common LLM type mistakes |
 
 ---
 
@@ -95,6 +96,8 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | Doc | Contents |
 |-----|---------|
 | `reference/api.md` | Complete API cheatsheet — every namespace and call |
+| `llms.txt` | Single-file context bundle for GPT-4o, Gemini, and local models — paste as context |
+| `prompts/system-prompt.md` | Portable system prompt for non-Claude clients (GPT-4o, Gemini, LM Studio, Cursor) |
 
 ---
 
