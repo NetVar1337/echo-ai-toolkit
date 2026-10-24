@@ -45,6 +45,7 @@ export const register: Register = (on) => {
 
   on('command.run', { command: 'echo-reset' }, async ($, _e, _next) => {
     activeAgent = null;
+    ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = null;
     $.ui.status(undefined);
     return { text: 'Echo agent context cleared.' };
   });
@@ -52,6 +53,7 @@ export const register: Register = (on) => {
   for (const name of Object.keys(AGENTS) as AgentName[]) {
     on('command.run', { command: name }, async ($, _e, _next) => {
       activeAgent = name;
+      ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = name;
       $.ui.status(`Echo: ${name}`);
       return {
         text: `**${name}** context active.\n\nNow describe your task — or open the agent directly:\n\`Agent: ${name} — <request>\``,
@@ -64,6 +66,7 @@ export const register: Register = (on) => {
       for (const [pattern, agent] of KEYWORDS) {
         if (pattern.test(e.text)) {
           activeAgent = agent;
+          ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = agent;
           $.ui.status(`Echo: ${agent}`);
           break;
         }
