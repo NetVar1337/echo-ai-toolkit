@@ -46,7 +46,7 @@ Open with `Agent: <name> — <request>` in Claude Code, or just describe your ta
 
 ---
 
-## Skills (14 reference documents)
+## Skills (15 reference documents)
 
 Loaded automatically when relevant agents need them. Also readable directly.
 
@@ -66,10 +66,11 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `skills/devirt-workflow.md` | 6-step VMProtect devirt: vmp-lazy-unpack OEP, Triton semantics, NoVmp VTIL, LLVM passes, r2 sigs |
 | `skills/angelscript-patterns.md` | Mutex entity buffer, thread-safe tick/render, safe deref chain, rate limiter, scan fallback, W2S null check |
 | `skills/offset-update-workflow.md` | Post-patch offset recovery: binary diff, function reacquisition, IDA pattern update, live offset sources |
+| `skills/ponytail.md` | Lazy senior dev philosophy: minimum code rules, shortcut comment convention, what to cut vs. never cut |
 
 ---
 
-## Templates (8)
+## Templates (13)
 
 | Template | What it demonstrates |
 |----------|---------------------|
@@ -81,6 +82,11 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `aimbot.as` | Full CS2 aimbot: target selection, smoothing, prediction, recoil, triggerbot |
 | `misc.as` | Bunny hop, flash reduction, radar, spectator list |
 | `ue5-sdk.as` | UE5 ESP from Dumper-7 SDK offsets: GWorld traversal, FTransform, cornered box, health bar |
+| `unity-il2cpp.as` | Unity IL2CPP ESP: REA-discovered offsets, camera matrix, entity list walk, health bar |
+| `valorant.as` | Valorant ESP: VGK-aware external, Dumper-7-VGK GObjects decrypt, UE4 TUObjectArray, 66ms tick |
+| `fortnite.as` | Fortnite ESP: UE5/EAC, GWorld traversal, 12-bone skeleton, HP+shield bars |
+| `esp-preview.as` | `esp_layout` namespace drop-in preview helper |
+| `web-mv.as` | web-mv HTTP memory viewer endpoint (`/regions`, `/read` at port 9000) |
 
 ---
 
