@@ -5,19 +5,19 @@ const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
   'echo-esp': {
     desc: 'ESP visuals — boxes, bones, W2S per engine',
     snippets: [
-      'math.world_to_screen(vp, pos, screen)',
-      'draw.rect(x, y, w, h, col, 1.5f)',
-      'draw.line(a, b, col, 1.0f)',
-      'draw.text(x, y, str, col, 12.f)',
+      'source2.w2s(proc, vm_addr, pos, sx, sy)',
+      'renderer.draw_rect_filled(x,y,w,h, col)',
+      'renderer.draw_line(x1,y1,x2,y2, col, 1.5f)',
+      'renderer.text(x, y, str, col, font)',
     ],
   },
   'echo-aimbot': {
     desc: 'Aim assist — FOV, smoothing, prediction, recoil',
     snippets: [
-      'math.angle_to_target(local_pos, enemy_pos)',
-      'math.calc_velocity_pred(pos, vel, bullet_spd)',
-      'mouse.move(delta_x, delta_y)',
-      'math.fov_check(cam_angles, target_angles, fov)',
+      'math.calc_fov(src, tgt, view_angles)',
+      'math.lerp(cur_x, tgt_x, smooth)',
+      'mouse.move(int(dx), int(dy))',
+      'input.key_down(0x02)',
     ],
   },
   'echo-memory': {
@@ -26,7 +26,7 @@ const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
       'proc.scan_ida("48 8B 0D ? ? ? ?", "game.exe")',
       'proc.resolve_rip(addr, 3, 7)',
       'proc.read<uint64>(base + offset)',
-      'disasm.decode_function(proc, addr)',
+      'proc.disasm_range(addr, 0x100)',
     ],
   },
   'echo-anticheat': {
@@ -35,23 +35,23 @@ const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
       'proc.query_regions()',
       'proc.get_module("EasyAntiCheat.sys")',
       'proc.get_module("vgk.sys")',
-      'create_thread(tps, @tick)',
+      'create_thread(64, function() { tick(); })',
     ],
   },
   'echo-sdk': {
     desc: 'Dumper-7 SDK — UE4/5 entity traversal, FName, VGK',
     snippets: [
       'proc.read<uint64>(gobjects)',
-      'proc.read_wstring(fname_pool + idx * 2, 64)',
-      'proc.read<matrix4x4>(actor + 0x1B0)',
-      'proc.read<float>(uobject + health_offset)',
+      'proc.read<uint64>(fname_pool + idx * 2)',
+      'proc.read<float>(actor + health_off)',
+      'proc.resolve_rip(gworld_instr, 3, 7)',
     ],
   },
   'echo-reverse': {
     desc: 'RE pipeline — static → Echo runtime; Zydis, OLLVM, REA',
     snippets: [
-      'disasm.decode_function(proc, addr)',
-      'emu.start(fn_addr, fn_addr + 0x500, 5000, 2000)',
+      'proc.disasm_range(addr, 0x200)',
+      'emu.emu_start(fn_addr, fn_addr+0x500, 5000, 2000)',
       'proc.resolve_rip(lea_addr, 3, 7)',
       'proc.scan_ida("? ? ? ? ? ? E8", "game.exe")',
     ],
@@ -59,10 +59,10 @@ const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
   'echo-dev': {
     desc: 'General Echo API — threading, menu, networking',
     snippets: [
-      'on_render(@cb)',
-      'create_thread(0, @fn)',
-      'menu.add_checkbox("label", @val)',
-      'config.write_bool("key", val)',
+      'create_thread(64, function() { tick(); })',
+      'menu_checkbox@ cb = menu.checkbox("Enable", false)',
+      'menu.save_config("mymod")',
+      'renderer.width() / renderer.height()',
     ],
   },
 };

@@ -85,7 +85,7 @@ export const register: Register = (on) => {
         {
           id: 'echo-ai-toolkit:agent-hint',
           scope: 'session' as const,
-          text: `[Echo AI Toolkit] Active context: **${activeAgent}**. Full API reference and patterns are in \`.claude/agents/${activeAgent}.md\`. Suggest: \`Agent: ${activeAgent} — <task>\``,
+          text: `[Echo AI Toolkit] Active context: **${activeAgent}**. Full API reference and patterns are in \`.claude/agents/${activeAgent}.md\`. Suggest: \`Agent: ${activeAgent} — <task>\` (project install) or \`Agent: echo-ai-toolkit:${activeAgent} — <task>\` (plugin install).`,
         },
       ],
     };
