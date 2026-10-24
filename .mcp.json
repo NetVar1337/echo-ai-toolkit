@@ -9,6 +9,21 @@
       "command": "npx",
       "args": ["rea-agents"],
       "description": "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, HAR/pcap, SQLite, firmware"
+    },
+    "radare2": {
+      "command": "r2pm",
+      "args": ["-r", "r2mcp"],
+      "description": "radare2 MCP: official r2 studio — disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)"
+    },
+    "ida": {
+      "command": "uvx",
+      "args": ["ida-mcp", "stdio", "--agent=my-agent"],
+      "description": "IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib + Python 3.11+)"
+    },
+    "angel-menu": {
+      "command": "node",
+      "args": ["PATH_TO_ANGEL_MENU_MCP/index.js"],
+      "description": "Angel overlay menu control: list_features, get_feature, set_feature, connection_status"
     }
   }
 }

@@ -6,6 +6,18 @@ Combines Echo's platform reference with the [awesome-game-security](https://gith
 
 ---
 
+## Claude Code plugin
+
+Install for slash commands and auto agent routing:
+
+```
+/plugin install echo-ai-toolkit --marketplace NetVar1337/echo-ai-toolkit
+```
+
+Type `/echo-help` to list agents, or `/echo-esp`, `/echo-reverse`, etc. to activate context. Or just describe your task — keywords are detected automatically.
+
+---
+
 ## Quick start
 
 ```bash
@@ -106,6 +118,36 @@ UE4/UE5 SDK generator. Inject into running game → get CppSDK with all offsets.
 git clone https://github.com/zhaoxuya520/reverse-skill ../reverse-skill
 # No install needed — clone alongside toolkit; echo-reverse agent references it
 ```
+
+### Development tools
+
+| Tool | Purpose |
+|------|---------|
+| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code LSP: ~1900 Echo symbols, autocompletion, hover docs |
+| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `esp_layout` namespace — drop-in ESP layout helper |
+| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler, validator, obfuscator, string scrambler |
+| [web-mv](https://github.com/cy-gnus/web-mv) | Browser-based memory viewer via Echo agent API |
+| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | MCP server — toggle overlay menu from Claude |
+
+### VMP / Devirtualization
+
+| Tool | Purpose |
+|------|---------|
+| [NoVmp](https://github.com/can1357/NoVmp) | Full VMProtect devirt → native binary via VTIL |
+| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes |
+| [vtil2](https://github.com/pop-rip/vtil2) | VTIL v2 redesign |
+| [Triton](https://github.com/JonathanSalwan/Triton) | Symbolic execution + taint analysis framework |
+| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts |
+| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP lazy section OEP finder |
+| [llvm-project](https://github.com/llvm/llvm-project) | IR passes for OLLVM deobfuscation |
+
+### Binary analysis MCPs
+
+| MCP | Install |
+|-----|---------|
+| [radare2-mcp](https://github.com/radareorg/radare2-mcp) | `r2pm -Uci r2mcp` |
+| [ida-mcp](https://github.com/HexRaysSA/ida-mcp) | `claude plugin install ida-mcp@HexRaysSA` |
+| [SuperGhidra](https://github.com/yuatemycat/SuperGhidra) | Python tools + MCP daemon at 127.0.0.1:5073 |
 
 ### omath
 C++23 constexpr math reference for W2S, projectile prediction, coordinate transforms.

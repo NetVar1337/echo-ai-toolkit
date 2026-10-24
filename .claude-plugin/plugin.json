@@ -1,0 +1,5 @@
+{
+  "name": "echo-ai-toolkit",
+  "version": "0.1.0",
+  "description": "Slash commands and context injection for Echo Universal API (AngelScript) development"
+}

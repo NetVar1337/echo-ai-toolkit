@@ -185,6 +185,49 @@ if (count < 1 || count > 64) {
 }
 ```
 
+## VMP / Devirtualization toolchain
+
+For VMProtect-protected targets, use the devirt stack documented in `skills/echo-ecosystem.md`.
+
+| Tool | Role |
+|------|------|
+| **vmp-lazy-unpack** | Trace to find OEP after VMP loader decrypts sections |
+| **Triton** | Symbolic execution to recover VMP handler semantics |
+| **VMProtect-devirtualization** | Triton scripts; outputs clean IR from virtualized handler |
+| **NoVmp** | Full devirt: VTIL IR → optimized → reconstructed native code |
+| **VTIL-Core / vtil2** | IR used by NoVmp; inspect optimizer output directly |
+| **LLVM** | Custom passes for OLLVM CFF, MBA, bogus-CF deobfuscation |
+
+**Typical workflow:**
+```
+1. vmp-lazy-unpack  → confirm OEP, sections decrypted
+2. Triton           → trace VMP handlers, symbolize, get semantics
+3. NoVmp            → automated devirt → native binary
+4. LLVM opt passes  → deobfuscate remaining OLLVM layers
+5. radare2-mcp / ida-mcp → analyze recovered binary, extract sigs
+6. proc.scan_ida()  → find recovered sig in live game process
+```
+
+For OLLVM-only targets (no VMP): skip steps 1–3, use LLVM passes or Unicorn trace (see Unicorn section above).
+
+## IDA / radare2 MCP tools
+
+With `ida` and `radare2` MCPs wired (see `.mcp.json` and `mcp/README.md`):
+
+```
+# IDA MCP
+decompile function at 0x<addr>          → pseudocode
+rename function 0x<addr> to <name>
+get xrefs to 0x<addr>
+create struct <name> { ... }
+
+# radare2 MCP
+analyze function at 0x<addr>
+search bytes "48 8B 0D ? ? ? ?"
+decompile function <name>
+list imports
+```
+
 ## mcp-gamehacking RE tools
 
 With the `gamehacking` MCP wired up, these subagents help directly:

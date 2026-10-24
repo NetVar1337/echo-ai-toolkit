@@ -42,6 +42,20 @@ inspect_wasm_artifact(path)
 inspect_apk_signature(path)
 ```
 
+## Claude Code plugin
+
+Install for slash commands and automatic agent context injection:
+
+```
+/plugin install echo-ai-toolkit --marketplace NetVar1337/echo-ai-toolkit
+```
+
+Use `/echo-esp`, `/echo-reverse`, etc. to activate agent context. Or just describe your task — the plugin auto-detects keywords and routes to the right agent automatically.
+
+## Ecosystem skill
+
+`skills/echo-ecosystem.md` — reference for external tooling: web-mv, angel-menu-mcp, echo-esp-preview, as_bundler, echo-angelscript-lsp, SuperGhidra, radare2-mcp, ida-mcp, NoVmp, VTIL-Core, vtil2, Triton, VMProtect-devirtualization, vmp-lazy-unpack, LLVM.
+
 ## Docs
 
 - Echo API: https://echo-23.gitbook.io/angel

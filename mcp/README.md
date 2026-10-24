@@ -263,3 +263,72 @@ Key entries (referenced by the `echo-reverse` agent):
 | Custom VM / DSL bytecode | `skills/reverse-engineering/dsl-vm-reverse/` |
 
 Always check `skills/ops/scope.md` for authorization gates before using any reverse-skill workflow on a live target.
+
+---
+
+## radare2-mcp
+
+Official radare2 MCP stdio server (radareorg/radare2-mcp).
+
+```bash
+r2pm -Uci r2mcp   # install once
+```
+
+`.mcp.json` entry (already added — update `r2pm` path if needed):
+```json
+"radare2": { "command": "r2pm", "args": ["-r", "r2mcp"] }
+```
+
+| Query | Example |
+|-------|---------|
+| Disassemble function | `r2 analyze function at 0x<addr>` |
+| Search bytes | `r2 search pattern "48 8B 0D ? ? ? ?"` |
+| Decompile (r2ghidra) | `r2 decompile function main` |
+| List imports | `r2 list imports` |
+
+Supports `-H port` HTTP mode, per-session multiplexing (`-X max[:idle_s]`), readonly mode, and bearer auth.
+
+---
+
+## ida-mcp
+
+Official Hex-Rays IDA MCP Server (HexRaysSA/ida-mcp). Requires IDA 9.4+ with idalib + Python 3.11+.
+
+```bash
+claude plugin marketplace add HexRaysSA/claude-marketplace
+claude plugin install ida-mcp@HexRaysSA
+```
+
+Or add directly (`.mcp.json` entry already added):
+```json
+"ida": { "command": "uvx", "args": ["--exclude-newer=1s", "ida-mcp", "stdio", "--agent=my-agent"] }
+```
+
+| Tool | Use |
+|------|-----|
+| Decompile | Pseudocode for a function at address |
+| Rename | Rename function or variable |
+| Xrefs | Find all callers/callees |
+| Structs | Create/update struct definitions |
+| Breakpoints | Set debugger breakpoints (IDA debugger) |
+
+---
+
+## angel-menu-mcp
+
+MCP server for Angel overlay menu control (Jozkah/angel-menu-mcp). Connects to `ws://127.0.0.1:9010/agent-ui`.
+
+```bash
+git clone https://github.com/Jozkah/angel-menu-mcp
+cd angel-menu-mcp && npm install
+# Edit .mcp.json: replace PATH_TO_ANGEL_MENU_MCP with your clone path
+```
+
+| Tool | Description |
+|------|-------------|
+| `list_features` | List all overlay menu features and their state |
+| `get_feature` | Get current value of a specific feature |
+| `set_feature` | Toggle or set a feature value |
+| `connection_status` | Check overlay WebSocket connection |
+
+> **Danger controls** (aim assist, chams, no-recoil) require a human "ARM danger controls" click on the PC side before Claude can toggle them.
