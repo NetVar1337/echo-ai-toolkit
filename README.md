@@ -18,7 +18,7 @@ Combines Echo's platform reference with the [awesome-game-security](https://gith
 /echo-setup
 ```
 
-`/echo-setup` clones and builds `mcp-gamehacking`, installs `rea-agents` globally, installs `angel-menu-mcp`, and writes `.mcp.json` with real paths. It shows which steps still need manual action (ponytail, IDA MCP, radare2 MCP).
+`/echo-setup` clones and builds `mcp-gamehacking`, installs `angel-menu-mcp`, and writes `.mcp.json` with real paths. REA auto-downloads on first connect via `npx`. It shows which steps still need manual action (ponytail, IDA MCP, radare2 MCP).
 
 Type `/echo-help` to list agents, or `/echo-esp`, `/echo-reverse`, etc. to activate context. Or just describe your task — keywords are detected automatically.
 

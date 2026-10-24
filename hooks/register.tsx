@@ -40,7 +40,7 @@ export const register: Register = (on) => {
     }
     $.command.register({ name: 'echo-help',  description: 'List all Echo AI Toolkit agents' });
     $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
-    $.command.register({ name: 'echo-setup', description: 'Auto-install all dependencies: mcp-gamehacking, REA, angel-menu-mcp, update .mcp.json' });
+    $.command.register({ name: 'echo-setup', description: 'Auto-install all dependencies: mcp-gamehacking, angel-menu-mcp, write .mcp.json (REA auto-downloads via npx on first connect)' });
 
     const done = await $.store.get('echo:setup-done');
     if (!done) {
@@ -84,13 +84,7 @@ export const register: Register = (on) => {
     // 1. Create deps dir
     await $.process.run(['mkdir', '-p', ECHO_DEPS]);
 
-    // 2. Install rea-agents (npm global)
-    {
-      const r = await $.process.run(['npm', 'install', '-g', 'rea-agents'], { timeoutMs: 120_000 });
-      r.exitCode === 0 ? ok('rea-agents installed') : err('rea-agents', r.stderr.trim());
-    }
-
-    // 3. Clone + build mcp-gamehacking
+    // 2. Clone + build mcp-gamehacking
     {
       const built = await $.process.run(['test', '-f', `${GH_DIR}/dist/index.js`]);
       if (built.exitCode === 0) {
@@ -176,6 +170,7 @@ export const register: Register = (on) => {
       '`/skills install multica-ai/andrej-karpathy-skills`',
       'IDA Pro MCP — requires IDA 9.4+ with idalib: `uvx ida-mcp`',
       'radare2 MCP — `r2pm -Uci r2mcp`',
+      'REA auto-downloads on first MCP connect via `npx rea-agents` — no install needed',
     ];
 
     return {
