@@ -89,13 +89,18 @@ const KEYWORDS: [RegExp, AgentName][] = [
   [/\b(angelscript|\.as\b|echo[\s_]?api|menu\.add|on_render|create_thread|proc\.read)\b/i, 'echo-dev'],
 ];
 
+// catch AGENT_INFO/AGENTS drift at startup (adding an agent must update both)
+const _mismatched = Object.keys(AGENTS).filter(k => !AGENT_INFO[k]);
+if (_mismatched.length) throw new Error(`echo-ai-toolkit: AGENT_INFO missing keys: ${_mismatched.join(', ')}`);
+
 // atom for active agent — written by commands/keyword detection, read by pane + prompt.compose
 const agentAtom = atom({ plugin: 'echo-ai-toolkit', key: 'agent' } as const, null as AgentName | null);
 
-// Derive install dir at module load; no shell needed
-const HOME: string = (typeof process !== 'undefined' && process.env?.HOME) ? process.env.HOME
-  : (typeof process !== 'undefined' && process.env?.USERPROFILE) ? (process.env.USERPROFILE as string)
+// Derive install dir at module load; HOME must be a Unix path (starts with /)
+const rawHome = (typeof process !== 'undefined')
+  ? (process.env?.HOME ?? process.env?.USERPROFILE ?? '')
   : '';
+const HOME: string = rawHome.startsWith('/') ? rawHome : '';
 const ECHO_DEPS = `${HOME}/.local/share/echo-ai-toolkit`;
 const GH_DIR    = `${ECHO_DEPS}/mcp-gamehacking`;
 const ANGEL_DIR = `${ECHO_DEPS}/angel-menu-mcp`;
@@ -171,6 +176,14 @@ export const register: Register = (on) => {
           }
         }
         if (canBuild) {
+          // guard against dir existing but being empty/partial (no package.json)
+          const hasPkg = await $.process.run(['test', '-f', `${GH_DIR}/package.json`]);
+          if (hasPkg.exitCode !== 0) {
+            err('mcp-gamehacking incomplete — delete the directory and run /echo-setup again');
+            canBuild = false;
+          }
+        }
+        if (canBuild) {
           const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
           const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
           (i.exitCode === 0 && b.exitCode === 0)
@@ -186,16 +199,22 @@ export const register: Register = (on) => {
       if (ready.exitCode === 0) {
         skip('angel-menu-mcp already installed');
       } else {
+        let canInstall = true;
         const hasClone = await $.process.run(['test', '-f', `${ANGEL_DIR}/package.json`]);
         if (hasClone.exitCode !== 0) {
           const clone = await $.process.run(
             ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANGEL_DIR],
             { timeoutMs: 60_000 }
           );
-          if (clone.exitCode !== 0) { err('angel-menu-mcp clone', clone.stderr.trim()); }
+          if (clone.exitCode !== 0) {
+            err('angel-menu-mcp clone', clone.stderr.trim());
+            canInstall = false;
+          }
         }
-        const i = await $.process.run(['npm', 'install'], { cwd: ANGEL_DIR, timeoutMs: 60_000 });
-        i.exitCode === 0 ? ok('angel-menu-mcp installed') : err('angel-menu-mcp npm', i.stderr.trim());
+        if (canInstall) {
+          const i = await $.process.run(['npm', 'install'], { cwd: ANGEL_DIR, timeoutMs: 60_000 });
+          i.exitCode === 0 ? ok('angel-menu-mcp installed') : err('angel-menu-mcp npm', i.stderr.trim());
+        }
       }
     }
 
