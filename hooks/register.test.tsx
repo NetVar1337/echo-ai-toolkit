@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'claude-code/test';
+import { describe, it, expect, beforeEach, createTestHarness } from 'claude-code/test';
 import type { PluginTestHarness } from 'claude-code/test';
 import { register, validateAgentSync } from './register';
 

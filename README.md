@@ -121,10 +121,7 @@ cd mcp-gamehacking && npm install && npm run build
 ### REA (Reverse Engineer Anything)
 Static binary analysis: Unity IL2CPP, Godot, APK, WASM, pcap, firmware.
 
-```bash
-npm install --global rea-agents
-npx rea-agents setup   # auto-wires Claude Code
-```
+`npx rea-agents` auto-downloads on first MCP connect — no install needed.
 
 ### Dumper-7 / Dumper-7-VGK
 UE4/UE5 SDK generator. Inject into running game → get CppSDK with all offsets.

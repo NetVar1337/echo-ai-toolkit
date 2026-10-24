@@ -271,7 +271,6 @@ export const register: Register = (on) => {
       '`/skills install multica-ai/andrej-karpathy-skills`',
       'IDA Pro MCP — requires IDA 9.4+ with idalib: `uvx ida-mcp`',
       'radare2 MCP — `r2pm -Uci r2mcp`',
-      'REA auto-downloads on first MCP connect via `npx rea-agents` — no install needed',
     ];
 
     return {

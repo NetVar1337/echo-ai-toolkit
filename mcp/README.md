@@ -8,27 +8,7 @@ Combined with this toolkit's Echo-specific agents, you get both deep game-engine
 
 ## Installation
 
-```bash
-git clone https://github.com/1llu50ry/mcp-gamehacking
-cd mcp-gamehacking
-npm install
-npm run build
-```
-
-Then edit `.mcp.json` at the root of this repo and replace `PATH_TO_MCP_GAMEHACKING` with the absolute path to your clone:
-
-```json
-{
-  "mcpServers": {
-    "gamehacking": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-gamehacking/dist/index.js"]
-    }
-  }
-}
-```
-
-Restart Claude Code — the `gamehacking` MCP server will appear in your tool list.
+Run `/echo-setup` in Claude Code — it clones, builds mcp-gamehacking, and writes `.mcp.json` automatically. After setup, `/reload-plugins` activates the `gamehacking` MCP server.
 
 ---
 
@@ -216,12 +196,7 @@ research_technique("EPT hook")
 
 ## REA (Reverse Engineer Anything) MCP
 
-`rea` in `.mcp.json` wires the REA MCP server. Install once:
-
-```bash
-npm install --global rea-agents
-npx rea-agents setup    # auto-wires Claude Code
-```
+`rea` in `.mcp.json` wires the REA MCP server. `npx rea-agents` auto-downloads on first MCP connect — no install needed.
 
 REA adds binary analysis tools for targets that mcp-gamehacking doesn't cover:
 
@@ -318,11 +293,7 @@ Or add directly (`.mcp.json` entry already added):
 
 MCP server for Angel overlay menu control (Jozkah/angel-menu-mcp). Connects to `ws://127.0.0.1:9010/agent-ui`.
 
-```bash
-git clone https://github.com/Jozkah/angel-menu-mcp
-cd angel-menu-mcp && npm install
-# Edit .mcp.json: replace PATH_TO_ANGEL_MENU_MCP with your clone path
-```
+Run `/echo-setup` in Claude Code — it clones, installs, and wires `angel-menu-mcp` automatically.
 
 | Tool | Description |
 |------|-------------|

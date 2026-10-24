@@ -32,7 +32,7 @@ Then add keyword routing in `hooks/register.tsx`:
 [/\b(keyword1|keyword2|keyword3)\b/i, 'echo-<name>'],
 ```
 
-Add a snippet entry to `AGENT_INFO` in `hooks/pane.tsx` for the side panel:
+Add a snippet entry to `AGENT_INFO` in `hooks/register.tsx` for the side panel:
 
 ```typescript
 'echo-<name>': {
@@ -74,19 +74,18 @@ Requirements:
 
 ## Plugin (hooks/)
 
-The plugin has two modules: `hooks/register.tsx` (commands, keyword routing, state) and `hooks/pane.tsx` (side panel rendering).
+The plugin lives in `hooks/register.tsx` — one module for commands, keyword routing, side panel, and state.
 
-`register.tsx` writes the active agent to shared state when it changes:
-
-```typescript
-($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = name;
-$.ui.status(`Echo: ${name}`);
-```
-
-`pane.tsx` reads from it in the `ui.render` hook:
+State is managed with atoms from `claude-code`:
 
 ```typescript
-const agent = ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] as string | null;
+import { atom, read, update } from 'claude-code';
+const agentAtom = atom({ plugin: 'echo-ai-toolkit', key: 'agent' } as const, null as AgentName | null);
+
+// write (inside a hook):
+await update($, agentAtom, () => name);
+// read (inside a hook):
+const agent = await read($, agentAtom);
 ```
 
 **Test:** `claude plugin test hooks/` runs `hooks/register.test.tsx`.
