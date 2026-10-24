@@ -1,66 +1,105 @@
 # echo-ai-toolkit
 
-AI development toolkit for the [Echo Universal API](https://echo-23.gitbook.io/angel) — an AngelScript scripting platform with process memory access, Discord overlay rendering, Zydis disassembly, and Unicorn emulation.
+AI-powered development toolkit for the [Echo Universal API](https://echo-23.gitbook.io/angel) — an AngelScript scripting platform with process memory access, Discord overlay rendering, Zydis disassembly, and Unicorn emulation.
 
-## What's in here
+Combines Echo's platform reference with the [awesome-game-security](https://github.com/gmh5225/awesome-game-security) knowledge base and [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking)'s 4100+ skills library.
 
-| Path | What it is |
-|------|------------|
-| `.claude/agents/echo-dev.md` | Claude Code agent with the full Echo API baked in |
-| `templates/basic.as` | Minimal script skeleton |
-| `templates/render.as` | ESP / overlay rendering starter |
-| `templates/menu.as` | Full menu UI with all element types |
-| `templates/memory.as` | Process attach + pattern scan + tick loop |
-| `reference/api.md` | Quick API cheatsheet (all namespaces) |
+---
 
-## Using the Claude Code agent
+## Quick start
 
-If you have [Claude Code](https://claude.com/claude-code), clone this repo and open it as your working directory. The `echo-dev` agent is automatically available:
-
-```
+```bash
+git clone https://github.com/NetVar1337/echo-ai-toolkit
 cd echo-ai-toolkit
-claude
+claude   # opens Claude Code with all agents available
 ```
 
-Inside the session you can invoke it directly:
+Copy a template to `%AppData%\Roaming\scripts\`, reopen the in-game menu. No compile step.
+
+---
+
+## Agents (5)
+
+Open with `Agent: <name> — <request>` in Claude Code, or just describe your task and Claude will route to the right agent.
+
+| Agent | Use when... |
+|-------|-------------|
+| `echo-dev` | General Echo scripting — API reference, threading, menu, networking, utilities |
+| `echo-esp` | Building ESP: boxes, skeletons, health bars, name tags, W2S for Source 2 / Unreal / Unity |
+| `echo-aimbot` | Aimbot: target selection, FOV, smoothing, prediction, recoil, triggerbot |
+| `echo-memory` | RE work: pointer chains, struct recovery, pattern scanning, Unicorn emulation, Zydis xrefs |
+| `echo-anticheat` | Detection risk assessment: AC internals, Echo's exposure surface, safe coding patterns |
+
+---
+
+## Skills (4 reference documents)
+
+Loaded automatically when relevant agents need them. Also readable directly.
+
+| Skill | Contents |
+|-------|---------|
+| `skills/anti-cheat-systems.md` | VAC, EAC, BattlEye, Vanguard, Ricochet, Byfron — drivers, mechanisms, research links |
+| `skills/game-hacking-techniques.md` | Memory access models, injection ref, hook types, entity list patterns, ESP/aimbot math, anti-detection |
+| `skills/reverse-engineering-tools.md` | Debuggers, disassemblers, Frida, Cheat Engine plugins, game-specific dumpers, pattern tools |
+| `skills/game-engine-resources.md` | Source 2, Unreal, Unity, IW engine internals — structs, offsets, W2S math, bone formats |
+
+---
+
+## Templates (7)
+
+| Template | What it demonstrates |
+|----------|---------------------|
+| `basic.as` | Minimal `main()` + `on_unload()` |
+| `render.as` | ESP box + color picker + `on_render` hook |
+| `menu.as` | All menu element types with config persistence |
+| `memory.as` | Process attach + IDA pattern scan + RIP resolve + tick loop |
+| `esp-bones.as` | Full CS2 ESP: cornered boxes, skeleton, health bar, distance labels |
+| `aimbot.as` | Full CS2 aimbot: target selection, smoothing, prediction, recoil, triggerbot |
+| `misc.as` | Bunny hop, flash reduction, radar, spectator list |
+
+---
+
+## Reference docs
+
+| Doc | Contents |
+|-----|---------|
+| `reference/api.md` | Complete API cheatsheet — every namespace and call |
+
+---
+
+## mcp-gamehacking integration
+
+Wire up the mcp-gamehacking MCP server to get 4100+ skills, 75 specialist agents, and 16 MCP tools inside your Claude Code session.
+
+See [`mcp/README.md`](mcp/README.md) for full setup. Quick version:
+
+```bash
+git clone https://github.com/1llu50ry/mcp-gamehacking
+cd mcp-gamehacking && npm install && npm run build
+# Edit .mcp.json in this repo: replace PATH_TO_MCP_GAMEHACKING with your clone path
+```
+
+Example queries once connected:
 
 ```
-Agent: echo-dev — write me a script that reads player health via pattern scan and draws an ESP box
+research_technique("cs2 entity system traversal")
+get_agent_briefing("cs2-specialist")
+read_subagent("bone-mapper")
+read_subagent("binary-differ")
+search_skills("vanguard bypass cr3")
 ```
 
-Or just describe what you want and Claude will pick it up from the context.
+---
 
-### Without Claude Code
+## Links
 
-The agent file at `.claude/agents/echo-dev.md` is plain Markdown. Paste its contents into any AI assistant's system prompt to give it Echo API knowledge. The LLM-optimized upstream docs are also at:
+- [Echo Universal API docs](https://echo-23.gitbook.io/angel)
+- [Echo LLM-optimized reference](https://echo-23.gitbook.io/angel/llms-full.txt)
+- [awesome-game-security](https://github.com/gmh5225/awesome-game-security) — 4000+ curated resources
+- [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) — MCP server for the above
 
-```
-https://echo-23.gitbook.io/angel/llms-full.txt
-```
+---
 
-## Templates
+## Contributing
 
-Copy a template to `%AppData%\Roaming\scripts\`, edit it, then close and reopen the in-game menu to load. No compile step.
-
-```
-templates/
-  basic.as    minimal entry point
-  render.as   ESP box + text rendering
-  menu.as     checkbox / slider / color picker / combobox / button
-  memory.as   attach + IDA-style pattern scan + RIP-resolve + read loop
-```
-
-## Quick-start
-
-```
-1. Copy templates/basic.as  →  %AppData%\Roaming\scripts\hello.as
-2. Edit it
-3. Reopen the in-game menu
-4. Select hello from the script list
-```
-
-## Reference
-
-[`reference/api.md`](reference/api.md) — full table of every namespace and call.
-
-Upstream docs: https://echo-23.gitbook.io/angel
+Add a skill file in `skills/` or a new agent in `.claude/agents/`. Keep agent files self-contained — they're loaded as system prompts and should include all context needed without external lookups.
