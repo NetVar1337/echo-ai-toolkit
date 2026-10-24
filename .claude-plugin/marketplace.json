@@ -1,4 +1,5 @@
 {
+  "name": "echo-ai-toolkit",
   "owner": { "name": "NetVar1337" },
   "plugins": [{ "name": "echo-ai-toolkit", "source": "./" }]
 }
