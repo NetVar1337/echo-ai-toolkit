@@ -8,11 +8,17 @@ Combines Echo's platform reference with the [awesome-game-security](https://gith
 
 ## Claude Code plugin
 
-Install for slash commands and auto agent routing:
-
+**Step 1** — install the plugin (downloads all agents, skills, templates):
 ```
 /plugin install echo-ai-toolkit --marketplace NetVar1337/echo-ai-toolkit
 ```
+
+**Step 2** — run once to auto-install all external dependencies:
+```
+/echo-setup
+```
+
+`/echo-setup` clones and builds `mcp-gamehacking`, installs `rea-agents` globally, installs `angel-menu-mcp`, and writes `.mcp.json` with real paths. It shows which steps still need manual action (ponytail, IDA MCP, radare2 MCP).
 
 Type `/echo-help` to list agents, or `/echo-esp`, `/echo-reverse`, etc. to activate context. Or just describe your task — keywords are detected automatically.
 
