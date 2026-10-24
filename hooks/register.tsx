@@ -1,4 +1,71 @@
+import { atom, read, update } from 'claude-code';
 import type { Register } from 'claude-code';
+
+const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
+  'echo-esp': {
+    desc: 'ESP visuals — boxes, bones, W2S per engine',
+    snippets: [
+      'source2.w2s(proc, vm_addr, pos, sx, sy)',
+      'renderer.draw_rect_filled(x,y,w,h, col)',
+      'renderer.draw_line(x1,y1,x2,y2, col, 1.5f)',
+      'renderer.text(x, y, str, col, font)',
+    ],
+  },
+  'echo-aimbot': {
+    desc: 'Aim assist — FOV, smoothing, prediction, recoil',
+    snippets: [
+      'math.calc_fov(src, tgt, view_angles)',
+      'math.lerp(cur_x, tgt_x, smooth)',
+      'mouse.move(int(dx), int(dy))',
+      'input.key_down(0x02)',
+    ],
+  },
+  'echo-memory': {
+    desc: 'Memory/RE — pattern scan, structs, Unicorn, Zydis',
+    snippets: [
+      'proc.scan_ida("48 8B 0D ? ? ? ?", "game.exe")',
+      'proc.resolve_rip(addr, 3, 7)',
+      'proc.read<uint64>(base + offset)',
+      'proc.disasm_range(addr, 0x100)',
+    ],
+  },
+  'echo-anticheat': {
+    desc: 'AC awareness — detection surface, safe patterns',
+    snippets: [
+      'proc.query_regions()',
+      'proc.get_module("EasyAntiCheat.sys")',
+      'proc.get_module("vgk.sys")',
+      'create_thread(64, function() { tick(); })',
+    ],
+  },
+  'echo-sdk': {
+    desc: 'Dumper-7 SDK — UE4/5 entity traversal, FName, VGK',
+    snippets: [
+      'proc.read<uint64>(gobjects)',
+      'proc.read<uint64>(fname_pool + idx * 2)',
+      'proc.read<float>(actor + health_off)',
+      'proc.resolve_rip(gworld_instr, 3, 7)',
+    ],
+  },
+  'echo-reverse': {
+    desc: 'RE pipeline — static → Echo runtime; Zydis, OLLVM, REA',
+    snippets: [
+      'proc.disasm_range(addr, 0x200)',
+      'emu.emu_start(fn_addr, fn_addr+0x500, 5000, 2000)',
+      'proc.resolve_rip(lea_addr, 3, 7)',
+      'proc.scan_ida("? ? ? ? ? ? E8", "game.exe")',
+    ],
+  },
+  'echo-dev': {
+    desc: 'General Echo API — threading, menu, networking',
+    snippets: [
+      'create_thread(64, function() { tick(); })',
+      'menu_checkbox@ cb = menu.checkbox("Enable", false)',
+      'menu.save_config("mymod")',
+      'renderer.width() / renderer.height()',
+    ],
+  },
+};
 
 const AGENTS = {
   'echo-dev':       'General Echo API — threading, menu, networking, utilities',
@@ -22,9 +89,10 @@ const KEYWORDS: [RegExp, AgentName][] = [
   [/\b(angelscript|\.as\b|echo[\s_]?api|menu\.add|on_render|create_thread|proc\.read)\b/i, 'echo-dev'],
 ];
 
-let activeAgent: AgentName | null = null;
+// atom for active agent — written by commands/keyword detection, read by pane + prompt.compose
+const agentAtom = atom({ plugin: 'echo-ai-toolkit', key: 'agent' } as const, null as AgentName | null);
 
-// Derive install dir at module load; no shell needed — Node process.env is available at runtime
+// Derive install dir at module load; no shell needed
 const HOME: string = (typeof process !== 'undefined' && process.env?.HOME) ? process.env.HOME
   : (typeof process !== 'undefined' && process.env?.USERPROFILE) ? (process.env.USERPROFILE as string)
   : '';
@@ -33,14 +101,15 @@ const GH_DIR    = `${ECHO_DEPS}/mcp-gamehacking`;
 const ANGEL_DIR = `${ECHO_DEPS}/angel-menu-mcp`;
 
 export const register: Register = (on) => {
-  // ── session start: register all commands + first-run notice ───────────────
+  // ── session start ──────────────────────────────────────────────────────────
   on('session.start', async ($, e, next) => {
     for (const name of Object.keys(AGENTS) as AgentName[]) {
-      $.command.register({ name, description: AGENTS[name] });
+      await $.command.register({ name, description: AGENTS[name] });
     }
-    $.command.register({ name: 'echo-help',  description: 'List all Echo AI Toolkit agents' });
-    $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
-    $.command.register({ name: 'echo-setup', description: 'Auto-install all dependencies: mcp-gamehacking, angel-menu-mcp, write .mcp.json (REA auto-downloads via npx on first connect)' });
+    await $.command.register({ name: 'echo-help',  description: 'List all Echo AI Toolkit agents' });
+    await $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
+    await $.command.register({ name: 'echo-setup', description: 'Auto-install mcp-gamehacking, angel-menu-mcp, write .mcp.json' });
+    void $.ui.open({ id: 'echo-ai-toolkit:panel', title: 'Echo' });
 
     const done = await $.store.get('echo:setup-done');
     if (!done) {
@@ -55,7 +124,7 @@ export const register: Register = (on) => {
   });
 
   // ── /echo-help ─────────────────────────────────────────────────────────────
-  on('command.run', { command: 'echo-help' }, async (_$, _e, _next) => {
+  on('command.run', { command: 'echo-help' }, async () => {
     const lines = (Object.keys(AGENTS) as AgentName[])
       .map(k => `**/${k}** — ${AGENTS[k]}`)
       .join('\n');
@@ -65,18 +134,17 @@ export const register: Register = (on) => {
   });
 
   // ── /echo-reset ────────────────────────────────────────────────────────────
-  on('command.run', { command: 'echo-reset' }, async ($, _e, _next) => {
-    activeAgent = null;
-    ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = null;
+  on('command.run', { command: 'echo-reset' }, async ($) => {
+    await update($, agentAtom, () => null);
     $.ui.status(undefined);
     return { text: 'Echo agent context cleared.' };
   });
 
-  // ── /echo-setup — auto-installs everything possible ────────────────────────
-  on('command.run', { command: 'echo-setup' }, async ($, _e, _next) => {
+  // ── /echo-setup ────────────────────────────────────────────────────────────
+  on('command.run', { command: 'echo-setup' }, async ($) => {
     const log: string[] = [];
-    const ok  = (msg: string) => { log.push(`✓ ${msg}`); };
-    const err = (msg: string, detail?: string) => {
+    const ok   = (msg: string) => { log.push(`✓ ${msg}`); };
+    const err  = (msg: string, detail?: string) => {
       log.push(`✗ ${msg}${detail ? `: ${detail.slice(0, 100)}` : ''}`);
     };
     const skip = (msg: string) => { log.push(`↩ ${msg}`); };
@@ -112,7 +180,7 @@ export const register: Register = (on) => {
       }
     }
 
-    // 4. Clone + install angel-menu-mcp
+    // 3. Clone + install angel-menu-mcp
     {
       const ready = await $.process.run(['test', '-d', `${ANGEL_DIR}/node_modules`]);
       if (ready.exitCode === 0) {
@@ -131,7 +199,7 @@ export const register: Register = (on) => {
       }
     }
 
-    // 5. Write .mcp.json with real paths into the working directory
+    // 4. Write .mcp.json with real paths
     {
       const config = {
         mcpServers: {
@@ -167,10 +235,8 @@ export const register: Register = (on) => {
       w.exitCode === 0 ? ok('.mcp.json written with real paths') : err('.mcp.json write', w.stderr.trim());
     }
 
-    // 6. Mark setup done
     await $.store.set('echo:setup-done', true);
 
-    // 7. Remaining manual steps
     const manual = [
       '`/plugin install ponytail --marketplace DietrichGebert/ponytail`',
       '`/skills install multica-ai/andrej-karpathy-skills`',
@@ -195,9 +261,8 @@ export const register: Register = (on) => {
 
   // ── agent context slash commands ───────────────────────────────────────────
   for (const name of Object.keys(AGENTS) as AgentName[]) {
-    on('command.run', { command: name }, async ($, _e, _next) => {
-      activeAgent = name;
-      ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = name;
+    on('command.run', { command: name }, async ($) => {
+      await update($, agentAtom, () => name);
       $.ui.status(`Echo: ${name}`);
       return {
         text: `**${name}** context active.\n\nDescribe your task — or open the agent directly:\n\`Agent: ${name} — <request>\``,
@@ -210,8 +275,7 @@ export const register: Register = (on) => {
     if (!e.command) {
       for (const [pattern, agent] of KEYWORDS) {
         if (pattern.test(e.text)) {
-          activeAgent = agent;
-          ($.state as Record<string, unknown>)['echo-ai-toolkit:agent'] = agent;
+          await update($, agentAtom, () => agent);
           $.ui.status(`Echo: ${agent}`);
           break;
         }
@@ -223,6 +287,7 @@ export const register: Register = (on) => {
   // ── system-prompt injection ────────────────────────────────────────────────
   on('prompt.compose', async ($, e, next) => {
     const result = await next(e);
+    const activeAgent = await read($, agentAtom);
     if (!activeAgent) return result;
     return {
       ...result,
@@ -235,5 +300,42 @@ export const register: Register = (on) => {
         },
       ],
     };
+  });
+
+  // ── side panel ────────────────────────────────────────────────────────────
+  on('ui.render', { component: 'Pane', requestId: 'echo-ai-toolkit:panel' }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e);
+    const agent = await read($, agentAtom);
+
+    if (!agent) {
+      return (
+        <Box paddingX={1} paddingY={1} flexDirection="column" gap={1}>
+          <Text bold color="yellow">Echo AI Toolkit</Text>
+          <Text dimColor>No agent active.</Text>
+          <Text dimColor>Use /echo-esp, /echo-reverse, etc.</Text>
+          <Text dimColor>Or describe your task — keywords auto-route.</Text>
+        </Box>
+      );
+    }
+
+    const info = AGENT_INFO[agent];
+    return (
+      <Box paddingX={1} paddingY={1} flexDirection="column" gap={1}>
+        <Box flexDirection="column">
+          <Text bold color="yellow">{agent}</Text>
+          <Text dimColor>{info?.desc ?? ''}</Text>
+        </Box>
+        <Box flexDirection="column">
+          <Text dimColor>── quick ref ──────────────</Text>
+          {(info?.snippets ?? []).map((s, i) => (
+            <Text key={i} color="cyan">{s}</Text>
+          ))}
+        </Box>
+        <Box flexDirection="column">
+          <Text dimColor>── invoke ──────────────────</Text>
+          <Text dimColor>{`Agent: ${agent} — <task>`}</Text>
+        </Box>
+      </Box>
+    );
   });
 };

@@ -1,5 +1,8 @@
 {
   "name": "echo-ai-toolkit",
   "version": "0.1.0",
-  "description": "Slash commands and context injection for Echo Universal API (AngelScript) development"
+  "description": "Slash commands and context injection for Echo Universal API (AngelScript) development",
+  "author": { "name": "NetVar1337" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
 }
