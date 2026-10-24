@@ -90,38 +90,44 @@ export const register: Register = (on) => {
       if (built.exitCode === 0) {
         skip('mcp-gamehacking already built');
       } else {
+        let canBuild = true;
         const exists = await $.process.run(['test', '-d', GH_DIR]);
         if (exists.exitCode !== 0) {
           const clone = await $.process.run(
             ['git', 'clone', '--depth', '1', 'https://github.com/1llu50ry/mcp-gamehacking', GH_DIR],
             { timeoutMs: 180_000 }
           );
-          if (clone.exitCode !== 0) { err('mcp-gamehacking clone', clone.stderr.trim()); }
+          if (clone.exitCode !== 0) {
+            err('mcp-gamehacking clone', clone.stderr.trim());
+            canBuild = false;
+          }
         }
-        const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
-        const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
-        (i.exitCode === 0 && b.exitCode === 0)
-          ? ok('mcp-gamehacking built')
-          : err('mcp-gamehacking build', b.stderr.trim());
+        if (canBuild) {
+          const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
+          const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
+          (i.exitCode === 0 && b.exitCode === 0)
+            ? ok('mcp-gamehacking built')
+            : err('mcp-gamehacking build', b.stderr.trim());
+        }
       }
     }
 
     // 4. Clone + install angel-menu-mcp
     {
-      const exists = await $.process.run(['test', '-f', `${ANGEL_DIR}/index.js`]);
-      if (exists.exitCode === 0) {
+      const ready = await $.process.run(['test', '-d', `${ANGEL_DIR}/node_modules`]);
+      if (ready.exitCode === 0) {
         skip('angel-menu-mcp already installed');
       } else {
-        const clone = await $.process.run(
-          ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANGEL_DIR],
-          { timeoutMs: 60_000 }
-        );
-        if (clone.exitCode !== 0) {
-          err('angel-menu-mcp clone', clone.stderr.trim());
-        } else {
-          const i = await $.process.run(['npm', 'install'], { cwd: ANGEL_DIR, timeoutMs: 60_000 });
-          i.exitCode === 0 ? ok('angel-menu-mcp installed') : err('angel-menu-mcp npm', i.stderr.trim());
+        const hasClone = await $.process.run(['test', '-f', `${ANGEL_DIR}/package.json`]);
+        if (hasClone.exitCode !== 0) {
+          const clone = await $.process.run(
+            ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANGEL_DIR],
+            { timeoutMs: 60_000 }
+          );
+          if (clone.exitCode !== 0) { err('angel-menu-mcp clone', clone.stderr.trim()); }
         }
+        const i = await $.process.run(['npm', 'install'], { cwd: ANGEL_DIR, timeoutMs: 60_000 });
+        i.exitCode === 0 ? ok('angel-menu-mcp installed') : err('angel-menu-mcp npm', i.stderr.trim());
       }
     }
 
