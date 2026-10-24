@@ -211,3 +211,55 @@ research_technique("EPT hook")
 | `shellcode-encoder` | Shellcode encoding to avoid signatures |
 | `vulnerability-scanner` | Finds exploitable flaws in drivers/binaries |
 | `import-resolver` | Resolves imports for manually-mapped modules |
+
+---
+
+## REA (Reverse Engineer Anything) MCP
+
+`rea` in `.mcp.json` wires the REA MCP server. Install once:
+
+```bash
+npm install --global rea-agents
+npx rea-agents setup    # auto-wires Claude Code
+```
+
+REA adds binary analysis tools for targets that mcp-gamehacking doesn't cover:
+
+| REA tool / target | Use for |
+|---|---|
+| Unity IL2CPP (versions 24–39) | `global-metadata.dat` → class/method names and offsets |
+| Godot PCK | Archive inspection and resource extraction |
+| Native binary (Ghidra/IDA/Hopper) | Pseudocode + symbol reconstruction without a running game |
+| `inspect_apk_signature` | Android game APK analysis |
+| `inspect_wasm_artifact` | Browser/web game WASM modules |
+| HAR / pcap / mitmdump | HTTP and WebSocket protocol reverse engineering |
+| SQLite | Game save file and database schema inspection |
+| Firmware | Partition table and filesystem extraction |
+
+REA is complementary to mcp-gamehacking: use mcp-gamehacking for live community knowledge (offsets, AC research, patterns) and REA for static binary analysis of specific file formats.
+
+---
+
+## reverse-skill (static, no MCP server)
+
+[reverse-skill](https://github.com/zhaoxuya520/reverse-skill) is a 44-rule AI skill router — clone it alongside this toolkit, do not add it to `.mcp.json`.
+
+```bash
+git clone https://github.com/zhaoxuya520/reverse-skill ../reverse-skill
+```
+
+Key entries (referenced by the `echo-reverse` agent):
+
+| Scenario | Entry point |
+|---|---|
+| IDA Pro RE workflow | `skills/ida-reverse/` |
+| radare2 RE workflow | `skills/radare2/` |
+| Binary Ninja HLIL/MLIL | `skills/binary-ninja-reverse/` |
+| OLLVM deobfuscation | `skills/reverse-engineering/references/ollvm-deobfuscation.md` |
+| Patch diff / N-day | `skills/patch-diff-exploit/` |
+| Malware / AC driver analysis | `skills/malware-analysis/` |
+| EDR bypass RE | `skills/edr-bypass-re/` |
+| .NET / Unity Mono | `skills/dotnet-reverse/` |
+| Custom VM / DSL bytecode | `skills/reverse-engineering/dsl-vm-reverse/` |
+
+Always check `skills/ops/scope.md` for authorization gates before using any reverse-skill workflow on a live target.

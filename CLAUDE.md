@@ -11,17 +11,35 @@ Scripts and templates for the Echo Universal API (AngelScript, Discord overlay, 
 | `echo-aimbot` | Aim assist — FOV, smoothing, prediction, recoil, triggerbot |
 | `echo-memory` | Memory/RE — pointer chains, structs, pattern scanning, Unicorn, Zydis |
 | `echo-anticheat` | AC awareness — detection surface, safe coding patterns, risk matrix |
+| `echo-sdk` | Dumper-7 SDK: UE4/5 entity traversal, FTransform, FName, Valorant GObjects decrypt |
+| `echo-reverse` | RE pipeline: static analysis → Echo runtime; Zydis xref, Unicorn OLLVM, REA, reverse-skill |
 
 Invoke: `Agent: echo-esp — write a CS2 bone ESP with mutex-safe entity buffer`
 
-## mcp-gamehacking
+## Coding principles (Karpathy)
 
-If wired up (see `mcp/README.md`), the `gamehacking` MCP server adds 4100+ skills and 75 specialist agents:
+Apply to all Echo scripts — see `skills/karpathy-coding.md`:
 
+1. **Think Before Coding** — understand memory layout, pointer chains, and AC surface before writing
+2. **Simplicity First** — named offset constants over abstractions; no classes in single-game scripts
+3. **Surgical Changes** — after a patch, update only the `proc.scan_ida()` pattern string
+4. **Goal-Driven Execution** — every line serves the stated goal; skip gold-plating
+
+## MCP integrations
+
+If wired up (see `mcp/README.md`), the `.mcp.json` connects two MCP servers:
+
+**gamehacking** — 4100+ skills, 75 agents, 16 tools:
 ```
 research_technique("cs2 entity system")
 get_agent_briefing("cs2-specialist")
 read_subagent("bone-mapper")
+```
+
+**rea** — static binary analysis (Unity IL2CPP, Godot, APK, WASM, firmware):
+```
+inspect_wasm_artifact(path)
+inspect_apk_signature(path)
 ```
 
 ## Docs

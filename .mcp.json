@@ -4,6 +4,11 @@
       "command": "node",
       "args": ["PATH_TO_MCP_GAMEHACKING/dist/index.js"],
       "description": "mcp-gamehacking: 4100+ game hacking skills, 75 agents, 161 subagents, 114 plugins, 148 prompts"
+    },
+    "rea": {
+      "command": "npx",
+      "args": ["rea-agents"],
+      "description": "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, HAR/pcap, SQLite, firmware"
     }
   }
 }
