@@ -56,6 +56,22 @@ Use `/echo-esp`, `/echo-reverse`, etc. to activate agent context. Or just descri
 
 `skills/echo-ecosystem.md` — reference for external tooling: web-mv, angel-menu-mcp, echo-esp-preview, as_bundler, echo-angelscript-lsp, SuperGhidra, radare2-mcp, ida-mcp, NoVmp, VTIL-Core, vtil2, Triton, VMProtect-devirtualization, vmp-lazy-unpack, LLVM.
 
+`skills/awesome-game-security.md` — per-category resource map from gmh5225/awesome-game-security, with Echo agent and mcp-gamehacking query per domain (memory, AC, RE, engine internals, SDK gen, kernel, mobile).
+
+## Recommended plugins
+
+Install ponytail for minimum-code discipline (lazy senior dev mode):
+
+```
+/plugin install ponytail --marketplace DietrichGebert/ponytail
+```
+
+Install Karpathy coding skills:
+
+```
+/skills install multica-ai/andrej-karpathy-skills
+```
+
 ## Docs
 
 - Echo API: https://echo-23.gitbook.io/angel

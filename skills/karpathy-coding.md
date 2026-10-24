@@ -127,3 +127,15 @@ renderer.text(screen_feet.x, screen_feet.y + 2, fmt("{:.0f}m", dist_m), color_wh
 - Distance-fade transparency (not asked)
 - Distance-based ESP toggle (not asked)
 - Custom font/size per distance range (not asked)
+
+---
+
+## Install
+
+This skill is part of the [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) Claude Code skills package:
+
+```
+/skills install multica-ai/andrej-karpathy-skills
+```
+
+Installs all 4 Karpathy principles as a Claude Code skill set, automatically applied to every new code task in the session.

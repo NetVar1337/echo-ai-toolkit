@@ -46,7 +46,7 @@ Open with `Agent: <name> — <request>` in Claude Code, or just describe your ta
 
 ---
 
-## Skills (9 reference documents)
+## Skills (14 reference documents)
 
 Loaded automatically when relevant agents need them. Also readable directly.
 
@@ -56,11 +56,16 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `skills/game-hacking-techniques.md` | Memory access models, injection ref, hook types, entity list patterns, ESP/aimbot math, anti-detection |
 | `skills/reverse-engineering-tools.md` | Debuggers, disassemblers, Frida, Cheat Engine plugins, game-specific dumpers, pattern tools |
 | `skills/game-engine-resources.md` | Source 2, Unreal, Unity, IW engine internals — structs, offsets, W2S math, bone formats |
-| `skills/gamehacking-cheatsheet.md` | Cheatsheet topic → Echo API map, pointer chain helper, aimbot typologies, AC position |
+| `skills/gamehacking-cheatsheet.md` | Cheatsheet topic → Echo API map + mcp-gamehacking queries per technique, aimbot typologies, AC position |
+| `skills/awesome-game-security.md` | Per-category resource map from gmh5225/awesome-game-security — Echo agent + mcp-gamehacking query per domain |
 | `skills/dumper7-sdk.md` | Dumper-7 SDK structure, GObjects traversal, FName resolution, VGK decrypt, offset update workflow |
 | `skills/omath-math.md` | W2S per engine, projectile prediction, ExternalReverseEngineeredObject pattern, rotation helpers |
 | `skills/karpathy-coding.md` | Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution |
 | `skills/reverse-workflow.md` | Static → runtime RE pipeline; tool decision tree, sig generation, Unicorn OLLVM trace, patch workflow |
+| `skills/echo-ecosystem.md` | External tooling: web-mv, angel-menu-mcp, echo-esp-preview, as_bundler, SuperGhidra, NoVmp, VTIL, Triton |
+| `skills/devirt-workflow.md` | 6-step VMProtect devirt: vmp-lazy-unpack OEP, Triton semantics, NoVmp VTIL, LLVM passes, r2 sigs |
+| `skills/angelscript-patterns.md` | Mutex entity buffer, thread-safe tick/render, safe deref chain, rate limiter, scan fallback, W2S null check |
+| `skills/offset-update-workflow.md` | Post-patch offset recovery: binary diff, function reacquisition, IDA pattern update, live offset sources |
 
 ---
 
@@ -128,6 +133,8 @@ git clone https://github.com/zhaoxuya520/reverse-skill ../reverse-skill
 | [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler, validator, obfuscator, string scrambler |
 | [web-mv](https://github.com/cy-gnus/web-mv) | Browser-based memory viewer via Echo agent API |
 | [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | MCP server — toggle overlay menu from Claude |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | Claude Code plugin: lazy senior dev mode — minimum code philosophy, surgical changes |
+| [andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | Claude Code skill set: Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven |
 
 ### VMP / Devirtualization
 
