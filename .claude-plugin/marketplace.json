@@ -1,9 +1,4 @@
 {
-  "name": "echo-ai-toolkit",
-  "publisher": "NetVar1337",
-  "description": "Slash commands and context injection for Echo Universal API (AngelScript) development",
-  "homepage": "https://github.com/NetVar1337/echo-ai-toolkit",
-  "tags": ["game-hacking", "angelscript", "echo", "esp", "reverse-engineering", "aimbot", "anti-cheat"],
-  "categories": ["development", "gaming"],
-  "install": "/plugin install echo-ai-toolkit --marketplace NetVar1337/echo-ai-toolkit"
+  "owner": { "name": "NetVar1337" },
+  "plugins": [{ "name": "echo-ai-toolkit", "source": "./" }]
 }
