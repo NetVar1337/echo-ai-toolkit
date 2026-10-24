@@ -90,8 +90,14 @@ const KEYWORDS: [RegExp, AgentName][] = [
 ];
 
 // catch AGENT_INFO/AGENTS drift at startup (adding an agent must update both)
-const _mismatched = Object.keys(AGENTS).filter(k => !AGENT_INFO[k]);
-if (_mismatched.length) throw new Error(`echo-ai-toolkit: AGENT_INFO missing keys: ${_mismatched.join(', ')}`);
+export function validateAgentSync(
+  agents: Record<string, unknown>,
+  info: Record<string, unknown>
+): void {
+  const mismatched = Object.keys(agents).filter(k => !info[k]);
+  if (mismatched.length) throw new Error(`echo-ai-toolkit: AGENT_INFO missing keys: ${mismatched.join(', ')}`);
+}
+validateAgentSync(AGENTS, AGENT_INFO);
 
 // atom for active agent — written by commands/keyword detection, read by pane + prompt.compose
 const agentAtom = atom({ plugin: 'echo-ai-toolkit', key: 'agent' } as const, null as AgentName | null);
@@ -153,6 +159,10 @@ export const register: Register = (on) => {
       log.push(`✗ ${msg}${detail ? `: ${detail.slice(0, 100)}` : ''}`);
     };
     const skip = (msg: string) => { log.push(`↩ ${msg}`); };
+
+    if (!HOME) {
+      return { text: '## Echo Setup\n\n✗ $HOME is not set — cannot determine install directory.' };
+    }
 
     // 1. Create deps dir
     await $.process.run(['mkdir', '-p', ECHO_DEPS]);

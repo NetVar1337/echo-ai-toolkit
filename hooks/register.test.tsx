@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'claude-code/test';
 import type { PluginTestHarness } from 'claude-code/test';
-import { register } from './register';
+import { register, validateAgentSync } from './register';
 
 describe('echo-ai-toolkit plugin', () => {
   let harness: PluginTestHarness;
@@ -96,5 +96,9 @@ describe('echo-ai-toolkit plugin', () => {
     await expect(
       harness.emit('prompt.compose', { text: 'test' })
     ).resolves.toBeDefined();
+  });
+
+  it('validateAgentSync throws when AGENTS has a key missing from AGENT_INFO', () => {
+    expect(() => validateAgentSync({ 'echo-new': 'New agent' }, {})).toThrow('AGENT_INFO missing keys: echo-new');
   });
 });
