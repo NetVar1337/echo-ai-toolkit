@@ -30,6 +30,7 @@ export const register: Register = (on) => {
       $.command.register({ name, description: AGENTS[name] });
     }
     $.command.register({ name: 'echo-help', description: 'List all Echo AI Toolkit agents' });
+    $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
     return next(e);
   });
 
@@ -40,6 +41,12 @@ export const register: Register = (on) => {
     return {
       text: `## Echo AI Toolkit agents\n\n${lines}\n\nUse: \`Agent: echo-esp — write a CS2 bone ESP\`\nOr run a command (e.g. \`/echo-esp\`) to set context, then describe your task.`,
     };
+  });
+
+  on('command.run', { command: 'echo-reset' }, async ($, _e, _next) => {
+    activeAgent = null;
+    $.ui.status(undefined);
+    return { text: 'Echo agent context cleared.' };
   });
 
   for (const name of Object.keys(AGENTS) as AgentName[]) {
