@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Continue'
 
 $Repo      = 'NetVar1337/echo-ai-toolkit'
 $Plugin    = 'echo-ai-toolkit'
-$Tier      = if ($env:ECHO_TIER) { $env:ECHO_TIER } else { 'standard' }
+$Tier      = if ($env:ECHO_TIER) { $env:ECHO_TIER } else { 'full' }
 $EchoHome  = if ($env:ECHO_HOME) { $env:ECHO_HOME } else { Join-Path $HOME '.local\share\echo-ai-toolkit' }
 $BinDir    = Join-Path $EchoHome 'bin'
 $RefDir    = Join-Path $EchoHome 'reference'
@@ -102,13 +102,13 @@ function CloneBuildNode($name, $repo, $entry) {
     if (Test-Path (Join-Path $dir $entry)) { Ok $name } else { Fail $name "expected $entry after install" }
 }
 if (($env:ECHO_SKIP_MCP -ne '1') -and (Have node) -and (Have npm)) {
-    # mcp-gamehacking carries an 18 GB skills library. Never fetch that without
-    # asking: opt in with $env:ECHO_WITH_GAMEHACKING = '1'.
-    if ($env:ECHO_WITH_GAMEHACKING -eq '1') {
-        Write-Host '    mcp-gamehacking is ~3.1 GB on disk - this takes a while...'
-        CloneBuildNode 'mcp-gamehacking' '1llu50ry/mcp-gamehacking' 'dist\index.js'
+    # mcp-gamehacking is part of a full install: 18 GB of skills on disk, ~3.1 GB
+    # over the wire. Skip it with $env:ECHO_SKIP_GAMEHACKING = '1'.
+    if ($env:ECHO_SKIP_GAMEHACKING -eq '1') {
+        Skip 'mcp-gamehacking' 'ECHO_SKIP_GAMEHACKING=1'
     } else {
-        Skip 'mcp-gamehacking' '~3.1 GB of content - set $env:ECHO_WITH_GAMEHACKING=1 to install'
+        Write-Host '    mcp-gamehacking is ~3.1 GB - this is the long step, give it time...'
+        CloneBuildNode 'mcp-gamehacking' '1llu50ry/mcp-gamehacking' 'dist\index.js'
     }
     CloneBuildNode 'angel-menu-mcp' 'Jozkah/angel-menu-mcp' 'index.js'
 } elseif ($env:ECHO_SKIP_MCP -eq '1') { Skip 'MCP servers' 'ECHO_SKIP_MCP=1' }
@@ -163,8 +163,15 @@ if (TierAtLeast 'standard') {
     }
 
     # web-mv — Bun relay + SolidJS UI (source only; no releases published).
-    if (-not (Have bun)) { Skip 'web-mv' 'Bun not installed (https://bun.sh)' }
-    else {
+    if (-not (Have bun)) {
+        Sub 'installing Bun (needed by web-mv)...'
+        try {
+            Invoke-RestMethod -UseBasicParsing -Uri 'https://bun.sh/install.ps1' | Invoke-Expression
+            $env:PATH = (Join-Path $HOME '.bun\bin') + ';' + $env:PATH
+        } catch {}
+        if (Have bun) { Ok "bun $(& bun --version 2>$null)" } else { Skip 'web-mv' 'Bun install failed (https://bun.sh)' }
+    }
+    if (Have bun) {
         $dir = Join-Path $EchoHome 'web-mv'
         if (-not (Test-Path (Join-Path $dir '.git'))) {
             git clone --depth 1 https://github.com/Jozkah/web-mv $dir 2>&1 | Out-Null
@@ -367,6 +374,8 @@ $mcp = [ordered]@{
         gamehacking = [ordered]@{ command='node'; args=@($ghEntry); description='mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools' }
         rea         = [ordered]@{ command='npx';  args=@('-y','rea-agents'); description='REA: Reverse Engineer Anything - Unity IL2CPP, Godot, native binaries, APK, WASM, firmware' }
         'angel-menu'= [ordered]@{ command='node'; args=@($amEntry); description='Echo overlay menu control: list_features, get_feature, set_feature, connection_status' }
+        radare2     = [ordered]@{ command='r2pm'; args=@('-r','r2mcp'); description='radare2 MCP: disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)' }
+        ida         = [ordered]@{ command='uvx';  args=@('ida-mcp','stdio','--agent=echo'); description='IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)' }
     }
 }
 $mcpPath = Join-Path $EchoHome 'mcp.json'

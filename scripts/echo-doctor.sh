@@ -48,7 +48,7 @@ if [ -f "$ECHO_HOME/mcp-gamehacking/dist/index.js" ]; then
 elif [ -d "$ECHO_HOME/mcp-gamehacking" ]; then
   row miss "mcp-gamehacking" "cloned but not built"
 else
-  row na "mcp-gamehacking" "~3.1 GB — ECHO_WITH_GAMEHACKING=1"
+  row miss "mcp-gamehacking" "~3.1 GB — run: echo update --tools"
 fi
 if [ -f "$ECHO_HOME/angel-menu-mcp/index.js" ]; then
   row ok "angel-menu-mcp" "installed"
@@ -56,6 +56,8 @@ else
   row miss "angel-menu-mcp" "not installed"
 fi
 have npx && row ok "rea (npx)" "installs on first use" || row miss "rea (npx)" "needs Node"
+have r2pm && row ok "radare2 MCP" "r2pm present" || row na "radare2 MCP" "needs radare2 (r2pm -Uci r2mcp)"
+have uvx  && row ok "ida MCP" "uvx present" || row na "ida MCP" "needs uv (uvx ida-mcp) + IDA 9.4+"
 
 echo
 echo "Echo tooling"

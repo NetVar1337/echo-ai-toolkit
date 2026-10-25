@@ -41,12 +41,14 @@ else { Row miss 'mcp.json' 'run install.ps1' }
 
 if (Test-Path (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js')) { Row ok 'mcp-gamehacking' 'built' }
 elseif (Test-Path (Join-Path $EchoHome 'mcp-gamehacking')) { Row miss 'mcp-gamehacking' 'cloned but not built' }
-else { Row na 'mcp-gamehacking' '~3.1 GB - set ECHO_WITH_GAMEHACKING=1' }
+else { Row miss 'mcp-gamehacking' '~3.1 GB - run: echo update --tools' }
 
 if (Test-Path (Join-Path $EchoHome 'angel-menu-mcp\index.js')) { Row ok 'angel-menu-mcp' 'installed' }
 else { Row miss 'angel-menu-mcp' 'not installed' }
 
 if (Have npx) { Row ok 'rea (npx)' 'installs on first use' } else { Row miss 'rea (npx)' 'needs Node' }
+if (Have r2pm) { Row ok 'radare2 MCP' 'r2pm present' } else { Row na 'radare2 MCP' 'needs radare2 (r2pm -Uci r2mcp)' }
+if (Have uvx)  { Row ok 'ida MCP' 'uvx present' } else { Row na 'ida MCP' 'needs uv (uvx ida-mcp) + IDA 9.4+' }
 
 Write-Host "`nEcho tooling"
 if (Test-Path (Join-Path $EchoHome 'bin\as_bundler.exe')) { Row ok 'as_bundler' (Join-Path $EchoHome 'bin\as_bundler.exe') }

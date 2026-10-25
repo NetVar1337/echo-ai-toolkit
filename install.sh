@@ -15,7 +15,7 @@ set -uo pipefail
 
 REPO="NetVar1337/echo-ai-toolkit"
 PLUGIN="echo-ai-toolkit"
-TIER="${ECHO_TIER:-standard}"
+TIER="${ECHO_TIER:-full}"
 ECHO_HOME="${ECHO_HOME:-$HOME/.local/share/echo-ai-toolkit}"
 BIN_DIR="$ECHO_HOME/bin"
 REF_DIR="$ECHO_HOME/reference"
@@ -115,13 +115,13 @@ clone_build_node() { # name repo entry
 }
 
 if have node && have npm && [ "${ECHO_SKIP_MCP:-0}" != "1" ]; then
-  # mcp-gamehacking carries an 18 GB skills library (8259 files). Never fetch that
-  # without asking: opt in with ECHO_WITH_GAMEHACKING=1.
-  if [ "${ECHO_WITH_GAMEHACKING:-0}" = "1" ]; then
-    sub "mcp-gamehacking is ~3.1 GB on disk — this takes a while…"
-    clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
+  # mcp-gamehacking is part of a full install: 18 GB of skills on disk, ~3.1 GB
+  # over the wire. Skip it with ECHO_SKIP_GAMEHACKING=1.
+  if [ "${ECHO_SKIP_GAMEHACKING:-0}" = "1" ]; then
+    skip "mcp-gamehacking" "ECHO_SKIP_GAMEHACKING=1"
   else
-    skip "mcp-gamehacking" "~3.1 GB of content — re-run with ECHO_WITH_GAMEHACKING=1 to install"
+    sub "mcp-gamehacking is ~3.1 GB — this is the long step, give it time…"
+    clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
   fi
   clone_build_node angel-menu-mcp Jozkah/angel-menu-mcp index.js
 elif [ "${ECHO_SKIP_MCP:-0}" = "1" ]; then
@@ -182,8 +182,15 @@ install_lsp
 # web-mv — Bun relay + SolidJS UI (source only; no releases published).
 install_web_mv() {
   local dir="$ECHO_HOME/web-mv"
+  # web-mv needs Bun; install it rather than skipping, so a full install is complete.
   if ! have bun; then
-    skip "web-mv" "Bun not installed (https://bun.sh)"; return
+    sub "installing Bun (needed by web-mv)…"
+    if have curl; then
+      curl -fsSL https://bun.sh/install 2>/dev/null | bash >/dev/null 2>&1
+      [ -x "$HOME/.bun/bin/bun" ] && export PATH="$HOME/.bun/bin:$PATH"
+    fi
+    if ! have bun; then skip "web-mv" "Bun install failed (https://bun.sh)"; return; fi
+    ok "bun $(bun --version 2>/dev/null)"
   fi
   if [ ! -d "$dir/.git" ]; then
     git clone --depth 1 https://github.com/Jozkah/web-mv "$dir" >/dev/null 2>&1 \
@@ -435,6 +442,8 @@ AM_ENTRY="$ECHO_HOME/angel-menu-mcp/index.js"
   add_server gamehacking node "[\"$GH_ENTRY\"]" "mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools"
   add_server rea npx '["-y","rea-agents"]' "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, firmware"
   add_server angel-menu node "[\"$AM_ENTRY\"]" "Echo overlay menu control: list_features, get_feature, set_feature, connection_status"
+  add_server radare2 r2pm '["-r","r2mcp"]' "radare2 MCP: disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)"
+  add_server ida uvx '["ida-mcp","stdio","--agent=echo"]' "IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)"
   printf '\n  }\n}\n'
 } > "$ECHO_HOME/mcp.json"
 ok ".mcp.json -> $ECHO_HOME/mcp.json"

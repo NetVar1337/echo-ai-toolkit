@@ -10,9 +10,9 @@ AI development toolkit for the [Echo Universal API](https://echo-23.gitbook.io/a
 
 ## Install
 
-**One command installs everything.** The plugin, both MCP servers, the Echo tooling,
-the Python reverse-engineering stack, and offline copies of the two big knowledge bases.
-Anything whose prerequisite is missing is skipped with a reason, never a failure.
+**One command installs everything.** No flags, no tiers to pick: the plugin, all 18
+skills, all 12 agents, all 5 MCP servers, all 17 companion tools, both Claude Code
+companion plugins, and the Pi profile with its `echo` CLI.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.sh | bash
@@ -25,71 +25,68 @@ irm https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.ps
 Safe to re-run — every step is idempotent. Verify at any time:
 
 ```bash
-./scripts/echo-doctor.sh        # or .\scripts\echo-doctor.ps1 on Windows
+echo doctor              # every tool: ok / MISSING / not applicable
 ```
 
-### Tiers and size
+### What lands
 
-Sizes are **measured**, not estimated:
-
-| Tier | Installs | Needs | Size |
-|---|---|---|---|
-| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ | ~35 MB |
-| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python | ~550 MB |
-| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun | ~1.2 GB |
-
-Most of the standard tier's size is unavoidable tooling: the Python venv with Triton
-(258 MB), and `VMProtect-devirtualization`'s bundled Intel Pin (121 MB) plus sample
-traces (24 MB).
-
-```bash
-ECHO_TIER=full bash install.sh
-```
-
-Two things are **opt-in** because they are large:
-
-| Flag | Adds | Size |
+| | Count | What |
 |---|---|---|
-| `ECHO_WITH_GAMEHACKING=1` | mcp-gamehacking — 4100+ skills, 75 agents, 19+ MCP tools | **~3.1 GB** (18 GB of skills on disk) |
-| `ECHO_SKIP_MCP=1` | *skips* the MCP build entirely — fastest plugin-only install | — |
+| Agents | 12 | `echo-dev`, `-esp`, `-aimbot`, `-triggerbot`, `-radar`, `-loot`, `-memory`, `-anticheat`, `-sdk`, `-reverse`, `-config`, `-scripts` |
+| Skills | 18 | also copied into the Pi profile — same `SKILL.md` format |
+| Templates | 15 | runnable `.as` files |
+| MCP servers | 5 | gamehacking, rea, angel-menu, radare2, ida |
+| Companion tools | 17 | the full list below |
+| Plugins | 3 | echo-ai-toolkit, ponytail, andrej-karpathy-skills |
 
-```bash
-ECHO_WITH_GAMEHACKING=1 bash install.sh
-```
+Expected size is **~3.6 GB**, almost all of it `mcp-gamehacking` (3.1 GB — 18 GB of
+skills once on disk). That is the cost of a complete install. To go smaller:
 
-The two big knowledge bases are fetched as **README files, not clones** —
-`awesome-game-security` is 3.19 GB on disk, but its 435 KB README is the entire
-curated list, which is all an AI needs.
+| Flag | Effect |
+|---|---|
+| `ECHO_SKIP_GAMEHACKING=1` | skip mcp-gamehacking — drops the install to ~550 MB |
+| `ECHO_SKIP_MCP=1` | skip every MCP build |
+| `ECHO_TIER=standard` | skip the compiler-built stack (NoVmp, VTIL-Core, vtil2, LLVM, web-mv) |
+| `ECHO_TIER=minimal` | plugin + MCP servers only |
+| `ECHO_NO_ALIAS=1` | do not add the `echo` shell alias |
 
-<details>
-<summary>What gets installed, and how each one is fetched</summary>
+A tool whose prerequisite cannot be satisfied is **skipped with a reason**, never a
+hard failure — so the install always completes, and `echo doctor` tells you what is
+missing and why.
 
-| Tool | What it gives you | How it is installed | Tier |
-|---|---|---|---|
-| **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin | minimal |
-| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | toggle the Echo overlay menu from Claude | clone + `npm install` | minimal |
-| [rea](https://github.com/morluto/rea) | static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect | minimal |
-| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + `npm run build` | **opt-in** (~3.1 GB) |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | lazy-senior-dev discipline | Claude Code plugin | standard |
-| [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | coding-discipline guidelines | Claude Code plugin | standard |
-| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | prebuilt release binary | standard |
-| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | single `.as` drop-in, copied to your scripts dir | standard |
-| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover docs for ~1900 Echo symbols | `.vsix` from the release, `code --install-extension` | standard |
-| [Triton](https://github.com/JonathanSalwan/Triton) | symbolic execution + taint analysis | `pip install triton-library` | standard |
-| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone (29 MB) | standard |
-| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone (8 MB) + `pip install -e .` | standard |
-| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4000+ curated resources | README only (435 KB, *not* the 3.19 GB clone) | standard |
-| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | the mega cheatsheet | README only (636 KB) | standard |
-| [web-mv](https://github.com/Jozkah/web-mv) | browser memory viewer (`ws://127.0.0.1:9000`) | clone + `bun install` | full |
-| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build | full |
-| [NoVmp](https://github.com/can1357/NoVmp) | full VMP devirt → optimized VTIL → native | CMake build (vendors VTIL-Core) | full |
-| [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` | full |
-| [llvm-project](https://github.com/llvm/llvm-project) | OLLVM passes + Triton's LLVM interface | **system package** (`winget` / `brew` / `apt`) — never built from source | full |
+### Everything that gets installed
+
+| Tool | What it gives you | How it is fetched |
+|---|---|---|
+| **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin |
+| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + build |
+| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | toggle the Echo overlay menu from Claude | clone + `npm install` |
+| [rea](https://github.com/morluto/rea) | static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect |
+| radare2 MCP | disasm, decompile, search, analysis | `r2pm -r r2mcp` (needs `r2pm -Uci r2mcp`) |
+| IDA MCP | decompile, rename, xref, structs | `uvx ida-mcp` (needs IDA 9.4+ with idalib) |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | lazy-senior-dev discipline | Claude Code plugin |
+| [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | coding-discipline guidelines | Claude Code plugin |
+| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | prebuilt release binary |
+| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | single `.as` drop-in into your scripts dir |
+| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover docs for ~1900 Echo symbols | `.vsix` from the release, `code --install-extension` |
+| [Triton](https://github.com/JonathanSalwan/Triton) | symbolic execution + taint analysis | `pip install triton-library` into a venv |
+| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone (29 MB, bundles Intel Pin) |
+| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone + `pip install -e .` |
+| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4000+ curated resources | README only (435 KB, *not* the 3.19 GB clone) |
+| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | the mega cheatsheet | README only (636 KB) |
+| [web-mv](https://github.com/Jozkah/web-mv) | browser memory viewer (`ws://127.0.0.1:9000`) | installs Bun if missing, clone + `bun install` |
+| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build |
+| [NoVmp](https://github.com/can1357/NoVmp) | full VMP devirt → optimized VTIL → native | CMake build (vendors VTIL-Core) |
+| [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` |
+| [llvm-project](https://github.com/llvm/llvm-project) | OLLVM passes + Triton's LLVM interface | **system package** (`winget` / `brew` / `apt`) — never built from source |
 
 Everything lands in `~/.local/share/echo-ai-toolkit/` (`$env:ECHO_HOME` to override).
 MCP wiring is written to `~/.local/share/echo-ai-toolkit/mcp.json`.
 
-</details>
+**Requirements:** Claude Code. Node 22.19+ for Pi and the MCP servers, Python 3 for the
+RE tooling, CMake / .NET 8 for the compiler-built stack (installed automatically where
+the platform allows). The Echo platform itself needs Discord with the overlay enabled
+(Echo is Windows-only).
 
 <details>
 <summary>Manual install (no script)</summary>
@@ -103,13 +100,8 @@ MCP wiring is written to `~/.local/share/echo-ai-toolkit/mcp.json`.
 /plugin install andrej-karpathy-skills@karpathy-skills
 ```
 
-Then run `/echo-setup` inside Claude Code to fetch the MCP dependencies. `/echo-tier`
-shows or changes the install tier.
+Then run `/echo-setup` inside Claude Code to fetch the MCP dependencies.
 </details>
-
-**Requirements:** Claude Code. Node 18+ for the MCP servers, Python 3 for the RE
-tooling, and CMake / .NET 8 / Bun only if you want the `full` tier. The Echo platform
-itself needs Discord with the overlay enabled (Echo is Windows-only).
 
 ### Use as a project (no plugin)
 
