@@ -392,6 +392,30 @@ fi
 if tier_at_least full; then
 say "Compiler-built tooling (tier: full)"
 
+# The compiler-built tools need cmake / dotnet / LLVM. Install them rather than
+# skipping, so a full install actually finishes. Best-effort: a failure is a skip.
+pkg_install() { # label pkg-apt pkg-brew pkg-winget
+  local label="$1" apt="$2" brew_p="$3" winget_p="$4"
+  if have apt-get && have sudo; then
+    sub "installing $label via apt…"
+    sudo -n apt-get install -y "$apt" >/dev/null 2>&1 && { ok "$label (apt)"; return 0; }
+  fi
+  if have brew; then
+    sub "installing $label via brew…"
+    brew install "$brew_p" >/dev/null 2>&1 && { ok "$label (brew)"; return 0; }
+  fi
+  if have winget && [ -n "$winget_p" ]; then
+    winget install --id "$winget_p" --silent --accept-package-agreements --accept-source-agreements >/dev/null 2>&1 \
+      && { ok "$label (winget)"; return 0; }
+  fi
+  skip "$label" "install manually (apt: $apt / brew: $brew_p${winget_p:+ / winget: $winget_p})"
+  return 1
+}
+
+have cmake  || pkg_install cmake  cmake  cmake  Kitware.CMake
+have dotnet || pkg_install "dotnet SDK 8" dotnet-sdk-8.0 dotnet Microsoft.DotNet.SDK.8
+{ have llvm-config || have opt; } || pkg_install LLVM llvm llvm LLVM.LLVM
+
 # VTIL-Core / NoVmp — C++ via CMake. NoVmp vendors VTIL-Core as a submodule.
 build_cmake() { # name repo submodules
   local name="$1" repo="$2" subs="${3:-}" dir="$ECHO_HOME/$1"
@@ -420,19 +444,7 @@ else
   skip "vtil2" "dotnet (.NET 8 SDK) not found"
 fi
 
-# LLVM — only for Triton's LLVM interface and OLLVM passes. Never build from source:
-# use the platform package.
-if have llvm-config || have opt; then
-  ok "LLVM already present"
-else
-  case "$(uname -s)" in
-    Darwin) have brew && { brew install llvm >/dev/null 2>&1 && ok "LLVM (brew)" || skip "LLVM" "brew install failed"; } || skip "LLVM" "brew not found" ;;
-    Linux)  if have apt-get; then
-              sudo apt-get install -y llvm >/dev/null 2>&1 && ok "LLVM (apt)" || skip "LLVM" "apt install failed (try: sudo apt install llvm)"
-            else skip "LLVM" "no apt-get — install LLVM manually"; fi ;;
-    *)      skip "LLVM" "install LLVM manually (winget install LLVM.LLVM)" ;;
-  esac
-fi
+# LLVM is handled by pkg_install above (system package, never a source build).
 fi
 
 # ── 7. write .mcp.json ───────────────────────────────────────────────────────

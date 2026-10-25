@@ -336,6 +336,26 @@ if (TierAtLeast 'standard') {
 if (TierAtLeast 'full') {
     Say 'Compiler-built tooling (tier: full)'
 
+    # The compiler-built tools need cmake / dotnet / LLVM. Install them rather
+    # than skipping, so a full install actually finishes.
+    function Install-Pkg($label, $wingetId) {
+        if (Have winget) {
+            Sub "installing $label via winget..."
+            winget install --id $wingetId --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { Ok "$label (winget)"; return $true }
+        }
+        if (Have choco) {
+            Sub "installing $label via choco..."
+            choco install -y $wingetId.Split('.')[-1] 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { Ok "$label (choco)"; return $true }
+        }
+        Skip $label "install manually (winget install $wingetId)"
+        return $false
+    }
+    if (-not (Have cmake))  { $null = Install-Pkg 'cmake' 'Kitware.CMake' }
+    if (-not (Have dotnet)) { $null = Install-Pkg 'dotnet SDK 8' 'Microsoft.DotNet.SDK.8' }
+    if (-not ((Have llvm-config) -or (Have opt))) { $null = Install-Pkg 'LLVM' 'LLVM.LLVM' }
+
     function BuildCMake($name, $repo, [string[]]$extra) {
         $dir = Join-Path $EchoHome $name
         if (-not (Have cmake)) { Skip $name 'cmake not found'; return }
@@ -365,12 +385,7 @@ if (TierAtLeast 'full') {
         }
     }
 
-    # LLVM — only for Triton's LLVM interface and OLLVM passes. Never build from source.
-    if ((Have llvm-config) -or (Have opt)) { Ok 'LLVM already present' }
-    elseif (Have winget) {
-        winget install --id LLVM.LLVM --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { Ok 'LLVM (winget)' } else { Skip 'LLVM' 'winget install failed' }
-    } else { Skip 'LLVM' 'install LLVM manually (winget install LLVM.LLVM)' }
+    # LLVM is handled by Install-Pkg above (system package, never a source build).
 }
 
 # ── 7. write mcp.json ────────────────────────────────────────────────────────
