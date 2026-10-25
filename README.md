@@ -39,16 +39,25 @@ echo doctor              # every tool: ok / MISSING / not applicable
 | Companion tools | 17 | the full list below |
 | Plugins | 3 | echo-ai-toolkit, ponytail, andrej-karpathy-skills |
 
-Expected size is **~3.6 GB**, almost all of it `mcp-gamehacking` (3.1 GB — 18 GB of
-skills once on disk). That is the cost of a complete install. To go smaller:
+**Expected size: ~22 GB**, measured. Almost all of it is `mcp-gamehacking` — a
+21 GB checkout (18 GB of `skills/`, 4161 skill directories, each with its own
+`source.txt`). GitHub reports that repo as 3.1 GB because that is the *compressed
+git* size; the working tree is what lands on your disk.
+
+That is the honest cost of "every skill". If that is more than you want:
 
 | Flag | Effect |
 |---|---|
-| `ECHO_SKIP_GAMEHACKING=1` | skip mcp-gamehacking — drops the install to ~550 MB |
+| `ECHO_SKIP_GAMEHACKING=1` | skip mcp-gamehacking — drops the install to ~600 MB |
 | `ECHO_SKIP_MCP=1` | skip every MCP build |
 | `ECHO_TIER=standard` | skip the compiler-built stack (NoVmp, VTIL-Core, vtil2, LLVM, web-mv) |
 | `ECHO_TIER=minimal` | plugin + MCP servers only |
 | `ECHO_NO_ALIAS=1` | do not add the `echo` shell alias |
+
+```bash
+# lean install, same agents/skills/templates/tools minus the 21 GB skills library
+ECHO_SKIP_GAMEHACKING=1 bash install.sh
+```
 
 A tool whose prerequisite cannot be satisfied is **skipped with a reason**, never a
 hard failure — so the install always completes, and `echo doctor` tells you what is

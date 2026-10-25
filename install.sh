@@ -100,10 +100,19 @@ have node && have npm || skip "MCP servers" "Node 18+ required"
 clone_build_node() { # name repo entry
   local name="$1" repo="$2" entry="$3" dir="$ECHO_HOME/$1"
   if [ -f "$dir/$entry" ]; then ok "$name already built"; return; fi
+  # A multi-GB clone can die partway and leave .git behind without a working tree.
+  # Treat "has .git but no package.json" as a broken clone and start over.
+  if [ -d "$dir/.git" ] && [ ! -f "$dir/package.json" ]; then
+    sub "removing incomplete $name clone…"
+    rm -rf "$dir"
+  fi
   if [ ! -d "$dir/.git" ]; then
     sub "cloning $name…"
-    git clone --depth 1 "https://github.com/$repo" "$dir" >/dev/null 2>&1 \
-      || { fail "$name" "clone failed"; return; }
+    if ! git clone --depth 1 "https://github.com/$repo" "$dir" >/dev/null 2>&1; then
+      rm -rf "$dir"
+      fail "$name" "clone failed (re-run to retry)"
+      return
+    fi
   fi
   sub "building $name (npm install + build — this is the slow step, a few minutes)…"
   ( cd "$dir" \

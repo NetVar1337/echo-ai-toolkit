@@ -89,9 +89,17 @@ Say 'MCP servers'
 function CloneBuildNode($name, $repo, $entry) {
     $dir = Join-Path $EchoHome $name
     if (Test-Path (Join-Path $dir $entry)) { Ok "$name already built"; return }
+    # A multi-GB clone can die partway and leave .git behind without a working tree.
+    if ((Test-Path (Join-Path $dir '.git')) -and -not (Test-Path (Join-Path $dir 'package.json'))) {
+        Sub "removing incomplete $name clone..."
+        Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+    }
     if (-not (Test-Path (Join-Path $dir '.git'))) {
         git clone --depth 1 "https://github.com/$repo" $dir 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { Fail $name 'clone failed'; return }
+        if ($LASTEXITCODE -ne 0) {
+            Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+            Fail $name 'clone failed (re-run to retry)'; return
+        }
     }
     Push-Location $dir
     npm install --silent 2>&1 | Out-Null
