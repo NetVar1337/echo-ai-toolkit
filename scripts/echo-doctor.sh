@@ -87,6 +87,30 @@ else
 fi
 
 echo
+echo "Pi coding agent"
+PIPROF="$ECHO_HOME/pi"
+if [ -f "$PIPROF/SYSTEM.md" ]; then
+  row ok "pi profile" "$PIPROF"
+  row ok "  SYSTEM.md" "$(wc -c < "$PIPROF/SYSTEM.md") bytes (replaces default prompt)"
+  [ -f "$PIPROF/APPEND_SYSTEM.md" ] && row ok "  APPEND_SYSTEM.md" "$(wc -c < "$PIPROF/APPEND_SYSTEM.md") bytes (appended)"
+  row ok "  skills" "$(ls -d "$PIPROF"/skills/*/ 2>/dev/null | wc -l) ported"
+  row ok "  prompts" "$(ls "$PIPROF"/prompts/*.md 2>/dev/null | wc -l) templates"
+else
+  row miss "pi profile" "run install.sh"
+fi
+[ -x "$ECHO_HOME/bin/echo" ] && row ok "echo launcher" "$ECHO_HOME/bin/echo" || row miss "echo launcher" "not installed"
+if have pi; then
+  row ok "pi binary" "$(pi --version 2>/dev/null | head -1)"
+else
+  row na "pi binary" "curl -fsSL https://pi.dev/install.sh | sh"
+fi
+if grep -qs 'echo-ai-toolkit: echo alias' "$HOME/.bashrc" "$HOME/.zshrc" 2>/dev/null; then
+  row ok "echo alias" "in shell rc (shadows the builtin)"
+else
+  row na "echo alias" "not added (ECHO_NO_ALIAS=1 or no rc file)"
+fi
+
+echo
 echo "Python tooling"
 # Python tools live in a dedicated venv when one could be created (PEP 668 safe).
 VENV_PY="$ECHO_HOME/venv/bin/python"

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# echo — launch Pi with the Echo profile.
+#
+#   echo                     interactive session
+#   echo -p "query"          print mode
+#   echo --help              pass anything straight through to pi
+#
+# Both prompt files are passed explicitly with Pi's own flags, so they apply even
+# if file discovery changes:
+#   --system-prompt         replaces Pi's default prompt
+#   --append-system-prompt  appended to it (repeatable)
+#
+# The profile lives in $ECHO_HOME/pi and is selected with PI_CODING_AGENT_DIR, so
+# your normal `pi` configuration is left untouched.
+set -euo pipefail
+
+ECHO_HOME="${ECHO_HOME:-$HOME/.local/share/echo-ai-toolkit}"
+PROFILE="$ECHO_HOME/pi"
+
+if ! command -v pi >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+echo: `pi` is not installed.
+
+  curl -fsSL https://pi.dev/install.sh | sh
+  # or: npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+
+Pi needs Node.js 22.19 or newer.
+EOF
+  exit 127
+fi
+
+if [ ! -f "$PROFILE/SYSTEM.md" ]; then
+  cat >&2 <<EOF
+echo: Echo profile missing at $PROFILE
+
+Re-run the toolkit installer, or:
+  ECHO_HOME=$ECHO_HOME ./install.sh
+EOF
+  exit 1
+fi
+
+export PI_CODING_AGENT_DIR="$PROFILE"
+
+args=(--system-prompt "$PROFILE/SYSTEM.md")
+[ -f "$PROFILE/APPEND_SYSTEM.md" ] && args+=(--append-system-prompt "$PROFILE/APPEND_SYSTEM.md")
+
+exec pi "${args[@]}" "$@"

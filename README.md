@@ -149,6 +149,52 @@ To open an agent directly: `Agent: echo-esp — write a CS2 bone ESP`
 
 ---
 
+## Pi coding agent
+
+[Pi](https://pi.dev) is a minimal terminal agent harness. The installer writes an Echo
+profile for it and adds an `echo` launcher, so the same 18 skills and 4 prompt
+templates work there too — with your own system prompt instead of Pi's default.
+
+```bash
+echo                      # interactive, Echo profile loaded
+echo -p "write a CS2 bone ESP"   # print mode
+```
+
+The launcher passes both prompt files explicitly, so they always apply:
+
+```
+pi --system-prompt        <profile>/SYSTEM.md          # replaces Pi's default prompt
+   --append-system-prompt <profile>/APPEND_SYSTEM.md   # appended (repeatable)
+```
+
+| File | Role |
+|---|---|
+| `pi/SYSTEM.md` | Directness + a narrow, explicit refusal boundary — no boilerplate warnings on legitimate RE work |
+| `pi/APPEND_SYSTEM.md` | Echo API facts applied silently: namespacing, `bool main()`, out-params, the AngelScript language traps |
+| `pi/AGENTS.md` | Repo layout, the two verification commands, conventions |
+| `pi/prompts/*.md` | `/echo-api`, `/echo-esp`, `/echo-reverse`, `/echo-verify` |
+| `pi/skills/` | all 18 skills, copied — Pi uses the same `SKILL.md` format |
+
+Profile location: `~/.local/share/echo-ai-toolkit/pi`, selected via
+`PI_CODING_AGENT_DIR`, so your normal `pi` config is untouched.
+
+> **`echo` shadows the shell builtin.** The installer adds
+> `alias echo='…/bin/echo'` to `.bashrc`/`.zshrc` (or a `function echo` to your
+> PowerShell profile) — **interactive shells only**, so scripts still get the real
+> builtin. If you would rather not, install with `ECHO_NO_ALIAS=1` and use
+> `~/.local/share/echo-ai-toolkit/bin/echo` directly.
+
+Pi needs Node 22.19+:
+
+```bash
+curl -fsSL https://pi.dev/install.sh | sh          # macOS / Linux
+powershell -c "irm https://pi.dev/install.ps1 | iex"  # Windows
+```
+
+Then `/login` inside Pi to connect a provider.
+
+---
+
 ## Agents (12)
 
 | Agent | Use when... |

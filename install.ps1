@@ -190,7 +190,86 @@ if (TierAtLeast 'standard') {
     }
 }
 
-# ── 5. Python reverse-engineering tooling ────────────────────────────────────
+# ── 5. Pi coding agent ───────────────────────────────────────────────────────
+if (TierAtLeast 'standard') {
+    Say 'Pi coding agent'
+
+    $piProfile = Join-Path $EchoHome 'pi'
+    New-Item -ItemType Directory -Force -Path (Join-Path $piProfile 'prompts'), (Join-Path $piProfile 'skills') | Out-Null
+
+    $repoSrc = if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'pi'))) { Join-Path $PSScriptRoot 'pi' } else { $null }
+    $base = "https://raw.githubusercontent.com/$Repo/main"
+
+    if ($repoSrc) {
+        foreach ($f in 'SYSTEM.md','APPEND_SYSTEM.md','AGENTS.md') {
+            $s = Join-Path $repoSrc $f
+            if (Test-Path $s) { Copy-Item $s (Join-Path $piProfile $f) -Force }
+        }
+        Get-ChildItem (Join-Path $repoSrc 'prompts') -Filter *.md -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $piProfile 'prompts') -Force }
+        $skillSrc = Join-Path (Split-Path $repoSrc -Parent) 'skills'
+        $echoSrc  = Join-Path $repoSrc 'bin\echo.ps1'
+    } else {
+        foreach ($f in 'SYSTEM.md','APPEND_SYSTEM.md','AGENTS.md') {
+            try { Invoke-WebRequest -UseBasicParsing -Uri "$base/pi/$f" -OutFile (Join-Path $piProfile $f) -ErrorAction Stop } catch {}
+        }
+        foreach ($p in 'echo-api','echo-esp','echo-reverse','echo-verify') {
+            try { Invoke-WebRequest -UseBasicParsing -Uri "$base/pi/prompts/$p.md" -OutFile (Join-Path $piProfile "prompts\$p.md") -ErrorAction Stop } catch {}
+        }
+        $skillSrc = Join-Path $HOME '.claude\plugins\marketplaces\echo-ai-toolkit\skills'
+        $echoSrc  = $null
+    }
+
+    # Skills: Pi uses the same SKILL.md format, so they port directly.
+    if (Test-Path $skillSrc) {
+        Get-ChildItem $skillSrc -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $skillMd = Join-Path $_.FullName 'SKILL.md'
+            if (Test-Path $skillMd) {
+                $dest = Join-Path $piProfile "skills\$($_.Name)"
+                New-Item -ItemType Directory -Force -Path $dest | Out-Null
+                Copy-Item $skillMd (Join-Path $dest 'SKILL.md') -Force
+            }
+        }
+    }
+    $nSkills = (Get-ChildItem (Join-Path $piProfile 'skills') -Directory -ErrorAction SilentlyContinue).Count
+
+    # MCP: reuse the same server set the toolkit writes.
+    $mcpSrc = Join-Path $EchoHome 'mcp.json'
+    if (Test-Path $mcpSrc) { Copy-Item $mcpSrc (Join-Path $piProfile 'mcp.json') -Force }
+
+    @{ skills = @('./skills'); prompts = @('./prompts') } |
+        ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $piProfile 'settings.json')
+
+    Ok "pi profile -> $piProfile ($nSkills skills)"
+
+    # Launcher.
+    $launcher = Join-Path $BinDir 'echo.ps1'
+    if ($echoSrc -and (Test-Path $echoSrc)) { Copy-Item $echoSrc $launcher -Force }
+    if (Test-Path $launcher) { Ok "launcher -> $launcher" }
+
+    # `echo` alias as a PowerShell function in the user profile.
+    if ($env:ECHO_NO_ALIAS -ne '1') {
+        $prof = $PROFILE.CurrentUserAllHosts
+        $marker = '# echo-ai-toolkit: echo alias'
+        $existing = if (Test-Path $prof) { Get-Content $prof -Raw } else { '' }
+        if ($existing -notmatch [regex]::Escape($marker)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $prof -Parent) | Out-Null
+            Add-Content -Path $prof -Value @"
+
+$marker -> Pi with the Echo profile
+# This shadows the built-in echo in interactive PowerShell sessions only.
+# Remove these lines, or set `$env:ECHO_NO_ALIAS = '1' and re-run the installer.
+function echo { & '$launcher' @args }
+"@
+            Ok "alias added to $prof (shadows the echo builtin - see the comment there)"
+        } else { Ok 'echo alias already present' }
+    } else { Skip 'echo alias' 'ECHO_NO_ALIAS=1' }
+
+    if (Have pi) { Ok "pi $(& pi --version 2>&1 | Select-Object -First 1)" }
+    else { Skip 'pi binary' 'install: irm https://pi.dev/install.ps1 | iex  (needs Node 22.19+)' }
+}
+
+# ── 6. Python reverse-engineering tooling ────────────────────────────────────
 if (TierAtLeast 'standard') {
     Say 'Python reverse-engineering tooling'
     $py = if (Have python) { 'python' } elseif (Have py) { 'py' } else { $null }

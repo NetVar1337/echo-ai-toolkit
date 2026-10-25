@@ -110,6 +110,52 @@ jobs:
             --checker "$PWD/scripts/angelscript/check" \
             --workdir "$RUNNER_TEMP"
 
+  pi-profile:
+    name: Pi profile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prompt files exist and are non-empty
+        run: |
+          fail=0
+          for f in pi/SYSTEM.md pi/APPEND_SYSTEM.md pi/AGENTS.md; do
+            if [ -s "$f" ]; then echo "OK   $f ($(wc -c < "$f") bytes)"; else echo "FAIL $f missing or empty"; fail=1; fi
+          done
+          exit $fail
+
+      - name: Every prompt template has frontmatter
+        run: |
+          fail=0
+          for f in pi/prompts/*.md; do
+            [ -e "$f" ] || continue
+            head -1 "$f" | grep -q '^---$' || { echo "FAIL $f: no frontmatter"; fail=1; continue; }
+            grep -q '^description:' "$f" || { echo "FAIL $f: no description"; fail=1; continue; }
+            echo "OK   $f"
+          done
+          exit $fail
+
+      - name: Skills port to Pi's SKILL.md format
+        run: |
+          fail=0
+          n=0
+          for d in skills/*/; do
+            f="$d/SKILL.md"
+            [ -f "$f" ] || { echo "FAIL $d: no SKILL.md"; fail=1; continue; }
+            grep -q '^name:' "$f" || { echo "FAIL $f: no name"; fail=1; continue; }
+            grep -q '^description:' "$f" || { echo "FAIL $f: no description"; fail=1; continue; }
+            n=$((n+1))
+          done
+          echo "$n skills are Pi-compatible (name + description frontmatter)"
+          exit $fail
+
+      - name: Launcher refuses cleanly without pi
+        run: |
+          chmod +x pi/bin/echo
+          out=$(ECHO_HOME=/nonexistent PATH=/usr/bin:/bin pi/bin/echo 2>&1 || true)
+          echo "$out"
+          echo "$out" | grep -q 'pi.*is not installed' || { echo "FAIL: no install hint"; exit 1; }
+
   plugin:
     name: Plugin validation
     runs-on: ubuntu-latest

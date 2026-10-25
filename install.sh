@@ -26,6 +26,11 @@ case "$TIER" in
   *) printf '\n\033[1;35m! unknown ECHO_TIER="%s" — using standard\033[0m\n' "$TIER"; TIER=standard ;;
 esac
 
+# Where the repo lives. When run via `curl | bash` there is no repo, so fetch the
+# Pi profile files instead of copying them.
+REPO_SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+[ -d "$REPO_SRC/pi" ] || REPO_SRC=""
+
 # ── reporting ────────────────────────────────────────────────────────────────
 OK=(); SKIPPED=(); FAILED=()
 say()  { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
@@ -202,7 +207,105 @@ fetch_doc awesome-game-security  gmh5225/awesome-game-security
 fetch_doc gamehacking-cheatsheet ridpath/gamehacking-cheatsheet
 fi
 
-# ── 5. Python reverse-engineering tooling ────────────────────────────────────
+# ── 5. Pi coding agent ───────────────────────────────────────────────────────
+if tier_at_least standard; then
+say "Pi coding agent"
+
+# Pi is a separate harness. The profile is plain Markdown and useful on its own,
+# so always write it; the `pi` binary itself is optional.
+install_pi() {
+  local profile="$ECHO_HOME/pi" src="$REPO_SRC/pi"
+
+  mkdir -p "$profile/prompts" "$profile/skills"
+
+  # With a local repo, copy. Under `curl | bash` there is none, so fetch.
+  if [ -n "$src" ] && [ -d "$src" ]; then
+    for f in SYSTEM.md APPEND_SYSTEM.md AGENTS.md; do
+      [ -f "$src/$f" ] && cp -f "$src/$f" "$profile/$f"
+    done
+    cp -f "$src"/prompts/*.md "$profile/prompts/" 2>/dev/null
+    local d name n=0
+    for d in "$REPO_SRC"/skills/*/; do
+      [ -f "$d/SKILL.md" ] || continue
+      name=$(basename "$d")
+      mkdir -p "$profile/skills/$name"
+      cp -f "$d/SKILL.md" "$profile/skills/$name/SKILL.md"
+      n=$((n+1))
+    done
+    [ -f "$src/bin/echo" ] && cp -f "$src/bin/echo" "$BIN_DIR/echo"
+  else
+    local base="https://raw.githubusercontent.com/$REPO/main"
+    for f in SYSTEM.md APPEND_SYSTEM.md AGENTS.md; do
+      $CURL "$base/pi/$f" -o "$profile/$f"
+    done
+    for p in echo-api echo-esp echo-reverse echo-verify; do
+      $CURL "$base/pi/prompts/$p.md" -o "$profile/prompts/$p.md"
+    done
+    $CURL "$base/pi/bin/echo" -o "$BIN_DIR/echo"
+    local n=0
+    # Skills are fetched from the marketplace clone the plugin manager keeps.
+    local skill_src
+    skill_src="$(ls -d "$HOME"/.claude/plugins/marketplaces/echo-ai-toolkit/skills 2>/dev/null | head -1)"
+    if [ -n "$skill_src" ] && [ -d "$skill_src" ]; then
+      local d name
+      for d in "$skill_src"/*/; do
+        [ -f "$d/SKILL.md" ] || continue
+        name=$(basename "$d")
+        mkdir -p "$profile/skills/$name"
+        cp -f "$d/SKILL.md" "$profile/skills/$name/SKILL.md"
+        n=$((n+1))
+      done
+    fi
+  fi
+  chmod +x "$BIN_DIR/echo" 2>/dev/null
+
+  # MCP: reuse the same server set the toolkit writes.
+  [ -f "$ECHO_HOME/mcp.json" ] && cp -f "$ECHO_HOME/mcp.json" "$profile/mcp.json"
+
+  # settings.json — resource paths, resolved from the agent dir.
+  cat > "$profile/settings.json" <<'JSON'
+{
+  "skills": ["./skills"],
+  "prompts": ["./prompts"]
+}
+JSON
+
+  ok "pi profile -> $profile ($(ls "$profile/skills" 2>/dev/null | wc -l) skills, $(ls "$profile/prompts" 2>/dev/null | wc -l) prompt templates)"
+  [ -x "$BIN_DIR/echo" ] && ok "launcher -> $BIN_DIR/echo"
+
+  # 6. `echo` alias. This shadows the shell builtin in interactive shells only.
+  if [ "${ECHO_NO_ALIAS:-0}" != "1" ] && [ -n "${HOME:-}" ]; then
+    local rc=""
+    case "${SHELL:-}" in
+      */zsh)  rc="$HOME/.zshrc" ;;
+      */bash) rc="$HOME/.bashrc" ;;
+    esac
+    if [ -n "$rc" ] && [ -f "$rc" ] && ! grep -q 'echo-ai-toolkit: echo alias' "$rc" 2>/dev/null; then
+      {
+        printf '\n# echo-ai-toolkit: echo alias -> Pi with the Echo profile\n'
+        printf '# This shadows the shell builtin in interactive shells only.\n'
+        printf '# Remove these lines, or set ECHO_NO_ALIAS=1 and re-run the installer.\n'
+        printf "alias echo='%s/echo'\n" "$BIN_DIR"
+      } >> "$rc"
+      ok "alias added to $rc (shadows the echo builtin — see the comment there)"
+    else
+      skip "echo alias" "${rc:-no rc file} — add manually: alias echo='$BIN_DIR/echo'"
+    fi
+  else
+    skip "echo alias" "ECHO_NO_ALIAS=1 or no \$HOME"
+  fi
+
+  # 7. Is Pi itself present?
+  if have pi; then
+    ok "pi $(pi --version 2>/dev/null | head -1)"
+  else
+    skip "pi binary" "install: curl -fsSL https://pi.dev/install.sh | sh  (needs Node 22.19+)"
+  fi
+}
+install_pi
+fi
+
+# ── 6. Python reverse-engineering tooling ────────────────────────────────────
 if tier_at_least standard; then
 say "Python reverse-engineering tooling"
 have python3 || skip "Python tooling" "python3 not found"
