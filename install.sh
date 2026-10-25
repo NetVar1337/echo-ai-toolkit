@@ -80,7 +80,7 @@ fi
 
 # ── 2. Claude Code companion plugins ─────────────────────────────────────────
 say "Claude Code companion plugins"
-add_plugin() { # name marketplace
+add_plugin() { # name marketplace pluginId
   if to 60 claude plugin list | grep -q "^  .* $1@"; then
     ok "$1 already installed"; return
   fi
@@ -187,6 +187,21 @@ install_lsp() {
   rm -rf "$tmp"
 }
 install_lsp
+
+# Signature-Doctor — offset & signature health dashboard (http://127.0.0.1:3210).
+install_signature_doctor() {
+  local dir="$ECHO_HOME/signature-doctor"
+  if [ -f "$dir/node_modules/ws/package.json" ]; then ok "signature-doctor already installed"; return; fi
+  have node || { skip "signature-doctor" "Node 22+ required"; return; }
+  if [ ! -d "$dir/.git" ]; then
+    git clone --depth 1 https://github.com/b4rzY/Signature-Doctor "$dir" >/dev/null 2>&1 \
+      || { fail "signature-doctor" "clone failed"; return; }
+  fi
+  ( cd "$dir" && npm ci --no-audit --no-fund --silent >/dev/null 2>&1 ) \
+    && ok "signature-doctor  →  node $dir/server/index.mjs  (http://127.0.0.1:3210)" \
+    || fail "signature-doctor" "npm ci failed"
+}
+install_signature_doctor
 
 # web-mv — Bun relay + SolidJS UI (source only; no releases published).
 install_web_mv() {
@@ -388,7 +403,7 @@ if have python3; then
 fi
 fi
 
-# ── 6. Compiler-built devirtualization stack ─────────────────────────────────
+# ── 7. Compiler-built devirtualization stack ──────────────────────────────────
 if tier_at_least full; then
 say "Compiler-built tooling (tier: full)"
 
@@ -447,8 +462,8 @@ fi
 # LLVM is handled by pkg_install above (system package, never a source build).
 fi
 
-# ── 7. write .mcp.json ───────────────────────────────────────────────────────
-say "Writing .mcp.json"
+# ── 8. write mcp.json ────────────────────────────────────────────────────────
+say "Writing mcp.json"
 GH_ENTRY="$ECHO_HOME/mcp-gamehacking/dist/index.js"
 AM_ENTRY="$ECHO_HOME/angel-menu-mcp/index.js"
 {
@@ -467,7 +482,23 @@ AM_ENTRY="$ECHO_HOME/angel-menu-mcp/index.js"
   add_server ida uvx '["ida-mcp","stdio","--agent=echo"]' "IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)"
   printf '\n  }\n}\n'
 } > "$ECHO_HOME/mcp.json"
-ok ".mcp.json -> $ECHO_HOME/mcp.json"
+ok "mcp.json -> $ECHO_HOME/mcp.json"
+
+# ── 9. register MCP servers with Claude Code ─────────────────────────────────
+say "Registering MCP servers with Claude Code"
+register_mcp() { # name command [args...]
+  local name="$1" cmd="$2"; shift 2
+  if to 10 claude mcp list 2>/dev/null | grep -qE "^\s*$name\b"; then
+    ok "MCP $name already registered"; return
+  fi
+  to 30 claude mcp add --scope user "$name" "$cmd" "$@" >/dev/null 2>&1 \
+    && ok "MCP $name registered" || skip "MCP $name" "registration failed — add manually from mcp.json"
+}
+[ -f "$GH_ENTRY" ] && register_mcp gamehacking node "$GH_ENTRY"
+register_mcp rea npx -y rea-agents
+[ -f "$AM_ENTRY" ] && register_mcp angel-menu node "$AM_ENTRY"
+have r2pm && register_mcp radare2 r2pm -r r2mcp
+register_mcp ida uvx ida-mcp stdio --agent=echo
 
 # ── summary ──────────────────────────────────────────────────────────────────
 printf '\n\033[1m────────────────────────────────────────────────────────────\033[0m\n'
@@ -491,6 +522,9 @@ cat <<EOF
     2. Type  /echo-help        to list the 12 agents
     3. Type  /echo-esp         to load ESP context
        ...or just describe your task — keywords auto-route.
+
+  Signature Doctor (offset/sig health dashboard):
+    node $ECHO_HOME/signature-doctor/server/index.mjs  →  http://127.0.0.1:3210
 
   Tools are in $ECHO_HOME
   Verify at any time:  ./scripts/echo-doctor.sh
