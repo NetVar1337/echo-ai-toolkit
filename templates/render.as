@@ -1,35 +1,48 @@
 // Render / ESP template
+//
+// Render calls only work inside the render thread, so every draw call must be
+// registered with on_render(). Colours are 4 separate ints: r, g, b, a.
+// Box styles come from box_style:: (NORMAL, OUTLINED, FILLED, FILLED_OUTLINED,
+// CORNERED, CORNERED_FILLED).
 
-font_handle@ fnt;
-tab@         my_tab;
-checkbox@    esp_on;
-color_picker@ esp_color;
+checkbox    g_esp_on;
+color_picker g_esp_color;
 
 bool main() {
-    fnt = renderer.load_font("Verdana", 12, false);
+    ui::config_path("echo_render_template");
 
-    my_tab    = menu.add_tab("ESP");
-    auto cat   = my_tab.add_category("Settings");
-    esp_on    = cat.add_checkbox("Enable ESP", true, "esp.enable");
-    esp_color = cat.add_color_picker("Color", color(255, 0, 0, 200), "esp.color");
+    // UI order matters: tab -> subtab -> category -> elements
+    ui::add_tab("ESP");
+    ui::add_category("Settings");
+    g_esp_on    = ui::add_checkbox("Enable ESP", true, "esp.enable");
+    g_esp_color = ui::add_color_picker("Color", 255, 0, 0, 200, true, "esp.color");
 
     on_render(@draw);
     return true;
 }
 
 void draw() {
-    if (!esp_on.get()) return;
-    color c = esp_color.get();
+    if (!ui::get(g_esp_on)) return;
 
-    // Example: draw a box around a fixed screen position
-    // Replace with real world-to-screen projected coords
-    float sx = 640.0f;
-    float sy = 360.0f;
-    float w  = 40.0f;
-    float h  = 80.0f;
+    color c = ui::get(g_esp_color);
 
-    renderer.rect_outlined(sx - w * 0.5f, sy - h, w, h, 1.5f, c);
-    renderer.text(sx, sy - h - 14.0f, "Player", fnt, c);
+    // Example: draw a box around a fixed screen position.
+    // Replace the fixed position with real world-to-screen projected coords.
+    int sx = 640;
+    int sy = 360;
+    int w  = 40;
+    int h  = 80;
+
+    // Built-in font, size in pixels (render context only)
+    render::update_font(fonts::TAHOMA, 12);
+
+    render::draw_box(sx - w / 2, sy - h, w, h,
+                     c.r, c.g, c.b, c.a, box_style::OUTLINED, 0.0f);
+
+    render::draw_text(sx, sy - h - 14, "Player",
+                      c.r, c.g, c.b, c.a);
 }
 
-void on_unload() {}
+void on_unload() {
+    // nothing to release — the runtime drops handles automatically
+}

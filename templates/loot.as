@@ -1,20 +1,23 @@
 // CS2 loot/dropped-weapon ESP
 // Scans entity list for dropped weapons; renders tiered labels + sorted panel.
-// Offsets are examples — verify against current cs2-dumper output.
+//
+// IMPORTANT: THE OFFSETS AND SIGNATURES BELOW ARE PLACEHOLDERS. They are
+// illustrative values from one community dump and are NOT verified. Re-derive
+// them with a current cs2-dumper run after every game update.
 
-// ─── Offsets ───────────────────────────────────────────────────────
+// ─── Offsets (placeholders — re-verify per patch) ───────────────────────────
 const uint64 OFF_ORIGIN       = 0x1294;
 const uint64 OFF_ITEM_DEF_IDX = 0x2FAA; // C_EconItemView::m_iItemDefinitionIndex (uint16)
 const uint64 OFF_OWNER_HANDLE = 0x568;  // C_WeaponBase::m_hOwnerEntity
 
-// ─── Loot config ───────────────────────────────────────────────────
+// ─── Loot config ─────────────────────────────────────────────────────────────
 const float DIST_DOT   = 300.0f;  // metres — show dot only beyond this
 const float DIST_LABEL = 150.0f;  // metres — show full label+tier prefix
 const float DIST_HIDE  = 400.0f;  // metres — don't render at all
 
 const int PANEL_MAX = 12;         // rows in sorted loot panel
 
-// ─── Item tiers ────────────────────────────────────────────────────
+// ─── Item tiers ──────────────────────────────────────────────────────────────
 enum ItemTier { JUNK, COMMON, RARE, EPIC, LEGEND }
 
 ItemTier cs2_weapon_tier(uint16 def_idx) {
@@ -30,24 +33,24 @@ ItemTier cs2_weapon_tier(uint16 def_idx) {
     return COMMON;
 }
 
-color_t tier_color(ItemTier t) {
-    if (t == LEGEND) return color_t(255, 215,  0, 255);  // gold
-    if (t == EPIC)   return color_t(200,  80, 255, 255);  // purple
-    if (t == RARE)   return color_t( 80, 150, 255, 255);  // blue
-    if (t == COMMON) return color_t(180, 180, 180, 255);  // grey
-    return                   color_t(100, 100, 100, 160);  // dim — JUNK
+color tier_color(ItemTier t) {
+    if (t == LEGEND) return color(255, 215,  0, 255);  // gold
+    if (t == EPIC)   return color(200,  80, 255, 255);  // purple
+    if (t == RARE)   return color( 80, 150, 255, 255);  // blue
+    if (t == COMMON) return color(180, 180, 180, 255);  // grey
+    return                   color(100, 100, 100, 160);  // dim — JUNK
 }
 
 string tier_prefix(ItemTier t) {
-    if (t == LEGEND) return "[★] ";
+    if (t == LEGEND) return "[*] ";
     if (t == EPIC)   return "[E] ";
     if (t == RARE)   return "[R] ";
     if (t == COMMON) return "[C] ";
     return                   "";
 }
 
-// ─── Shared state ──────────────────────────────────────────────────
-struct LootEntry {
+// ─── Shared state ────────────────────────────────────────────────────────────
+class LootEntry {
     float  sx, sy;     // screen position of origin
     bool   on_screen;
     float  dist;       // metres from local player
@@ -56,65 +59,84 @@ struct LootEntry {
     uint64 ent_addr;
 }
 array<LootEntry@> g_loot;
-mutex@ g_mx = mutex();
+mutex@ g_mx = create_mutex();
 
-// ─── Menu ──────────────────────────────────────────────────────────
-tab@      tab_loot;
-checkbox@ l_on;
-checkbox@ l_panel;     // sorted panel in corner
-slider@   l_max_dist;
-checkbox@ l_hide_junk;
-font_handle@ fnt;
+// ─── Menu ────────────────────────────────────────────────────────────────────
+checkbox g_l_on;
+checkbox g_l_panel;     // sorted panel in corner
+slider   g_l_max_dist;  // metres
+checkbox g_l_hide_junk;
 
-// ─── Process state ─────────────────────────────────────────────────
-process@ proc;
-uint64   entity_list  = 0;
-uint64   local_player = 0;
-uint64   view_mat_addr= 0;
+// ─── Process state ───────────────────────────────────────────────────────────
+uint64 g_entity_list   = 0;
+uint64 g_local_player  = 0;
+uint64 g_view_mat_addr = 0;
 
 bool main() {
-    tab_loot  = menu.add_tab("Loot");
-    auto cat  = tab_loot.add_category("Settings");
-    l_on      = cat.add_checkbox("Enable",     true,   "loot.on");
-    l_panel   = cat.add_checkbox("Sorted panel",true,  "loot.panel");
-    l_max_dist= cat.add_slider("Max dist (m)", 50.0f, 400.0f, 200.0f, "loot.dist");
-    l_hide_junk = cat.add_checkbox("Hide junk", true,  "loot.nojunk");
+    ui::config_path("echo_loot");
 
-    fnt = renderer.load_font("Verdana", 10, false);
+    ui::add_tab("Loot");
+    ui::add_category("Settings");
+    g_l_on       = ui::add_checkbox("Enable", true, "loot.on");
+    g_l_panel    = ui::add_checkbox("Sorted panel", true, "loot.panel");
+    g_l_max_dist = ui::add_slider("Max dist (m)", 200, 50, 400, 10, "m", "loot.dist");
+    g_l_hide_junk = ui::add_checkbox("Hide junk", true, "loot.nojunk");
 
-    proc = process.attach("cs2.exe");
-    if (proc is null) { alert("cs2.exe not found"); return false; }
+    attach_data ad = process::attach("cs2.exe");
+    if (ad.pid == 0) {
+        alert::show("cs2.exe not found");
+        return false;
+    }
 
-    create_thread(0,  @do_scan);
-    create_thread(8,  @tick);    // 8 tps sufficient for static loot
+    create_thread(0, @do_scan);
+    create_thread(8, @tick);    // 8 tps sufficient for static loot
     on_render(@draw);
     return true;
 }
 
 void do_scan() {
-    uint64 sig = proc.scan_ida("48 8B 0D ? ? ? ? 48 89 5C 24", "client.dll");
-    if (sig == 0) { alert("entity list sig failed"); return; }
-    uint64 ent_sys = proc.resolve_rip(sig, 3, 7);
-    entity_list    = proc.read<uint64>(proc.read<uint64>(ent_sys) + 0x10);
+    uint64 client = process::get_module_base("client.dll");
+    if (client == 0) {
+        alert::show("client.dll not found");
+        return;
+    }
 
-    sig = proc.scan_ida("48 8B 0D ? ? ? ? 48 85 C9 74 ? 8B 01", "client.dll");
-    if (sig != 0) local_player = proc.resolve_rip(sig, 3, 7);
+    uint64 sig = process::find_signature(client, "48 8B 0D ? ? ? ? 48 89 5C 24");
+    if (sig == 0) {
+        alert::show("entity list sig failed");
+        return;
+    }
+    uint64 ent_sys = process::get_relative_address(sig, 3, 7);
+    g_entity_list  = process::read_uint64(process::read_uint64(ent_sys) + 0x10);
 
-    sig = proc.scan_ida("48 8D 05 ? ? ? ? 48 89 05 ? ? ? ?", "client.dll");
-    if (sig != 0) view_mat_addr = proc.resolve_rip(sig, 3, 7);
+    sig = process::find_signature(client, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 8B 01");
+    if (sig != 0) g_local_player = process::get_relative_address(sig, 3, 7);
 
-    alert("Loot ESP ready");
+    sig = process::find_signature(client, "48 8D 05 ? ? ? ? 48 89 05 ? ? ? ?");
+    if (sig != 0) g_view_mat_addr = process::get_relative_address(sig, 3, 7);
+
+    alert::show("Loot ESP ready");
 }
 
+// Entity list chunk walk (user code — chunk layout is game specific)
 uint64 get_entity(int idx) {
-    uint64 chunk = proc.read<uint64>(entity_list + uint64(idx >> 9) * 8);
+    uint64 chunk = process::read_uint64(g_entity_list + uint64(idx >> 9) * 8);
     if (chunk == 0) return 0;
-    return proc.read<uint64>(chunk + uint64(idx & 0x1FF) * 120);
+    return process::read_uint64(chunk + uint64(idx & 0x1FF) * 120);
+}
+
+// Read a 4x4 float matrix (16 floats) from the target process (user code)
+matrix4x4 read_matrix16(uint64 addr) {
+    matrix4x4 m;
+    for (int c = 0; c < 4; c++)
+        for (int r = 0; r < 4; r++)
+            m[c][r] = process::read_float(addr + uint64(c * 4 + r) * 4);
+    return m;
 }
 
 bool is_dropped_weapon(uint64 ent) {
     // Dropped weapon: valid entity with no owner handle (0 or invalid)
-    uint32 owner = proc.read<uint32>(ent + OFF_OWNER_HANDLE);
+    uint32 owner = process::read_uint32(ent + OFF_OWNER_HANDLE);
     return (owner == 0 || (owner & 0xFFFF) == 0xFFFF);
 }
 
@@ -126,47 +148,43 @@ string weapon_name_for(uint16 def_idx) {
     if (def_idx == 60)  return "M4A1-S";
     if (def_idx == 8)   return "AWP";
     if (def_idx == 19)  return "P2000";
-    if (def_idx == 2)   return "Dual Berettas";
-    return fmt("wpn_{}", uint32(def_idx));
+    if (def_idx == 2)   return "Dual Berrettas";
+    return "wpn_" + util::format_string("{}", def_idx);
 }
 
-// ─── Tick ─────────────────────────────────────────────────────────
+// ─── Tick ────────────────────────────────────────────────────────────────────
 void tick() {
-    if (!l_on.get() || entity_list == 0) return;
+    if (!ui::get(g_l_on) || g_entity_list == 0) return;
 
-    uint64 lp_ptr = proc.read<uint64>(local_player);
+    uint64 lp_ptr = process::read_uint64(g_local_player);
     if (lp_ptr == 0) return;
 
-    float lp_x = proc.read<float>(lp_ptr + OFF_ORIGIN);
-    float lp_y = proc.read<float>(lp_ptr + OFF_ORIGIN + 4);
-    float lp_z = proc.read<float>(lp_ptr + OFF_ORIGIN + 8);
-    float range = l_max_dist.get();
-    bool hide_junk = l_hide_junk.get();
+    vec3  lp_pos = vec3(process::read_float(lp_ptr + OFF_ORIGIN),
+                        process::read_float(lp_ptr + OFF_ORIGIN + 4),
+                        process::read_float(lp_ptr + OFF_ORIGIN + 8));
+    float range     = float(ui::get(g_l_max_dist));
+    bool  hide_junk = ui::get(g_l_hide_junk);
 
-    // Read view matrix for W2S
-    float vp[16];
-    if (view_mat_addr != 0)
-        for (int i = 0; i < 16; i++)
-            vp[i] = proc.read<float>(view_mat_addr + uint64(i) * 4);
+    // Read the view matrix for W2S
+    bool have_vm = (g_view_mat_addr != 0);
+    matrix4x4 vm;
+    if (have_vm) vm = read_matrix16(g_view_mat_addr);
 
     array<LootEntry@> buf;
 
     // Scan all entity slots for dropped weapons
-    for (int i = 0; i < 512; i++) {
+    for (int i = 1; i < 512; i++) {
         uint64 ent = get_entity(i);
         if (ent == 0) continue;
         if (!is_dropped_weapon(ent)) continue;
 
-        uint16 def_idx = proc.read<uint16>(ent + OFF_ITEM_DEF_IDX);
+        uint16 def_idx = process::read_uint16(ent + OFF_ITEM_DEF_IDX);
         if (def_idx == 0) continue;
 
-        float ex = proc.read<float>(ent + OFF_ORIGIN);
-        float ey = proc.read<float>(ent + OFF_ORIGIN + 4);
-        float ez = proc.read<float>(ent + OFF_ORIGIN + 8);
-
-        float dx = ex - lp_x, dy = ey - lp_y, dz = ez - lp_z;
-        float dist_units = sqrt(dx*dx + dy*dy + dz*dz);
-        float dist_m     = dist_units / 39.37f;
+        vec3  epos = vec3(process::read_float(ent + OFF_ORIGIN),
+                          process::read_float(ent + OFF_ORIGIN + 4),
+                          process::read_float(ent + OFF_ORIGIN + 8));
+        float dist_m = epos.distance(lp_pos) / 39.37f;
         if (dist_m > range || dist_m > DIST_HIDE) continue;
 
         ItemTier t = cs2_weapon_tier(def_idx);
@@ -179,10 +197,13 @@ void tick() {
         le.name     = weapon_name_for(def_idx);
         le.on_screen = false;
 
-        // W2S
-        if (view_mat_addr != 0) {
-            vec3 wpos(ex, ey, ez);
-            le.on_screen = source2.w2s(proc, view_mat_addr, wpos, le.sx, le.sy);
+        // W2S — source2::w2s writes the screen position and returns false
+        // when the point is off-screen or behind the camera
+        if (have_vm) {
+            vec2 screen;
+            le.on_screen = source2::w2s(epos, vm, screen);
+            le.sx = screen.x;
+            le.sy = screen.y;
         }
 
         buf.insertLast(le);
@@ -206,51 +227,60 @@ void tick() {
     g_mx.unlock();
 }
 
-// ─── Render ────────────────────────────────────────────────────────
+// ─── Render ──────────────────────────────────────────────────────────────────
 void draw() {
-    if (!l_on.get()) return;
+    if (!ui::get(g_l_on)) return;
 
     g_mx.lock_shared();
     array<LootEntry@> snap = g_loot;
     g_mx.unlock_shared();
+
+    render::update_font(fonts::TAHOMA, 10);
 
     // World-space labels
     for (uint i = 0; i < snap.length(); i++) {
         LootEntry@ e = snap[i];
         if (!e.on_screen) continue;
 
-        color_t col = tier_color(e.tier);
+        color col = tier_color(e.tier);
 
         if (e.dist <= DIST_LABEL) {
             // Full label: prefix + name + distance
-            string label = tier_prefix(e.tier) + e.name + fmt(" {:.0f}m", e.dist);
-            renderer.text_outlined(e.sx, e.sy, label, col, color_t(0,0,0,200), fnt);
+            string label = tier_prefix(e.tier) + e.name + " " +
+                           util::format_string("{:.0}m", e.dist);
+            render::draw_text_outlined(int(e.sx), int(e.sy), label,
+                                       col.r, col.g, col.b, col.a);
         } else if (e.dist <= DIST_DOT) {
             // Dot only
-            renderer.draw_circle_filled(e.sx, e.sy, 3.5f, 12, color_t(0, 0, 0, 180));
-            renderer.draw_circle_filled(e.sx, e.sy, 2.5f, 12, col);
+            render::draw_circle(e.sx, e.sy, 3.5f, 0, 0, 0, 180, true, 12);
+            render::draw_circle(e.sx, e.sy, 2.5f, col.r, col.g, col.b, col.a, true, 12);
         }
     }
 
     // Sorted panel (top-right corner)
-    if (!l_panel.get() || snap.length() == 0) return;
+    if (!ui::get(g_l_panel) || snap.length() == 0) return;
 
-    float pw     = 160.0f;
-    float row_h  = 16.0f;
-    uint  rows   = (snap.length() < uint(PANEL_MAX)) ? snap.length() : uint(PANEL_MAX);
-    float ph     = row_h * float(rows) + 8.0f;
-    float px     = float(renderer.width()) - pw - 10.0f;
-    float py     = 10.0f;
+    vec2  vp    = render::get_viewport_size();
+    int   pw    = 160;
+    int   row_h = 16;
+    uint  rows  = (snap.length() < uint(PANEL_MAX)) ? snap.length() : uint(PANEL_MAX);
+    int   ph    = row_h * int(rows) + 8;
+    int   px    = int(vp.x) - pw - 10;
+    int   py    = 10;
 
-    renderer.draw_rect_filled(px, py, pw, ph, color_t(10, 10, 10, 200));
-    renderer.draw_rect_outlined(px, py, pw, ph, 1.0f, color_t(80, 80, 80, 180));
+    render::draw_box(px, py, pw, ph, 10, 10, 10, 200, box_style::FILLED, 0.0f);
+    render::draw_box(px, py, pw, ph, 80, 80, 80, 180, box_style::OUTLINED, 0.0f);
 
     for (uint i = 0; i < rows; i++) {
         LootEntry@ e = snap[i];
-        string label = tier_prefix(e.tier) + e.name + fmt(" {:.0f}m", e.dist);
-        renderer.text_outlined(px + 6.0f, py + 4.0f + float(i) * row_h,
-                               label, tier_color(e.tier), color_t(0,0,0,160), fnt);
+        string label = tier_prefix(e.tier) + e.name + " " +
+                       util::format_string("{:.0}m", e.dist);
+        color c = tier_color(e.tier);
+        render::draw_text_outlined(px + 6, py + 4 + int(i) * row_h, label,
+                                   c.r, c.g, c.b, c.a);
     }
 }
 
-void on_unload() { proc = null; }
+void on_unload() {
+    process::detach();
+}

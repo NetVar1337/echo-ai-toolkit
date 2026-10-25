@@ -1,314 +1,586 @@
-# Echo AI Toolkit — LLM Context Bundle
+# Echo Universal API — LLM Context Bundle
 
-Paste this file as context when using GPT-4o, Gemini, local models, or any LLM that doesn't
-load the full repo. It is a compressed single-file reference for the Echo Universal API.
+Paste this file as context for GPT-4o, Gemini, local models (LM Studio, Ollama), or any
+LLM that does not load the full repo. Single-file, self-contained.
 
 Source: https://github.com/NetVar1337/echo-ai-toolkit
 Full API: https://echo-23.gitbook.io/angel/llms-full.txt
+Full reference: `reference/api.md`
 
 ---
 
-## What is Echo?
+## What Echo is
 
-Echo is an external scripting platform for Windows games. Scripts are written in AngelScript
-and run outside the game process. Echo provides:
-- External process memory read (no injection, no writes)
-- Discord overlay rendering (renderer namespace)
-- Zydis disassembler (proc.disasm_range)
-- Unicorn CPU emulator (emulator@)
-- JSON, HTTP, WebSocket, file I/O
-- Menu system with config persistence
+External scripting platform for Windows games. Scripts are **AngelScript** (C-like,
+statically typed, no exceptions, `@` object handles, `is null` null-check). Echo runs
+outside the game process: direct memory access, no injection, a Discord overlay renderer,
+Zydis disassembly, a Unicorn CPU emulator, JSON/HTTP/WebSocket/file I/O, and a menu with
+config persistence.
 
-Scripts are placed in `%AppData%\Roaming\scripts\`. No compile step — reload from the in-game menu.
+Scripts live in `%AppData%\Roaming\scripts\*.as`. No compile step — reload from the
+overlay menu.
 
 ---
 
-## AngelScript type rules (get these wrong → script crash)
+## Hard rules (get these wrong and the script will not compile or will crash)
 
-- Addresses are ALWAYS `uint64`. Never `uint32` — it silently truncates 64-bit pointers.
-- Null check: `if (ptr is null)` NOT `if (ptr == null)`
-- Array length: `arr.length()` NOT `arr.size()`
-- Float literals MUST have `f` suffix: `1.5f` not `1.5`
-- No try/catch — check return values; `proc.read` returns 0 on failure
-- No `auto` keyword — always explicit type: `uint64 x = proc.read<uint64>(addr);`
-- String format: `fmt("val: {}", x)` not `"val: " + x`
-- `nullptr` → `null`
+1. **Entry point is `bool main()`.** Return `true` on success, `false` to unload.
+   `void main()` does not compile.
+2. **Every call must exist in the API below.** Anything outside the namespaces listed here
+   does not exist — see `reference/_API_CONTRACT.md` for the full old→new mapping.
+   The namespaces are `process::`, `render::`, `ui::`, `uc::`, `zydis::`, `util::`,
+   `file::`, `dir::`, `input::`, `json::`, `http::`, `ws::`, `console::`, `alert::`,
+   `math::`, `hash::`, `trace::`, `source::`, `source2::`, `unreal::`, `unity::`,
+   `iw_engine::`.
+3. **Colours are four separate ints** `r, g, b, a` (0–255). No colour struct parameter
+   on render calls. (`struct color { int r,g,b,a; }` exists only for
+   `ui::get`/`ui::set` on a colour picker.)
+4. **W2S writes to an out-param and returns `bool`.**
+   `vec2 screen; if (!source2::w2s(world_pos, view_matrix, screen)) return;`
+5. **`process::find_signature` needs a base address** — get it with
+   `process::get_module_base("game.exe")` first.
+6. **Render calls only work inside the render thread** — register with
+   `on_render(@cb)`. Exceptions callable anywhere: `render::get_fps`,
+   `render::get_frametime`, `render::is_foreground`, `render::get_viewport_size`,
+   `render::load_font`, `render::load_image`.
+7. **UI element order matters**: `ui::add_tab` → `ui::add_subtab` → `ui::add_category` →
+   elements. Elements attach to the most recent category.
+8. **UI values are read through handles**: `bool v = ui::get(checkbox);`,
+   `ui::set(checkbox, v);`
+9. **No exceptions, no try/catch.** Check return values. `process::read_*` returns the
+   default value on failure.
+10. **Addresses are always `uint64`.** Never `uint32` — it truncates 64-bit pointers.
+11. **Null check is `is null`**, never `== null`. Array length is `arr.length()`, never
+    `arr.size()`.
+12. **Never invent a helper function.** If a convenience function is needed, write it out
+    in the script — it is user code, not API.
 
 ---
 
-## Script structure
+## Script skeleton
 
 ```angelscript
-void main() {
-    proc.attach("game.exe");
-    if (!proc.is_running()) return;
-    // scan patterns once here
-    create_thread(64, function() {
-        while (proc.is_running()) { tick(); sleep(1); }
-    });
+void on_unload() {
+    // teardown
 }
-void on_unload() { proc.detach(); }
-void on_render() { /* draw calls here — runs every frame */ }
+
+bool main() {
+    return true;
+}
 ```
-
----
-
-## Process / memory namespace
-
-```
-proc.attach(name)                        → void
-proc.detach()                            → void
-proc.is_running()                        → bool
-proc.read<T>(addr)                       → T  (T: uint8/16/32/64, float, double, bool, vec2/3/4)
-proc.write<T>(addr, val)                 → void  ⚠ triggers AC on kernel-protected games
-proc.scan_ida(pattern, module)           → uint64  (0 on fail)
-proc.resolve_rip(instr_addr, op_off, instr_len) → uint64  (resolves RIP-relative LEA/MOV)
-proc.get_module(name)                    → module_info@  (null if not found)
-proc.get_modules()                       → array<module_info>
-proc.disasm_range(addr, size)            → array<instruction>
-proc.query_regions()                     → array<region_info>
-```
-
-module_info fields: `.base`, `.size`, `.name`
-
----
-
-## Renderer namespace (call only inside on_render)
-
-```
-renderer.draw_rect_filled(x,y,w,h, col)
-renderer.draw_rect_outlined(x,y,w,h, thick, col)
-renderer.draw_rect_gradient(x,y,w,h, tl,tr,bl,br)
-renderer.draw_line(x1,y1, x2,y2, col, thick)
-renderer.draw_circle(cx,cy,r, segs, col, thick)
-renderer.draw_circle_filled(cx,cy,r, segs, col)
-renderer.text(x,y, text, col, font)
-renderer.text_outlined(x,y, text, col, outline_col, font)
-renderer.measure_text(text, font)        → vec2
-renderer.load_font(family, size, bold)   → font_handle@
-renderer.width()                         → uint
-renderer.height()                        → uint
-```
-
-`color_t(r,g,b,a)` — all 0–255.
-
----
-
-## W2S built-ins (world-to-screen)
-
-```
-source2.w2s(proc, vm_addr, world_pos, sx, sy)  → bool  (CS2, Deadlock)
-unreal.w2s(proc, vm_addr, world_pos, sx, sy)   → bool  (UE4/UE5)
-unity.w2s(proc, vm_addr, world_pos, sx, sy)    → bool  (Unity)
-source.w2s(proc, vm_addr, world_pos, sx, sy)   → bool  (CS:GO, TF2)
-```
-
-Always check the bool return — returns false when point is behind camera.
-
----
-
-## Input namespace
-
-```
-input.key_down(vk)       → bool   (held)
-input.key_pressed(vk)    → bool   (one frame)
-mouse.move(dx, dy)       → void
-mouse.move_to(x, y)      → void
-mouse.click(btn)         → void   (0=left,1=right,2=middle)
-input.mouse_pos()        → vec2
-```
-
-Common VK codes: VK_INSERT=0x2D, VK_DELETE=0x2E, VK_HOME=0x24, VK_F1–F12=0x70–0x7B
-
----
-
-## Menu namespace
-
-```angelscript
-// Elements live in a tab → category hierarchy (subtabs optional):
-tab@          t   = menu.add_tab("ESP");
-category@     cat = t.add_category("Settings");
-
-checkbox@     cb  = cat.add_checkbox("Enable",   true,            "esp.on");
-slider@       sl  = cat.add_slider("Smooth",     0.0f, 1.0f,      0.08f, "esp.smooth");
-color_picker@ cp  = cat.add_color_picker("Color",color_t(255,0,0,200),   "esp.col");
-combobox@     co  = cat.add_combobox("Mode",     {"Off","Low","High"}, 0, "esp.mode");
-button@       bt  = cat.add_button("Reset",      @on_reset);
-text_input@   it  = cat.add_text_input("Name",   "default",       "esp.name");
-keybind@      kb  = cat.add_keybind("Aim key",   0x02,            "esp.key");
-
-bool    on   = cb.get();
-float   val  = sl.get();
-color_t col  = cp.get();
-int     idx  = co.get();
-string  text = it.get();
-int     vk   = kb.get();
-
-// Optional change callback
-cb.set_callback(@on_toggle);
-void on_toggle(bool v) { }
-void on_reset() { }
-```
-
----
-
-## Math helpers
-
-```
-math.rad_to_deg(r)   math.deg_to_rad(d)
-math.lerp(a,b,t)     math.clamp(v,lo,hi)
-math.abs(v)          math.sqrt(v)
-math.sin(r)  math.cos(r)  math.atan2(y,x)
-math.normalize_angle(a)   // wraps to [-180,180]
-math.calc_fov(src, tgt, view_angles) → float
-```
-
-vec3: `.length()`, `.normalized()`, `.dot(b)`, `.cross(b)`, `+`, `-`, `* float`
 
 ---
 
 ## Threading
 
 ```angelscript
-create_thread(tps, callback)   // tps=0 = unlimited — always use >=1
-sleep(ms)
-mutex@ mtx = mutex();
-mtx.lock();  mtx.unlock();
-mtx.lock_shared();  mtx.unlock_shared();
+mutex@ m = create_mutex();          // mutex.lock/unlock/lock_shared/unlock_shared/try_lock
+
+atomic_bool@     atomic_bool(bool value);
+atomic_int32@    atomic_int32(int value);
+atomic_uint32@   atomic_uint32(uint value);
+atomic_int64@    atomic_int64(int64 value);
+atomic_uint64@   atomic_uint64(uint64 value);
+atomic_float@    atomic_float(float value);
+atomic_double@   atomic_double(double value);
+// .load() .store(v) .exchange(v) .compare_exchange(expected, desired)
+
+void create_thread(int tps, thread_callback@ cb);  // tps 1-128; 0 = run once
+void on_render(thread_callback@ cb);                // every frame, render thread
+void sleep(uint ms);
 ```
 
-Build into local tmp array, swap under mutex — never resize shared array mid-render.
+Ticking threads (`tps` 1–128) can only be created from `main()`. One-shot threads
+(`tps == 0`) can be created from any context. Never create a thread with `tps == 0` and
+expect a loop — it runs once and exits.
+
+Shared state across threads must be guarded: unsynchronised global access races the
+AngelScript engine and can take the whole process down. Build a snapshot locally, swap it
+in under the mutex, let readers take their own handle and read lock-free.
+
+```angelscript
+mutex@ g_lock = create_mutex();
+int g_counter = 0;
+
+void tick() {
+    g_lock.lock();
+    g_counter++;
+    g_lock.unlock();
+}
+
+bool main() {
+    create_thread(64, @tick);
+    on_render(@render_tick);
+    return true;
+}
+```
 
 ---
 
-## Unicorn emulator
+## Process / memory
 
 ```angelscript
-emulator@ emu = emulator.create(UC_ARCH_X86, UC_MODE_64);
-emu.mem_map(addr, size, UC_PROT_ALL);
-emu.mem_write(addr, bytes);
-emu.reg_write(UC_X86_REG_RAX, val);
-emu.emu_start(start_addr, end_addr, timeout_us, max_insn);
-uint64 result = emu.reg_read(UC_X86_REG_RAX);
+struct attach_data { uint64 pid; uint64 peb_address; uint64 base_address; }
+struct module_entry { string name; uint64 base; uint64 size; }
+struct memory_region { uint64 base; uint64 size; bool present; bool writable; bool executable; }
+
+attach_data process::attach(string name);      // pid == 0 means failure
+attach_data process::attach(uint32 pid);
+void process::detach();
+bool process::is_alive();
+
+// reads — value form, default on failure
+array<uint8>@ process::read_bytes(uint64 address, uint32 size);  // null on failure
+int8/uint8/int16/uint16/int32/uint32/int64/uint64/float/double
+        process::read_<type>(uint64 address);
+string process::read_string(uint64 address);   // null-terminated, 256 char max
+
+// reads — out-param form, true on success
+bool process::read_uint64(uint64 address, uint64 &out);   // and every other type
+bool process::read_string(uint64 address, string &out);
+
+// writes — true on success
+bool process::write_bytes(array<uint8> bytes, uint64 address);   // bytes FIRST
+bool process::write_uint64(uint64 address, uint64 value);
+bool process::write_int32(uint64 address, int32 value);
+bool process::write_float(uint64 address, float value);
+bool process::write_double(uint64 address, double value);      // + all other widths
+
+// modules
+uint64 process::get_module_base(string name);       // 0 if not found
+uint32 process::get_module_size(uint64 base);        // 0 if not found
+uint64 process::get_module_export(uint64 base, string name);  // 0 if not found
+array<module_entry>@ process::get_module_list();
+
+// signatures — need a base address, return 0 if not found
+uint64 process::find_signature(uint64 base, string sig, string mask);
+uint64 process::find_signature(uint64 base, string sig);              // IDA-style
+uint64 process::find_signature(uint64 base, string sig, string mask, uint64 range_offset, uint64 range_length);
+array<uint64>@ process::find_signatures(uint64 base, string sig, string mask);
+array<uint64>@ process::find_signatures(uint64 base, string sig);
+uint64 process::get_relative_address(uint64 address, uint32 offset, uint32 inst_size);
+
+memory_region process::virtual_query(uint64 address);
+bool process::dump(string filename);
+bool process::dump(string module_name, string filename);
+bool process::open_socket(const string url);   // JSON-over-WebSocket client
 ```
 
-UC_PROT_NONE=0, READ=1, WRITE=2, EXEC=4, ALL=7
+Masked scan: `sig` = hex bytes, `mask` uses `x` to match, `?` to wildcard.
+IDA-style scan: wildcards are `?` or `??`.
+
+### Bulk reads — memory_buffer
+
+`memory_buffer@ process::read_buffer(uint64 address, uint64 size)` — **null on failure**.
+One read, many field reads.
+
+`read_uint8/read_uint16/read_uint32/read_uint64/read_int8/read_int16/read_int32/
+read_int64/read_float/read_double/read_vec2_float/read_vec2_double/read_vec3_float/
+read_vec3_double/read_vec4_float/read_vec4_double(offset)`, `uint64 size()`.
+
+```angelscript
+uint64 base = process::get_module_base("cs2.exe");
+if (base == 0) return false;
+uint64 sig = process::find_signature(base, "48 8B 0D ? ? ? ?");
+if (sig == 0) return false;
+uint64 target = process::get_relative_address(sig, 3, 7);
+uint64 health = process::read_uint64(target);
+```
+
+---
+
+## Render (render thread only)
+
+```angelscript
+float render::get_fps();                       // any context
+float render::get_frametime();                 // any context
+bool render::is_foreground();                  // any context
+vec2 render::get_viewport_size();              // any context
+bool render::get_viewport_size(int &out width, int &out height);
+void render::set_anti_aliasing(bool enabled);
+
+void render::draw_box(int x, int y, int w, int h, int r, int g, int b, int a, box_style style, float rounding);
+void render::draw_gradient_box(int x, int y, int w, int h,
+        int r1,int g1,int b1,int a1, int r2,int g2,int b2,int a2, bool horizontal);
+void render::draw_line(float x1, float y1, float x2, float y2, int r,int g,int b,int a, float thickness = 1.0f);
+void render::draw_line_outlined(float x1, float y1, float x2, float y2, int r,int g,int b,int a, float thickness = 1.0f);
+void render::draw_circle(float x, float y, float radius, int r,int g,int b,int a, bool filled = false, int segments = 32);
+void render::draw_triangle(float x1,float y1, float x2,float y2, float x3,float y3, int r,int g,int b,int a, bool filled = false);
+void render::draw_concave_poly(array<vec2> points, int r,int g,int b,int a);
+void render::draw_convex_poly(array<vec2> points, int r,int g,int b,int a, bool filled);
+void render::draw_polyline(array<vec2> points, int r,int g,int b,int a, float thickness, bool closed);
+void render::draw_hue_bar(int x, int y, int w, int h, int r,int g,int b,int a);
+void render::draw_hue_bar_static(int x, int y, int w, int h, int r,int g,int b,int a);
+
+void render::draw_text(int x, int y, string text, int r,int g,int b,int a);
+void render::draw_text_outlined(int x, int y, string text, int r,int g,int b,int a);
+void render::draw_text_shadow(int x, int y, string text, int r,int g,int b,int a);
+vec2 render::calculate_text_size(string text);
+
+bool render::load_font(const array<uint8> &in, font_handle &out, font_hint = font_hint::AUTO);
+void render::update_font(fonts font, int size);
+bool render::load_image(string data, image &out obj);
+void render::draw_image(image obj, int x, int y, int w, int h);
+
+bbox_2d render::calculate_2d_bbox(vec3 origin, vec3 mins, vec3 maxs, matrix4x4 view_matrix);
+bbox_2d render::calculate_2d_bbox_unity(vec3 origin, vec3 center, vec3 extents, matrix4x4 view_matrix);
+```
+
+`enum box_style { NORMAL, OUTLINED, FILLED, FILLED_OUTLINED, CORNERED, CORNERED_FILLED }`.
+`enum fonts { PROGGY, TAHOMA, TAHOMA_PX, TAHOMA_BOLD, TAHOMA_BOLD_PX, SMALLEST_PIXEL_7, TAHOMISH }`.
+`enum font_hint { NONE, AUTO, MONO }`.
+
+```angelscript
+void render_tick() {
+    vec2 vp = render::get_viewport_size();
+    render::draw_box(100, 100, 200, 50, 255, 0, 0, 255, box_style::FILLED, 0.0f);
+    render::draw_box(100, 100, 200, 50, 255, 0, 0, 255, box_style::OUTLINED, 0.0f);
+    render::draw_line(0, 0, vp.x, vp.y, 255, 255, 255, 255, 1.0f);
+    render::draw_circle(50, 50, 10, 0, 255, 0, 255, true, 32);
+    render::draw_text(10, 10, "hello", 255, 255, 255, 255);
+}
+```
+
+---
+
+## Menu / UI
+
+```angelscript
+bool ui::is_open();
+float ui::get_scale();
+color ui::get_accent();
+ui_info ui::get_info();
+string ui::get_tab();
+string ui::get_sub_tab();
+void ui::config_path(string folder_name);        // config tab appears automatically
+
+void ui::add_tab(string label);
+void ui::add_tab(string label, sub_tab_side side);
+void ui::add_subtab(string label);
+void ui::add_category(string label);
+void ui::add_category(string label, category_pos pos);
+bool ui::get_active_binds(array<active_bind> &out binds);
+
+checkbox    ui::add_checkbox(string label, bool default_value, string config_key = "");
+checkbox    ui::add_checkbox(string label, bool default_value, checkbox_callback@ cb = nullptr, string config_key = "");
+slider      ui::add_slider(string label, int default_val, int min_val, int max_val, int step, string tag = "", string config_key = "");
+color_picker ui::add_color_picker(string label, int r, int g, int b, int a, bool stick = true, string config_key = "");
+combobox    ui::add_combobox(string label, array<string> options, int default_idx, string config_key = "");
+combobox    ui::add_combobox(string label, array<string> options, int default_idx, combobox_callback@ cb = nullptr, string config_key = "");
+multi_select ui::add_multi_select(string label, array<string> options, string config_key = "");
+button      ui::add_button(string label, button_callback@ cb = nullptr);
+
+bool ui::get(checkbox);
+int ui::get(slider);
+color ui::get(color_picker);            // struct color { int r,g,b,a; }
+uint64 ui::get(combobox);               // selected index
+bool ui::get(multi_select, uint64 index);
+
+void ui::set(checkbox, bool value);
+void ui::set(slider, int value);
+void ui::set(color_picker, color value);
+void ui::set(combobox, uint64 index);
+void ui::set(multi_select, uint64 index, bool value);
+
+void ui::set_visible(element, bool visible);
+void ui::add_tooltip(element, string text);
+void ui::set_label_style(checkbox, label_style style);
+```
+
+**The slider is integer-only.** `enum sub_tab_side { middle, left, right }`.
+`enum category_pos { automatic, left_full, right_full, left_top, left_bottom, right_top, right_bottom }`.
+`enum label_style { none, warning, dangerous }`.
+
+```angelscript
+checkbox g_enabled = false;
+slider g_fov = 60;
+
+bool main() {
+    ui::config_path("my_script");
+    ui::add_tab("Main");
+    ui::add_category("Options");
+    g_enabled = ui::add_checkbox("Enable", false);
+    g_fov = ui::add_slider("FOV", 60, 5, 300, 5, "deg");
+    return true;
+}
+
+void tick() {
+    bool on = ui::get(g_enabled);
+    int fov = ui::get(g_fov);
+}
+```
+
+---
+
+## World to screen (all return bool, all use an out-param)
+
+```angelscript
+bool source::w2s(vec3 world_pos, matrix4x4 view_matrix, vec2 &out screen_pos);
+bool source2::w2s(vec3 world_pos, matrix4x4 view_matrix, vec2 &out screen_pos);
+bool unity::w2s(vec3 world_pos, matrix4x4 view_matrix, vec2 &out screen_pos);
+bool unreal::w2s(vec3 world_pos, f_view_cache cache, vec2 &out screen_pos);
+bool iw_engine::w2s(vec3 world_pos, vec3 camera_location, matrix3x3 view_matrix, float fov_x, float fov_y, vec2 &out screen_pos);
+```
+
+`false` means off-screen or behind the camera — skip the draw.
+
+Unreal: build `f_view_cache` once per frame with
+`f_view_cache build_view_cache(f_view_info camera, bool vertical_fov = false)`.
+`f_view_info` has `.location` (vec3), `.rotation` (vec3 pitch/yaw/roll), `.fov` (float).
+
+---
+
+## Engine helpers
+
+```angelscript
+uint64 source::get_entity(uint64 entity_list_address, uint64 index);
+uint64 source2::get_controller(uint64 entity_list_address, uint64 index);
+uint64 source2::get_pawn(uint64 entity_list_address, uint64 controller_address, uint64 pawn_offset);
+
+u_bone_array unreal::read_bones(uint64 skeletal_mesh, uint64 bone_array_offset, uint64 bone_array_cached_offset, uint64 component_offset);
+u_bone_array unreal::read_bones(uint64 skeletal_mesh, uint64 bone_array_offset, uint64 component_offset);
+// bones.valid(); bones.count(); bones[110]
+
+ftransform bone_transform;
+bone_transform.read(bone_address);
+vec3 pos = bone_transform.transform_to_world(ftransform parent_transform);
+
+vec3 unity::rust_transform_position(uint64 transform_address);
+uint32 unity::rust_prefab_id(string name);
+```
+
+---
+
+## Math, vectors, matrices
+
+```angelscript
+math::PI  math::TAU  math::RAD2DEG  math::DEG2RAD
+angle_range::R_180   angle_range::R_360
+
+matrix4x4 math::multiply_matrix(matrix4x4 a, matrix4x4 b);
+matrix4x4 math::rotation_matrix(vec3 rotation, vec3 origin);
+vec3 math::rotated_vector(vec3 point, vec4 quaternion);
+vec3 math::forward_vector(vec2 angles);
+vec3 math::right_vector(vec2 angles);
+vec3 math::up_vector(vec2 angles);
+
+vec2  math::vec_to_angles(vec3 direction);
+vec3  math::angles_to_vec(vec2 angles);
+double math::normalize_angle(double angle, angle_range range);
+double math::angle_diff(double a, double b);
+double math::calculate_fov(vec2 a, vec2 b);
+vec2  math::calculate_angle(vec3 from, vec3 to);
+vec2  math::clamp_angles(vec2 angles, angle_range range);
+vec2  math::smooth_angles(vec2 current, vec2 target, angle_range range, double smoothing, double min_speed, double max_speed);
+
+vec2 math::unreal_rotation_to_radians(vec3 camera_rot);
+double math::unreal_calculate_fov(vec3 camera_rot, vec3 camera_pos, vec3 target_pos);
+vec2 math::unreal_calculate_angle(vec3 camera_rot, vec3 camera_pos, vec3 target_pos);
+vec2 math::unreal_smooth_rotation(vec3 camera_rot, vec3 camera_pos, vec3 target_pos, double smoothing, double min_speed, double max_speed);
+```
+
+`vec2` / `vec3` / `vec4`: `.x .y .z .w`; methods `.is_empty() .length() .length_squared()
+.normalize() .dot(other) .add(other) .subtract(other) .multiply(scalar) .distance(other)
+.lerp(other, t) .read_float(addr) .read_double(addr) .write_float(addr) .write_double(addr)`.
+
+`matrix4x4` / `matrix3x4` / `matrix3x3`: `m[row][col]`, `bool m.read(address)`,
+`bool m.read_double(address)`.
+
+Interpolation lives on the vector type: `v.lerp(other, t)`. There is no scalar lerp helper
+in `math::`.
+
+---
+
+## Data structures
+
+```angelscript
+// JSON
+json_obj@ json::array();
+json_obj@ json::parse(string text, string &out error);   // null on failure
+string json::stringify(json_obj@ obj, bool beautify = false);
+// json_obj: has(key) length() type(key) type_at(i) keys()
+//           get_string/get_float/get_double/get_int/get_uint/get_int64/get_uint64/get_bool/get_obj(key)
+//           get_*_at(index)
+//           set(key, value) set_null(key) remove(key)
+//           push(value) push_null()   // array mode only
+
+// Hash map — uint64 keys, dynamically typed values
+hash_map@ create_hash_map();
+map.set_bool/set_int32/set_uint32/set_int64/set_uint64/set_float/set_double/set_string(key, v);
+bool map.get_bool/get_int32/.../get_string(key, &out);   // true only if key exists AND type matches
+bool map.contains(key); bool map.erase(key); hmap_type map.get_type(key);
+uint map.size(); bool map.empty(); void map.clear();
+
+// Hash set
+hash_set_uint64@ s = create_hash_set_uint64();   // one type per element kind
+bool s.insert(v); bool s.erase(v); bool s.contains(v); uint s.size(); bool s.empty(); void s.clear();
+```
+
+---
+
+## Filesystem, input, logging
+
+```angelscript
+// Files — sandboxed, relative to the data directory, max 512 MB, 2 directory levels
+bool file::exists(string filename);
+bool file::write(string filename, string data);
+bool file::append(string filename, string data);
+bool file::read(string filename, string &out data);        // OUT-PARAM
+bool file::remove(string filename);
+bool file::size(string filename, uint64 &out size);
+bool file::write_bytes(string filename, array<uint8> data);
+bool file::append_bytes(string filename, array<uint8> data);
+array<uint8>@ file::read_bytes(string filename);           // null on failure
+bool dir::exists(string name); bool dir::create(string name); bool dir::remove(string name);
+array<string>@ dir::list(string name);
+
+// Input
+void input::mouse_move(int x, int y);      // ABSOLUTE position
+bool input::mouse_press(); bool input::mouse_release(); bool input::mouse_click();
+void input::mouse_pos(int &out x, int &out y);
+bool input::key_active(int vk_code);       // true while HELD
+bool input::key_toggled(int vk_code);      // toggle state (caps lock)
+void input::key_press(int vk_code);        // SENDS key down
+void input::key_release(int vk_code);      // SENDS key up
+void input::key_tap(int vk_code);          // SENDS down+up
+
+// Logging
+void print(? msg);                         // global
+void console::log(? msg); void console::log(? msg, int r, int g, int b);
+void console::warn(? msg); void console::error(? msg); void console::clear();
+void alert::show(string msg);              // + (r,g,b), (r,g,b,duration), (r,g,b,duration,rainbow)
+void alert::show_tag(string msg, string tag);  // + same overloads; same tag updates in place
+void alert::dismiss(); void alert::dismiss(string tag);
+```
+
+---
+
+## Utilities
+
+```angelscript
+string util::get_username();
+void util::disable_capture_protection();
+string util::wide_to_string(array<uint8> bytes, bool stop_at_null = false);
+string util::to_hex(number, bool prefix = true);
+uint64 util::tickcount(); string util::system_time(bool use_12h = false);
+uint64 util::time_now(); double util::time_ms(start,end); double util::time_us(start,end); double util::time_ns(start,end);
+void util::seed_random(uint64 seed);
+int util::random_int(int min, int max); float util::random_float(float,float);
+double util::random_double(double,double); int64 util::random_i64(int64,int64); uint64 util::random_u64(uint64,uint64);
+string util::hex_encode(...); string util::hex_decode(...);   // empty string on decode failure
+string util::base64_encode(...); string util::base64_decode(...);
+uint64 hash::fnv1a(string str); uint32 hash::crc32(string str);
+string util::format_string(string fmt, ...);   // {} placeholders; {:>8} {:08} {:.2} {0:<8.2}
+array<zip_entry>@ util::zip_parse(string data);  // flat zips only
+```
+
+---
+
+## Networking
+
+```angelscript
+struct http_response { int status_code; string body; string error; }
+
+void http::get(string url, response_callback@ cb);   // callback form: main() ONLY
+void http::post(string url, string body, string content_type, response_callback@ cb);
+void http::get(string url);                         // fire-and-forget: any context
+void http::post(string url, string body, string content_type);
+
+void ws::connect(string url, connect_callback@ on_open, message_callback@ on_message,
+                 disconnect_callback@ on_disconnect, error_callback@ on_error);
+void ws::reconnect(); void ws::disconnect(); bool ws::is_connected(); void ws::send(string msg);
+```
+
+WebSocket callbacks fire on the connection thread — guard shared state.
+
+---
+
+## Zydis / Unicorn (RE)
+
+```angelscript
+// Zydis
+array<uint8>@ bytes = process::read_bytes(addr, 64);
+array<disasm_insn@> insns;
+if (!zydis::disasm(bytes, addr, insns)) return;      // rip base resolves RIP-relative operands
+if (!zydis::disasm_func(bytes, addr, insns)) return;  // until first ret; false if >4096 insns
+string zydis::reg_name(int reg);
+// insn.text, insn.runtime_address, insn.length, insn.get_op(i)
+
+// Unicorn — opaque uint64 handle, 0 = failure, x86_64 only
+uint64 h = uc::create();          // standalone
+uint64 h = uc::create_process();  // backed by the attached process (attach first!)
+uc::mem_map(h, addr, size, uc::prot::read | uc::prot::exec);
+uc::mem_write(h, addr, bytes);
+uc::reg_write64(h, x86_reg::rax, value);
+uint64 v; uc::reg_read64(h, x86_reg::rax, v);
+int err = uc::start(h, begin, end, timeout_us, count);   // uc::error::ok on clean exit
+uc::close(h);
+```
 
 ---
 
 ## Common patterns
 
-**Scan + RIP resolve:**
+**Scan + resolve + read:**
 ```angelscript
-uint64 instr = proc.scan_ida("48 8B 05 ? ? ? ?", "client.dll");
-if (instr == 0) { alert("pattern failed"); return; }
-uint64 ptr = proc.resolve_rip(instr, 3, 7);
-uint64 list = proc.read<uint64>(ptr);
+uint64 base = process::get_module_base("client.dll");
+if (base == 0) return false;
+uint64 instr = process::find_signature(base, "48 8B 05 ? ? ? ?");
+if (instr == 0) return false;
+uint64 ptr = process::get_relative_address(instr, 3, 7);
+uint64 list = process::read_uint64(ptr);
+if (list == 0) return;
 ```
 
-**FTransform bone read (UE4/UE5 — stride is 48 bytes):**
+**Bulk struct read:**
 ```angelscript
-uint64 entry = bone_base + uint64(idx) * 48;
-float bx = proc.read<float>(entry + 16);  // translation.x
-float by = proc.read<float>(entry + 20);
-float bz = proc.read<float>(entry + 24);
+memory_buffer@ buf = process::read_buffer(entity, 64);
+if (buf is null) return;
+float hp = buf.read_float(0x334);
+vec3 origin = buf.read_vec3_float(0x138);
 ```
 
-**Cornered box:**
+**World to screen:**
 ```angelscript
-void draw_cornered_box(float x,float y,float w,float h, color_t col) {
-    float c = w*0.22f; float t = 1.5f;
-    renderer.draw_line(x,y, x+c,y, col,t);    renderer.draw_line(x,y, x,y+c, col,t);
-    renderer.draw_line(x+w,y, x+w-c,y, col,t); renderer.draw_line(x+w,y, x+w,y+c, col,t);
-    renderer.draw_line(x,y+h, x+c,y+h, col,t); renderer.draw_line(x,y+h, x,y+h-c, col,t);
-    renderer.draw_line(x+w,y+h, x+w-c,y+h, col,t); renderer.draw_line(x+w,y+h, x+w,y+h-c, col,t);
-}
+vec2 screen;
+if (!source2::w2s(world_pos, view_matrix, screen)) continue;   // off-screen / behind camera
+render::draw_box((int)screen.x, (int)screen.y, 50, 50, 255,0,0,255, box_style::OUTLINED, 0.0f);
+```
+
+**Angle helper:**
+```angelscript
+vec2 aim = math::calculate_angle(my_pos, target_pos);   // vec2(pitch, yaw)
+vec2 smooth = math::smooth_angles(cur, aim, angle_range::R_180, 0.3, 1.0, 45.0);
 ```
 
 ---
 
 ## Top crash causes
 
-1. `uint32` for addresses — use `uint64`
-2. No null check after pointer read — `if (ptr == 0) continue;`
-3. No null check after pattern scan — `if (addr == 0) return;`
-4. `arr.size()` → `arr.length()`
-5. `if (h == null)` → `if (h is null)`
-6. FTransform stride 16 instead of 48
-7. `proc.read` before `proc.attach`
-8. Pattern scan inside the tick loop (scan once in main)
+1. `void main()` instead of `bool main()` returning `true`/`false`.
+2. Invented API names — anything outside the namespaces listed above does not exist
+   (see `reference/_API_CONTRACT.md` for the full old→new mapping).
+3. `uint32` for addresses — use `uint64`.
+4. No null check after a pointer read (`if (ptr == 0) return;`).
+5. No null check after a signature scan (`if (addr == 0) return;`).
+6. `arr.size()` instead of `arr.length()`; `if (h == null)` instead of `if (h is null)`.
+7. Colour struct passed to a render call instead of four ints.
+8. Drawing outside the render thread.
+9. W2S result used as coordinates instead of checking the bool.
+10. UI elements registered before their tab/category.
+11. Signature scan inside the tick loop — scan once in `main()` and cache the result.
+12. Reading memory before `process::attach`.
 
 ---
 
-## New APIs (v0.2)
+## Anti-cheat surface
 
-```
-// Inter-thread data hub (no mutex needed)
-shared_snapshot<T>@  snap = shared_snapshot<T>();
-snap.publish(data);  data = snap.read();  // may return null
+Echo is external and read-only by design.
 
-// Typed hash sets
-hash_set_uint64@ / hash_set_int32@ / hash_set_float@
-  .insert(key)  .contains(key)  .remove(key)  .size()
-
-// Bulk struct read
-memory_buffer@ buf = proc.read_buffer(addr, size);
-buf.read_float(off)  buf.read_vec3_float(off)  buf.read_uint64(off) …
-
-// virtual_query
-array<region_info@>@ proc.virtual_query()
-region_info@         proc.virtual_query(uint64 addr)
-
-// All module list
-array<module_info@>@ proc.get_modules()
-
-// WebSocket server (IPC)
-ws_server@ srv = process.open_socket(port);
-srv.on_connect(fn)  srv.on_message(fn)  srv.on_disconnect(fn)
-
-// Source 2 reflection
-uint64 source2.get_controller(p, entity)
-int    source2.get_bone_by_name(p, entity, name)  // cache result
-uint32 schema.get_offset(p, class_name, field_name)
-
-// Unreal helpers
-uint64 unreal.build_view_cache(p, camera_mgr_addr)
-bool   unreal.read_bones(p, mesh_addr, view_cache, out_bones)
-vec2   math.unreal_calculate_angle(src, dst)
-vec2   math.unreal_smooth_rotation(cur, tgt, smooth)
-
-// Unity (Rust) helpers
-uint32 unity.rust_prefab_id(p, entity)
-vec3   unity.rust_transform_position(p, entity)
-
-// IW Engine
-bool iw_engine.w2s(p, vm_addr, world_pos, sx, sy)
-
-// Polygon rendering
-renderer.draw_convex_poly(pts, fill)
-renderer.draw_concave_poly(pts, fill)
-renderer.draw_polyline(pts, col, thick, closed)
-renderer.draw_hue_bar(x, y, w, h, value, min, max)
-
-// ZIP
-zip_archive@ z = fs.zip_parse(path);
-fs.zip_entries(z)  z.read_entry(name)
-
-// Clip paths (polygon boolean ops)
-clip_paths@ cp = clip_paths();
-cp.add_path(pts)  cp.inflate(delta)  cp.boolean_op(other, CLIP_INTERSECT)
-cp.points() → array<array<vec2@>@>
-
-// SIMD / bit ops
-mm_xor_si128 / mm_shuffle_epi8 / mm_add_epi32 / mm_set_epi32
-rol32 / ror64 / bswap32 / bswap64 / popcnt / lzcnt / tzcnt
-
-// Extended alert
-alert.show(msg)  alert.show_tag(msg, tag)  alert.dismiss()
-
-// util
-util.seed_random(seed)  util.base64_encode(data)  util.hex_encode(data)
-```
+- Never write to game memory on EAC/BattlEye/Vanguard targets.
+- Never snap the cursor straight to the target — smooth over multiple ticks.
+- Use `create_thread(64, @tick)`, not `create_thread(0, @tick)` (0 runs once and exits).
+- Add small timing variance in aim loops, e.g. `sleep(util::random_int(0, 4));`.
 
 ---
 
@@ -316,26 +588,16 @@ util.seed_random(seed)  util.base64_encode(data)  util.hex_encode(data)
 
 | File | What it shows |
 |------|--------------|
-| `templates/basic.as` | Minimal main + on_unload |
-| `templates/render.as` | ESP box + color picker |
-| `templates/menu.as` | All menu element types |
-| `templates/memory.as` | Attach + scan + RIP resolve + tick loop |
-| `templates/esp-bones.as` | Full CS2 ESP: box, skeleton, health bar |
-| `templates/aimbot.as` | CS2 aimbot: FOV, smooth, predict, recoil |
-| `templates/radar.as` | 2D circular radar: entity dots, edge arrows, rotating/north-up |
+| `templates/basic.as` | Minimal `bool main()` + `on_unload()` |
+| `templates/render.as` | ESP box + colour picker |
+| `templates/menu.as` | All UI element types |
+| `templates/memory.as` | Attach + scan + relative resolve + tick loop |
+| `templates/esp-bones.as` | CS2 ESP: box, skeleton, health bar |
+| `templates/aimbot.as` | CS2 aimbot: FOV, smoothing, prediction, recoil |
+| `templates/radar.as` | 2D circular radar: entity dots, edge arrows |
 | `templates/loot.as` | CS2 dropped-weapon ESP: tiered labels, sorted panel |
 | `templates/misc.as` | Bunny hop, flash reduction, spectator list |
 | `templates/ue5-sdk.as` | UE5 GWorld traversal from Dumper-7 SDK |
 | `templates/unity-il2cpp.as` | Unity IL2CPP ESP |
 | `templates/valorant.as` | Valorant ESP (VGK external) |
 | `templates/fortnite.as` | Fortnite ESP (UE5/EAC) |
-
----
-
-## Anti-cheat surface
-
-Echo is external and read-only by design:
-- Never `proc.write` to game memory on EAC/BattlEye/Vanguard targets
-- Never jump cursor directly to target — use smooth lerp per tick
-- Use `create_thread(64, ...)` not `create_thread(0, ...)`
-- Add `sleep(uint(random.int(0, 4)))` in aim loop for timing variance

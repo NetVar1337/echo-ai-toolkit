@@ -1,7 +1,11 @@
 // Full CS2/Source 2 ESP: boxes, skeleton, health bar, distance labels
-// All offsets are examples — verify against current cs2-dumper output
+//
+// OFFSETS BELOW ARE PLACEHOLDERS. They are illustrative values copied from a
+// community dump of one specific build. They are NOT verified and will be
+// wrong after any game update. Re-derive every offset with a current
+// cs2-dumper run before using this template.
 
-// ─── Offsets ───────────────────────────────────────────────────────
+// ─── Offsets (placeholders — re-verify per patch) ────────────────────────────
 const uint64 OFF_HP         = 0x344;
 const uint64 OFF_LIFE       = 0x338;  // 0 = alive
 const uint64 OFF_TEAM       = 0x3CB;
@@ -21,17 +25,18 @@ const int SHR   = 14; const int ELB_R = 16; const int HAND_R = 17;
 const int HIP_L = 18; const int KNEE_L= 23; const int FOOT_L = 28;
 const int HIP_R = 33; const int KNEE_R= 38; const int FOOT_R = 43;
 
-// Pairs for skeleton draw: [from, to]
-int BONE_PAIRS[][] = {
-    {HEAD,NECK},{NECK,CHEST},{CHEST,SPINE},{SPINE,PELVIS},  // spine
-    {CHEST,SHL},{SHL,ELB_L},{ELB_L,HAND_L},                // L arm
-    {CHEST,SHR},{SHR,ELB_R},{ELB_R,HAND_R},                // R arm
-    {PELVIS,HIP_L},{HIP_L,KNEE_L},{KNEE_L,FOOT_L},          // L leg
-    {PELVIS,HIP_R},{HIP_R,KNEE_R},{KNEE_R,FOOT_R}           // R leg
+// Pairs for skeleton draw: flat [from, to, from, to, ...]
+int BONE_PAIRS[30] = {
+    HEAD,NECK,  NECK,CHEST,  CHEST,SPINE,  SPINE,PELVIS,   // spine
+    CHEST,SHL,  SHL,ELB_L,   ELB_L,HAND_L,                 // L arm
+    CHEST,SHR,  SHR,ELB_R,   ELB_R,HAND_R,                 // R arm
+    PELVIS,HIP_L, HIP_L,KNEE_L, KNEE_L,FOOT_L,              // L leg
+    PELVIS,HIP_R, HIP_R,KNEE_R, KNEE_R,FOOT_R              // R leg
 };
+const int BONE_PAIR_COUNT = 15;
 
-// ─── Shared entity data (written by tick, read by render) ──────────
-struct EspEntity {
+// ─── Shared entity data (written by tick, read by render) ────────────────────
+class EspEntity {
     bool   alive;
     bool   visible;
     bool   is_team;
@@ -43,45 +48,45 @@ struct EspEntity {
 }
 
 array<EspEntity@> g_entities;
-mutex@ g_mx = mutex();
+mutex@ g_mx = create_mutex();
 
-// ─── Menu ─────────────────────────────────────────────────────────
-tab@          t;
-checkbox@     esp_on;
-checkbox@     show_box;
-checkbox@     show_skel;
-checkbox@     show_hp;
-checkbox@     show_name;
-slider@       max_dist;
-color_picker@ col_enemy;
-color_picker@ col_team;
-color_picker@ col_visible;
-font_handle@  fnt;
+// ─── Menu ────────────────────────────────────────────────────────────────────
+checkbox     g_esp_on;
+checkbox     g_show_box;
+checkbox     g_show_skel;
+checkbox     g_show_hp;
+checkbox     g_show_name;
+slider       g_max_dist;      // metres
+color_picker g_col_enemy;
+color_picker g_col_team;
+color_picker g_col_visible;
 
-// ─── Process state ─────────────────────────────────────────────────
-process@ proc;
-uint64   entity_list  = 0;
-uint64   view_mat_addr= 0;
-uint64   local_player = 0;
+// ─── Process state ───────────────────────────────────────────────────────────
+uint64 g_entity_list   = 0;
+uint64 g_view_mat_addr = 0;
+uint64 g_local_player  = 0;
 
-// ─── Entry point ───────────────────────────────────────────────────
+// ─── Entry point ─────────────────────────────────────────────────────────────
 bool main() {
-    t          = menu.add_tab("ESP");
-    auto cat   = t.add_category("Visuals");
-    esp_on     = cat.add_checkbox("Enable",    true,  "esp.on");
-    show_box   = cat.add_checkbox("Boxes",     true,  "esp.box");
-    show_skel  = cat.add_checkbox("Skeleton",  true,  "esp.skel");
-    show_hp    = cat.add_checkbox("Health bar",true,  "esp.hp");
-    show_name  = cat.add_checkbox("Names",     true,  "esp.name");
-    max_dist   = cat.add_slider("Max dist (m)",10.0f, 500.0f, 200.0f, "esp.dist");
-    col_enemy  = cat.add_color_picker("Enemy", color(220,60,60,255),  "esp.col_e");
-    col_team   = cat.add_color_picker("Team",  color(80,120,255,255), "esp.col_t");
-    col_visible= cat.add_color_picker("Vis",   color(0,220,60,255),   "esp.col_v");
+    ui::config_path("echo_esp_bones");
 
-    fnt = renderer.load_font("Verdana", 11, false);
+    ui::add_tab("ESP");
+    ui::add_category("Visuals");
+    g_esp_on      = ui::add_checkbox("Enable", true, "esp.on");
+    g_show_box    = ui::add_checkbox("Boxes", true, "esp.box");
+    g_show_skel   = ui::add_checkbox("Skeleton", true, "esp.skel");
+    g_show_hp     = ui::add_checkbox("Health bar", true, "esp.hp");
+    g_show_name   = ui::add_checkbox("Names", true, "esp.name");
+    g_max_dist    = ui::add_slider("Max dist (m)", 200, 10, 500, 10, "m", "esp.dist");
+    g_col_enemy   = ui::add_color_picker("Enemy", 220, 60, 60, 255, true, "esp.col_e");
+    g_col_team    = ui::add_color_picker("Team", 80, 120, 255, 255, true, "esp.col_t");
+    g_col_visible = ui::add_color_picker("Vis", 0, 220, 60, 255, true, "esp.col_v");
 
-    proc = process.attach("cs2.exe");
-    if (proc is null) { alert("cs2.exe not found"); return false; }
+    attach_data ad = process::attach("cs2.exe");
+    if (ad.pid == 0) {
+        alert::show("cs2.exe not found");
+        return false;
+    }
 
     create_thread(0,  @do_scan);   // one-shot: find addresses
     create_thread(32, @tick);      // 32 tps entity update
@@ -89,84 +94,94 @@ bool main() {
     return true;
 }
 
-// ─── Address scan (runs once after attach) ─────────────────────────
+// ─── Address scan (runs once after attach) ───────────────────────────────────
 void do_scan() {
+    uint64 client = process::get_module_base("client.dll");
+    if (client == 0) {
+        alert::show("client.dll not found");
+        return;
+    }
+
     // Entity system
-    uint64 sig = proc.scan("48 8B 0D ?? ?? ?? ?? 48 89 5C 24", "client.dll");
-    if (sig == 0) { alert("entity list sig failed"); return; }
-    uint64 ent_sys  = proc.resolve_rip(sig, 3, 7);
-    entity_list     = proc.read<uint64>(proc.read<uint64>(ent_sys) + 0x10);
+    uint64 sig = process::find_signature(client, "48 8B 0D ? ? ? ? 48 89 5C 24");
+    if (sig == 0) {
+        alert::show("entity list sig failed");
+        return;
+    }
+    uint64 ent_sys = process::get_relative_address(sig, 3, 7);
+    g_entity_list  = process::read_uint64(process::read_uint64(ent_sys) + 0x10);
 
     // View matrix
-    sig = proc.scan("48 8D 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ??", "client.dll");
-    if (sig != 0) view_mat_addr = proc.resolve_rip(sig, 3, 7);
+    sig = process::find_signature(client, "48 8D 05 ? ? ? ? 48 89 05 ? ? ? ?");
+    if (sig != 0) g_view_mat_addr = process::get_relative_address(sig, 3, 7);
 
     // Local player
-    sig = proc.scan("48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 8B 01", "client.dll");
-    if (sig != 0) local_player = proc.resolve_rip(sig, 3, 7);
+    sig = process::find_signature(client, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 8B 01");
+    if (sig != 0) g_local_player = process::get_relative_address(sig, 3, 7);
 
-    alert("ESP ready");
+    alert::show("ESP ready");
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Entity list chunk walk (user code — the chunk layout is game specific)
 uint64 get_entity(int idx) {
-    uint64 chunk = proc.read<uint64>(entity_list + uint64(idx >> 9) * 8);
+    uint64 chunk = process::read_uint64(g_entity_list + uint64(idx >> 9) * 8);
     if (chunk == 0) return 0;
-    return proc.read<uint64>(chunk + uint64(idx & 0x1FF) * 120);
+    return process::read_uint64(chunk + uint64(idx & 0x1FF) * 120);
 }
 
-bool read_bone_screen(uint64 ent, int bone, float vp[], float& sx, float& sy) {
-    uint64 skel     = proc.read<uint64>(ent + OFF_SKELETON);
-    uint64 bone_arr = proc.read<uint64>(skel + OFF_BONE_ARR);
-    uint64 addr     = bone_arr + uint64(bone) * 0x20 + 0x10;
-    float wx = proc.read<float>(addr);
-    float wy = proc.read<float>(addr + 4);
-    float wz = proc.read<float>(addr + 8);
-
-    float cx = vp[0]*wx + vp[4]*wy + vp[8]*wz  + vp[12];
-    float cy = vp[1]*wx + vp[5]*wy + vp[9]*wz  + vp[13];
-    float cw = vp[3]*wx + vp[7]*wy + vp[11]*wz + vp[15];
-    if (cw < 0.001f) return false;
-    float inv = 1.0f / cw;
-    sx = 960.0f + cx * inv * 960.0f;
-    sy = 540.0f - cy * inv * 540.0f;
-    return sx >= 0 && sx <= 1920 && sy >= 0 && sy <= 1080;
+// Read a 4x4 float matrix (16 floats) from the target process (user code)
+matrix4x4 read_matrix16(uint64 addr) {
+    matrix4x4 m;
+    for (int c = 0; c < 4; c++)
+        for (int r = 0; r < 4; r++)
+            m[c][r] = process::read_float(addr + uint64(c * 4 + r) * 4);
+    return m;
 }
 
-// ─── Tick: read entity data ─────────────────────────────────────────
+// Read one bone's world position (user code — bone stride is game specific)
+vec3 get_bone_pos(uint64 ent, int bone) {
+    uint64 skel = process::read_uint64(ent + OFF_SKELETON);
+    uint64 arr  = process::read_uint64(skel + OFF_BONE_ARR);
+    uint64 a    = arr + uint64(bone) * 0x20 + 0x10;
+    return vec3(process::read_float(a),
+                 process::read_float(a + 4),
+                 process::read_float(a + 8));
+}
+
+// ─── Tick: read entity data ──────────────────────────────────────────────────
 void tick() {
-    if (!esp_on.get() || entity_list == 0 || view_mat_addr == 0) return;
+    if (!ui::get(g_esp_on) || g_entity_list == 0 || g_view_mat_addr == 0) return;
 
-    // Read view projection matrix (16 floats)
-    float vp[16];
-    for (int i = 0; i < 16; i++)
-        vp[i] = proc.read<float>(view_mat_addr + uint64(i) * 4);
+    // Read the 4x4 view-projection matrix (float[16])
+    matrix4x4 vm = read_matrix16(g_view_mat_addr);
 
-    uint64 lp_ptr  = proc.read<uint64>(local_player);
-    int    lp_team = (lp_ptr != 0) ? proc.read<int>(lp_ptr + OFF_TEAM) : 0;
-    float  lp_ox   = (lp_ptr != 0) ? proc.read<float>(lp_ptr + OFF_ORIGIN)     : 0;
-    float  lp_oy   = (lp_ptr != 0) ? proc.read<float>(lp_ptr + OFF_ORIGIN + 4) : 0;
-    float  lp_oz   = (lp_ptr != 0) ? proc.read<float>(lp_ptr + OFF_ORIGIN + 8) : 0;
-    float  dist_max = max_dist.get() * 39.37f; // metres → Source units
+    uint64 lp_ptr  = process::read_uint64(g_local_player);
+    int    lp_team = (lp_ptr != 0) ? process::read_int32(lp_ptr + OFF_TEAM) : 0;
+    vec3   lp_pos  = (lp_ptr != 0)
+                   ? vec3(process::read_float(lp_ptr + OFF_ORIGIN),
+                          process::read_float(lp_ptr + OFF_ORIGIN + 4),
+                          process::read_float(lp_ptr + OFF_ORIGIN + 8))
+                   : vec3(0, 0, 0);
+    float  dist_max = float(ui::get(g_max_dist)) * 39.37f; // metres → Source units
 
     array<EspEntity@> local_buf;
 
     for (int i = 1; i < 64; i++) {
         uint64 ent = get_entity(i);
         if (ent == 0) continue;
-        if (proc.read<uint8>(ent + OFF_LIFE) != 0) continue;  // dead
-        int hp = proc.read<int>(ent + OFF_HP);
+        if (process::read_uint8(ent + OFF_LIFE) != 0) continue;  // dead
+        int hp = process::read_int32(ent + OFF_HP);
         if (hp <= 0) continue;
 
-        float ox = proc.read<float>(ent + OFF_ORIGIN);
-        float oy = proc.read<float>(ent + OFF_ORIGIN + 4);
-        float oz = proc.read<float>(ent + OFF_ORIGIN + 8);
-        float dx = lp_ox - ox, dy = lp_oy - oy, dz = lp_oz - oz;
-        float dist_units = sqrt(dx*dx + dy*dy + dz*dz);
+        vec3 origin = vec3(process::read_float(ent + OFF_ORIGIN),
+                           process::read_float(ent + OFF_ORIGIN + 4),
+                           process::read_float(ent + OFF_ORIGIN + 8));
+        float dist_units = origin.distance(lp_pos);
         if (dist_units > dist_max) continue;
 
-        int team = proc.read<int>(ent + OFF_TEAM);
-        bool spotted = proc.read<bool>(ent + OFF_SPOTTED);
+        int  team    = process::read_int32(ent + OFF_TEAM);
+        bool spotted = process::read_uint8(ent + OFF_SPOTTED) != 0;
 
         EspEntity@ ed = EspEntity();
         ed.alive   = true;
@@ -174,29 +189,27 @@ void tick() {
         ed.is_team = (team == lp_team);
         ed.visible = spotted;
         ed.dist    = dist_units / 39.37f;
-
-        // Read player name
-        char name_buf[64];
-        for (int c = 0; c < 32; c++) {
-            uint8 ch = proc.read<uint8>(ent + OFF_NAME + c);
-            if (ch == 0) break;
-            ed.name += string(ch);
-        }
+        ed.name    = process::read_string(ent + OFF_NAME);
 
         // Project all skeleton bones
-        float head_sx = 0, head_sy = 0, feet_sx = 0, feet_sy = 0;
         bool head_ok = false, feet_ok = false;
         for (int b = 0; b < 44; b++) {
-            ed.sv[b] = read_bone_screen(ent, b, vp, ed.sx[b], ed.sy[b]);
+            vec2 screen;
+            bool ok = source2::w2s(get_bone_pos(ent, b), vm, screen);
+            ed.sv[b] = ok;
+            ed.sx[b] = screen.x;
+            ed.sy[b] = screen.y;
         }
-        head_ok  = ed.sv[HEAD];
-        feet_ok  = ed.sv[FOOT_L] || ed.sv[FOOT_R];
-        head_sx  = ed.sx[HEAD]; head_sy = ed.sy[HEAD];
-        feet_sx  = ed.sv[FOOT_L] ? ed.sx[FOOT_L] : ed.sx[FOOT_R];
-        feet_sy  = ed.sv[FOOT_L] ? ed.sy[FOOT_L] : ed.sy[FOOT_R];
+        head_ok = ed.sv[HEAD];
+        feet_ok = ed.sv[FOOT_L] || ed.sv[FOOT_R];
+
+        float head_sx = ed.sx[HEAD];
+        float head_sy = ed.sy[HEAD];
+        float feet_sx = ed.sv[FOOT_L] ? ed.sx[FOOT_L] : ed.sx[FOOT_R];
+        float feet_sy = ed.sv[FOOT_L] ? ed.sy[FOOT_L] : ed.sy[FOOT_R];
 
         if (head_ok && feet_ok) {
-            float bh = abs(feet_sy - head_sy);
+            float bh = feet_sy > head_sy ? feet_sy - head_sy : head_sy - feet_sy;
             float bw = bh * 0.45f;
             ed.box_x = head_sx - bw * 0.5f;
             ed.box_y = head_sy;
@@ -212,66 +225,78 @@ void tick() {
     g_mx.unlock();
 }
 
-// ─── Render ────────────────────────────────────────────────────────
+// ─── Render ──────────────────────────────────────────────────────────────────
 void draw() {
-    if (!esp_on.get()) return;
+    if (!ui::get(g_esp_on)) return;
 
     g_mx.lock_shared();
     array<EspEntity@> snap = g_entities;
     g_mx.unlock_shared();
 
+    render::update_font(fonts::TAHOMA, 11);
+
     for (uint i = 0; i < snap.length(); i++) {
         EspEntity@ e = snap[i];
         if (!e.alive) continue;
 
-        color c = e.is_team   ? col_team.get()
-                : e.visible   ? col_visible.get()
-                :               col_enemy.get();
+        color c = e.is_team   ? ui::get(g_col_team)
+                : e.visible   ? ui::get(g_col_visible)
+                :               ui::get(g_col_enemy);
+
         // Fade alpha with distance
-        float alpha_f = 1.0f - clamp(e.dist / max_dist.get(), 0.0f, 1.0f) * 0.5f;
-        c.a = uint8(float(c.a) * alpha_f);
+        float alpha_f = 1.0f - (e.dist / float(ui::get(g_max_dist))) * 0.5f;
+        int a = int(c.a * alpha_f);
+        if (a < 0) a = 0;
 
         // Box
-        if (show_box.get() && e.box_w > 0) {
-            float x = e.box_x, y = e.box_y, w = e.box_w, h = e.box_h;
-            float cx = w * 0.25f, cy = h * 0.25f;
+        if (ui::get(g_show_box) && e.box_w > 0) {
+            int x = int(e.box_x), y = int(e.box_y);
+            int w = int(e.box_w), h = int(e.box_h);
+            int cx = int(w * 0.25f), cy = int(h * 0.25f);
             // corners
-            renderer.line(x,   y,   x+cx,y,   1.5f, c);
-            renderer.line(x,   y,   x,   y+cy,1.5f, c);
-            renderer.line(x+w, y,   x+w-cx,y, 1.5f, c);
-            renderer.line(x+w, y,   x+w, y+cy,1.5f, c);
-            renderer.line(x,   y+h, x+cx,y+h, 1.5f, c);
-            renderer.line(x,   y+h, x,   y+h-cy,1.5f,c);
-            renderer.line(x+w, y+h, x+w-cx,y+h,1.5f,c);
-            renderer.line(x+w, y+h, x+w, y+h-cy,1.5f,c);
+            render::draw_line(x,     y,     x + cx, y,     c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x,     y,     x,     y + cy, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x + w, y,     x + w - cx, y, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x + w, y,     x + w, y + cy, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x,     y + h, x + cx, y + h, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x,     y + h, x,     y + h - cy, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x + w, y + h, x + w - cx, y + h, c.r, c.g, c.b, a, 1.5f);
+            render::draw_line(x + w, y + h, x + w, y + h - cy, c.r, c.g, c.b, a, 1.5f);
         }
 
         // Health bar (left of box, vertical)
-        if (show_hp.get() && e.box_h > 0) {
-            float filled = e.box_h * (float(e.hp) / 100.0f);
-            float bx = e.box_x - 7.0f;
-            renderer.rect_outlined(bx, e.box_y, 4.0f, e.box_h, 1.0f, color(0,0,0,180));
-            int r = int(255.0f * (1.0f - float(e.hp)/100.0f));
-            int g = int(255.0f * (float(e.hp)/100.0f));
-            renderer.rect(bx+1.0f, e.box_y + (e.box_h - filled), 2.0f, filled, color(r,g,0,220));
+        if (ui::get(g_show_hp) && e.box_h > 0) {
+            int x = int(e.box_x) - 7;
+            int y = int(e.box_y);
+            int h = int(e.box_h);
+            int filled = int(h * (float(e.hp) / 100.0f));
+            render::draw_box(x, y, 4, h, 0, 0, 0, 180, box_style::OUTLINED, 0.0f);
+            int r = int(255.0f * (1.0f - float(e.hp) / 100.0f));
+            int g = int(255.0f * (float(e.hp) / 100.0f));
+            render::draw_box(x + 1, y + (h - filled), 2, filled, r, g, 0, 220,
+                             box_style::FILLED, 0.0f);
         }
 
         // Skeleton
-        if (show_skel.get()) {
-            for (uint p = 0; p < BONE_PAIRS.length(); p++) {
-                int a = BONE_PAIRS[p][0], b = BONE_PAIRS[p][1];
-                if (!e.sv[a] || !e.sv[b]) continue;
-                renderer.line(e.sx[a],e.sy[a],e.sx[b],e.sy[b],1.0f,c);
+        if (ui::get(g_show_skel)) {
+            for (int p = 0; p < BONE_PAIR_COUNT; p++) {
+                int b0 = BONE_PAIRS[p * 2], b1 = BONE_PAIRS[p * 2 + 1];
+                if (!e.sv[b0] || !e.sv[b1]) continue;
+                render::draw_line(e.sx[b0], e.sy[b0], e.sx[b1], e.sy[b1],
+                                  c.r, c.g, c.b, a, 1.0f);
             }
         }
 
         // Name + distance
-        if (show_name.get() && e.box_y > 14.0f) {
-            string label = e.name + " [" + int(e.dist) + "m]";
-            renderer.text_outlined(e.box_x + e.box_w*0.5f, e.box_y - 14.0f,
-                                   label, fnt, c, color(0,0,0,160));
+        if (ui::get(g_show_name) && e.box_y > 14.0f) {
+            string label = e.name + " [" + util::format_string("{}m", int(e.dist)) + "]";
+            render::draw_text_outlined(int(e.box_x + e.box_w * 0.5f),
+                                       int(e.box_y) - 14, label,
+                                       c.r, c.g, c.b, a);
         }
     }
 }
 
-void on_unload() { proc = null; }
+void on_unload() {
+    process::detach();
+}

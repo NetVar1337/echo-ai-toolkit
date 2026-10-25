@@ -7,10 +7,13 @@
 //   2. Open CppSDK/SDK_HEADERS/Engine_classes.hpp and Engine_structs.hpp
 //   3. Update the offset constants below from those files
 //   4. Place in %AppData%\Roaming\scripts\, reload in-game
+//
+// IMPORTANT: THE OFFSETS AND THE SIGNATURE BELOW ARE PLACEHOLDERS. They come
+// from one Dumper-7 output and are NOT verified. They break on every patch.
+// Re-derive them before using this template.
 
-// ── Offset constants (update from Dumper-7 CppSDK after each patch) ─────────
+// ── Offset constants (placeholders — update from Dumper-7 after each patch) ──
 // Source: Engine_classes.hpp / ShooterGame_classes.hpp
-// Build: update patterns below using binary-differ after game patches
 const uint32 OFF_PERSISTENTLEVEL  = 0x30;   // UWorld::PersistentLevel
 const uint32 OFF_ACTORS_DATA      = 0xA0;   // ULevel::AActors.Data (TArray)
 const uint32 OFF_ACTORS_COUNT     = 0xA8;   // ULevel::AActors.Num
@@ -28,213 +31,217 @@ const uint32 OFF_CAMLOC           = 0x1490; // APlayerCameraManager::CameraLocat
 const uint32 OFF_CAMROT           = 0x149C; // APlayerCameraManager::CameraRotation
 const uint32 OFF_CAMFOV           = 0x14A8; // APlayerCameraManager::FOVAngle
 
-// ── GWorld scan pattern (update if broken after patch) ───────────────────────
+// ── GWorld scan pattern (placeholder — update if broken after patch) ─────────
 const string GWORLD_SIG = "48 8B 1D ? ? ? ? 48 85 DB 74";
 
 // ── Shared state ─────────────────────────────────────────────────────────────
-process@  proc;
-mutex@    ent_lock;
-tab@      esp_tab;
-subtab@   vis_tab;
+mutex@ g_ent_lock = create_mutex();
+checkbox g_show_boxes;
+checkbox g_show_health;
+checkbox g_show_distance;
+slider   g_fov_limit;      // degrees; 360 = no limit
+color_picker g_col_visible;
+color_picker g_col_occluded;
 
-bool      show_boxes    = true;
-bool      show_health   = true;
-bool      show_distance = true;
-float     fov_limit     = 360.0;  // degrees; 360 = no limit
-color     col_visible   = color(0, 255, 0, 200);
-color     col_occluded  = color(255, 80, 80, 200);
-
-struct Entity {
+class Entity {
     vec3  pos;
     float health;
     float maxhealth;
     int   team;
 }
 
-array<Entity> entities;
-int           local_team = -1;
-vec3          local_pos;
-vec3          cam_loc;
-vec3          cam_rot;
-float         cam_fov    = 90.0;
+array<Entity@> g_entities;
+int  g_local_team = -1;
+vec3 g_local_pos;
+vec3 g_cam_rot;
+f_view_cache g_view;
+
+const string GAME_EXE = "YourGame-Win64-Shipping.exe"; // ← change me
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 bool main() {
-    proc = process.attach("YourGame-Win64-Shipping.exe");  // ← change me
-    if (!proc.valid()) {
-        alert("Game not found");
+    ui::config_path("echo_ue5_sdk");
+
+    attach_data ad = process::attach(GAME_EXE);
+    if (ad.pid == 0) {
+        alert::show("Game not found");
         return false;
     }
 
-    @ent_lock = mutex();
-
-    menu@ m = get_menu();
-    @esp_tab = m.add_tab("UE5 ESP");
-    @vis_tab = esp_tab.add_subtab("Visuals");
-    category@ cat = vis_tab.add_category("Settings");
-    cat.add_checkbox("Boxes",    show_boxes);
-    cat.add_checkbox("Health",   show_health);
-    cat.add_checkbox("Distance", show_distance);
-    cat.add_slider("FOV limit", fov_limit, 10.0, 360.0, 1.0);
-    cat.add_color("Visible",    col_visible);
-    cat.add_color("Occluded",   col_occluded);
+    ui::add_tab("UE5 ESP");
+    ui::add_category("Settings");
+    g_show_boxes    = ui::add_checkbox("Boxes", true, "ue5.boxes");
+    g_show_health   = ui::add_checkbox("Health", true, "ue5.health");
+    g_show_distance = ui::add_checkbox("Distance", true, "ue5.distance");
+    g_fov_limit     = ui::add_slider("FOV limit", 360, 10, 360, 5, "deg", "ue5.fov");
+    g_col_visible   = ui::add_color_picker("Visible", 0, 255, 0, 200, true, "ue5.col_v");
+    g_col_occluded  = ui::add_color_picker("Occluded", 255, 80, 80, 200, true, "ue5.col_o");
 
     create_thread(64, @update_loop);    // 64 tps entity update
     on_render(@draw_loop);
     return true;
 }
 
-// ── Entity update ─────────────────────────────────────────────────────────────
+// ── Entity update ────────────────────────────────────────────────────────────
 void update_loop() {
-    while (true) {
-        do_update();
-        sleep(15);
-    }
+    do_update();
 }
 
 void do_update() {
-    // GWorld
-    uint64 gw_sig = proc.scan_ida(GWORLD_SIG, "YourGame-Win64-Shipping.exe");
+    // GWorld — find_signature needs a base address first
+    uint64 base = process::get_module_base(GAME_EXE);
+    if (base == 0) return;
+
+    uint64 gw_sig = process::find_signature(base, GWORLD_SIG);
     if (gw_sig == 0) return;
-    uint64 gworld_ptr = proc.resolve_rip(gw_sig, 3, 7);
-    uint64 world      = proc.read<uint64>(gworld_ptr);
+    uint64 gworld_ptr = process::get_relative_address(gw_sig, 3, 7);
+    uint64 world      = process::read_uint64(gworld_ptr);
     if (world == 0) return;
 
     // Camera
-    uint64 gi       = proc.read<uint64>(world + OFF_GAMEINSTANCE);
-    uint64 lp_data  = proc.read<uint64>(gi + OFF_LOCALPLAYERS_DATA);
-    uint64 local_p  = proc.read<uint64>(lp_data);
-    uint64 pc       = proc.read<uint64>(local_p + OFF_PC);
-    uint64 cam      = proc.read<uint64>(pc + OFF_CAMMANAGER);
-    cam_loc.read(proc, cam + OFF_CAMLOC);
-    cam_rot.read(proc, cam + OFF_CAMROT);
-    cam_fov = proc.read<float>(cam + OFF_CAMFOV);
-    if (cam_fov < 10.0 || cam_fov > 170.0) cam_fov = 90.0;
+    uint64 gi      = process::read_uint64(world + OFF_GAMEINSTANCE);
+    uint64 lp_data = process::read_uint64(gi + OFF_LOCALPLAYERS_DATA);
+    uint64 local_p = process::read_uint64(lp_data);
+    uint64 pc      = process::read_uint64(local_p + OFF_PC);
+    uint64 cam     = process::read_uint64(pc + OFF_CAMMANAGER);
+    if (cam == 0) return;
+
+    vec3 cam_loc = vec3(process::read_float(cam + OFF_CAMLOC),
+                        process::read_float(cam + OFF_CAMLOC + 4),
+                        process::read_float(cam + OFF_CAMLOC + 8));
+    vec3 cam_rot = vec3(process::read_float(cam + OFF_CAMROT),
+                        process::read_float(cam + OFF_CAMROT + 4),
+                        process::read_float(cam + OFF_CAMROT + 8));
+    float cam_fov = process::read_float(cam + OFF_CAMFOV);
+    if (cam_fov < 10.0f || cam_fov > 170.0f) cam_fov = 90.0f;
+
+    f_view_info view_info;
+    view_info.location = cam_loc;
+    view_info.rotation = cam_rot;
+    view_info.fov      = cam_fov;
 
     // Actor list
-    uint64 level      = proc.read<uint64>(world + OFF_PERSISTENTLEVEL);
-    uint64 actors_ptr = proc.read<uint64>(level + OFF_ACTORS_DATA);
-    int32  actors_num = proc.read<int32>(level + OFF_ACTORS_COUNT);
+    uint64 level      = process::read_uint64(world + OFF_PERSISTENTLEVEL);
+    uint64 actors_ptr = process::read_uint64(level + OFF_ACTORS_DATA);
+    int32  actors_num = process::read_int32(level + OFF_ACTORS_COUNT);
     if (actors_num <= 0 || actors_num > 512) return;
 
-    array<Entity> tmp;
-    local_team = -1;
+    array<Entity@> tmp;
+    int local_team = -1;
 
     for (int32 i = 0; i < actors_num; i++) {
-        uint64 actor = proc.read<uint64>(actors_ptr + i * 8);
+        uint64 actor = process::read_uint64(actors_ptr + uint64(i) * 8);
         if (actor == 0) continue;
 
-        int team = proc.read<int32>(actor + OFF_TEAM);
-        float hp = proc.read<float>(actor + OFF_HEALTH);
-        if (hp <= 0) continue;
+        int   team = process::read_int32(actor + OFF_TEAM);
+        float hp   = process::read_float(actor + OFF_HEALTH);
+        if (hp <= 0.0f) continue;
 
-        uint64 root  = proc.read<uint64>(actor + OFF_ROOTCOMPONENT);
+        uint64 root = process::read_uint64(actor + OFF_ROOTCOMPONENT);
         if (root == 0) continue;
-        vec3@ pos;
-        pos.read(proc, root + OFF_COMPONENTWORLD + OFF_FTRANSFORM_POS);
 
-        // Assume local player has team set and is closest to (0,0,0) initially
-        // Better: compare to PC actor address
+        // ComponentToWorld.Translation — three consecutive floats
+        vec3 pos = vec3(process::read_float(root + OFF_COMPONENTWORLD + OFF_FTRANSFORM_POS),
+                        process::read_float(root + OFF_COMPONENTWORLD + OFF_FTRANSFORM_POS + 4),
+                        process::read_float(root + OFF_COMPONENTWORLD + OFF_FTRANSFORM_POS + 8));
+
+        // Assume local player has a team set and is closest to (0,0,0) initially
+        // Better: compare to the PC actor address
         if (local_team == -1) local_team = team;
 
-        Entity e;
+        Entity@ e = Entity();
         e.pos       = pos;
         e.health    = hp;
-        e.maxhealth = proc.read<float>(actor + OFF_MAXHEALTH);
-        if (e.maxhealth <= 0) e.maxhealth = 100.0;
+        e.maxhealth = process::read_float(actor + OFF_MAXHEALTH);
+        if (e.maxhealth <= 0.0f) e.maxhealth = 100.0f;
         e.team      = team;
-        tmp.push_back(e);
+        tmp.insertLast(e);
     }
 
-    ent_lock.lock();
-    entities = tmp;
-    local_pos = cam_loc;  // approximate local pos as camera loc
-    ent_lock.unlock();
+    g_ent_lock.lock();
+    g_entities   = tmp;
+    g_local_team = local_team;
+    g_local_pos  = cam_loc;  // approximate local pos as camera loc
+    g_cam_rot    = cam_rot;
+    g_view       = build_view_cache(view_info);
+    g_ent_lock.unlock();
 }
 
-// ── Draw ──────────────────────────────────────────────────────────────────────
+// ── Draw ─────────────────────────────────────────────────────────────────────
 void draw_loop() {
-    ent_lock.lock();
-    array<Entity> snap = entities;
-    ent_lock.unlock();
+    g_ent_lock.lock_shared();
+    array<Entity@> snap = g_entities;
+    int local_team = g_local_team;
+    vec3 local_pos = g_local_pos;
+    vec3 cam_rot = g_cam_rot;
+    f_view_cache view = g_view;
+    g_ent_lock.unlock_shared();
 
-    int sw = get_screen_width();
-    int sh = get_screen_height();
+    render::update_font(fonts::TAHOMA, 12);
 
     for (uint i = 0; i < snap.length(); i++) {
         Entity@ e = snap[i];
         if (e.team == local_team) continue;
 
         // FOV filter
-        vec3 aim = calc_angle(local_pos, e.pos);
-        float dfov = angle_dist(cam_rot, aim);
-        if (fov_limit < 360.0 && dfov > fov_limit) continue;
+        double dfov = math::unreal_calculate_fov(cam_rot, local_pos, e.pos);
+        if (double(ui::get(g_fov_limit)) < 360.0 && dfov > double(ui::get(g_fov_limit))) continue;
 
-        // W2S
-        vec2@ head_scr = unreal.w2s(e.pos + vec3(0, 0, 90), cam_loc, cam_rot, cam_fov, sw, sh);
-        if (head_scr.z < 0) continue;
-        vec2@ feet_scr = unreal.w2s(e.pos,                  cam_loc, cam_rot, cam_fov, sw, sh);
-        if (feet_scr.z < 0) continue;
+        // W2S — unreal::w2s writes the screen position and returns false when
+        // the point is off-screen or behind the camera
+        vec2 head_scr;
+        if (!unreal::w2s(e.pos + vec3(0, 0, 90), view, head_scr)) continue;
+        vec2 feet_scr;
+        if (!unreal::w2s(e.pos, view, feet_scr)) continue;
 
-        float h = math.abs(feet_scr.y - head_scr.y);
-        float w = h * 0.5;
+        float h = feet_scr.y - head_scr.y;
+        if (h < 0.0f) h = -h;
+        float w = h * 0.5f;
         float cx = feet_scr.x;
         float cy = head_scr.y;
 
-        color col = (e.team != local_team) ? col_occluded : col_visible;
+        color col = (e.team != local_team) ? ui::get(g_col_occluded)
+                                           : ui::get(g_col_visible);
 
         // Cornered box
-        if (show_boxes) {
-            float clen = w * 0.25;
-            renderer.line(cx - w/2,       cy,          cx - w/2 + clen, cy,          col, 1.5);
-            renderer.line(cx + w/2 - clen, cy,          cx + w/2,        cy,          col, 1.5);
-            renderer.line(cx - w/2,       cy + h,      cx - w/2 + clen, cy + h,      col, 1.5);
-            renderer.line(cx + w/2 - clen, cy + h,      cx + w/2,        cy + h,      col, 1.5);
-            renderer.line(cx - w/2,       cy,          cx - w/2,        cy + clen,   col, 1.5);
-            renderer.line(cx - w/2,       cy + h - clen, cx - w/2,      cy + h,      col, 1.5);
-            renderer.line(cx + w/2,       cy,          cx + w/2,        cy + clen,   col, 1.5);
-            renderer.line(cx + w/2,       cy + h - clen, cx + w/2,      cy + h,      col, 1.5);
+        if (ui::get(g_show_boxes)) {
+            float clen = w * 0.25f;
+            render::draw_line(cx - w / 2,       cy,          cx - w / 2 + clen, cy,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx + w / 2 - clen, cy,          cx + w / 2,        cy,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx - w / 2,       cy + h,      cx - w / 2 + clen, cy + h,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx + w / 2 - clen, cy + h,      cx + w / 2,        cy + h,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx - w / 2,       cy,          cx - w / 2,        cy + clen,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx - w / 2,       cy + h - clen, cx - w / 2,      cy + h,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx + w / 2,       cy,          cx + w / 2,        cy + clen,
+                              col.r, col.g, col.b, col.a, 1.5f);
+            render::draw_line(cx + w / 2,       cy + h - clen, cx + w / 2,      cy + h,
+                              col.r, col.g, col.b, col.a, 1.5f);
         }
 
         // Health bar
-        if (show_health) {
-            float pct  = math.clamp(e.health / e.maxhealth, 0.0, 1.0);
-            float bh   = h * pct;
-            float bx   = cx - w/2 - 6;
-            color bg   = color(0, 0, 0, 150);
-            color fg   = color(int((1-pct)*255), int(pct*255), 0, 220);
-            renderer.rect(bx - 2, cy, 4, h, bg);
-            renderer.rect(bx - 2, cy + h - bh, 4, bh, fg);
+        if (ui::get(g_show_health)) {
+            float pct = e.health / e.maxhealth;
+            if (pct > 1.0f) pct = 1.0f;
+            float bh = h * pct;
+            float bx = cx - w / 2 - 6;
+            render::draw_box(int(bx) - 2, int(cy), 4, int(h),
+                             0, 0, 0, 150, box_style::FILLED, 0.0f);
+            render::draw_box(int(bx) - 2, int(cy + h - bh), 4, int(bh),
+                             int((1 - pct) * 255), int(pct * 255), 0, 220,
+                             box_style::FILLED, 0.0f);
         }
 
         // Distance label
-        if (show_distance) {
-            float dist_m = (e.pos - local_pos).length() / 100.0;
-            string lbl   = fmt("{:.0f}m", dist_m);
-            renderer.text(cx, cy + h + 2, lbl, color(220, 220, 220, 200), get_font("default"));
+        if (ui::get(g_show_distance)) {
+            float dist_m = e.pos.distance(local_pos) / 100.0f;
+            string lbl = util::format_string("{:.0}m", dist_m);
+            render::draw_text(int(cx), int(cy + h) + 2, lbl, 220, 220, 220, 200);
         }
     }
-}
-
-// ── Math helpers ──────────────────────────────────────────────────────────────
-float norm_ang(float a) {
-    while (a >  180.0) a -= 360.0;
-    while (a < -180.0) a += 360.0;
-    return a;
-}
-
-vec3 calc_angle(vec3 src, vec3 dst) {
-    vec3 d   = dst - src;
-    float xy = math.sqrt(d.x*d.x + d.y*d.y);
-    vec3 ang;
-    ang.x = math.atan2(-d.z, xy) * (180.0 / math.PI);
-    ang.y = math.atan2(d.y, d.x) * (180.0 / math.PI);
-    ang.z = 0;
-    return ang;
-}
-
-float angle_dist(vec3 a, vec3 b) {
-    float dx = norm_ang(b.x - a.x);
-    float dy = norm_ang(b.y - a.y);
-    return math.sqrt(dx*dx + dy*dy);
 }

@@ -1,8 +1,15 @@
 {
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "echo-ai-toolkit",
-  "version": "0.2.0",
-  "description": "12 specialist agents and 17 skills for Echo Universal API (AngelScript) development — ESP, aimbot, triggerbot, radar, loot, config, memory/RE, SDK gen, anti-cheat awareness, multi-agent orchestration, and runnable example scripts",
-  "author": { "name": "NetVar1337" },
+  "version": "0.3.0",
+  "description": "12 specialist agents and 18 skills for Echo Universal API (AngelScript) development — ESP, aimbot, triggerbot, radar, loot, config, memory/RE, SDK gen, anti-cheat awareness, multi-agent orchestration, and runnable example scripts.",
+  "author": {
+    "name": "NetVar1337",
+    "url": "https://github.com/NetVar1337"
+  },
+  "homepage": "https://github.com/NetVar1337/echo-ai-toolkit",
+  "repository": "https://github.com/NetVar1337/echo-ai-toolkit",
   "license": "MIT",
+  "keywords": ["angelscript", "echo", "game-development", "overlay", "reverse-engineering", "ue5", "unity", "source2"],
   "types": "./types/index.d.ts"
 }

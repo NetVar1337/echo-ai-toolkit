@@ -30,6 +30,70 @@ jobs:
           done
           exit $fail
 
+  api:
+    name: Echo API conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch authoritative Echo API reference
+        run: |
+          curl -fsSL https://echo-23.gitbook.io/angel/llms-full.txt -o /tmp/echo-llms-full.txt
+          test -s /tmp/echo-llms-full.txt
+
+      - name: Build API signature index
+        run: |
+          python3 - <<'PY'
+          import re
+          src = open('/tmp/echo-llms-full.txt').read()
+          blocks = re.findall(r'```(?:cpp|c\+\+)\n(.*?)```', src, re.S)
+          out = []
+          for b in blocks:
+              for line in b.split('\n'):
+                  l = line.strip()
+                  if not l or l.startswith('//'):
+                      continue
+                  if re.search(r'\b[a-z_]+::[a-z_0-9]+\s*\(', l):
+                      out.append(l.rstrip(';').strip())
+          seen, res = set(), []
+          for s in out:
+              if s not in seen:
+                  seen.add(s); res.append(s)
+          open('/tmp/echo-api-index.md', 'w').write('\n'.join(res) + '\n')
+          print(f'{len(res)} signatures extracted')
+          PY
+
+      - name: Check docs teach only the real API
+        run: python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.md
+
+  layout:
+    name: Plugin layout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Agents and skills are in plugin-loadable locations
+        run: |
+          fail=0
+          # Claude Code loads plugin agents from agents/ and skills from skills/<name>/SKILL.md
+          for f in agents/*.md; do
+            [ -e "$f" ] || continue
+            grep -q '^name:' "$f" || { echo "FAIL $f: missing frontmatter 'name:'"; fail=1; }
+            grep -q '^description:' "$f" || { echo "FAIL $f: missing frontmatter 'description:'"; fail=1; }
+          done
+          for d in skills/*/; do
+            n=$(basename "$d")
+            [ -f "$d/SKILL.md" ] || { echo "FAIL $d: no SKILL.md"; fail=1; continue; }
+            grep -q '^name:' "$d/SKILL.md" || { echo "FAIL $d/SKILL.md: missing frontmatter 'name:'"; fail=1; }
+            grep -q '^description:' "$d/SKILL.md" || { echo "FAIL $d/SKILL.md: missing frontmatter 'description:'"; fail=1; }
+          done
+          # every agent file must have a matching slash command registered in the hook
+          for f in agents/*.md; do
+            n=$(basename "$f" .md)
+            grep -q "'$n'" hooks/register.tsx || { echo "FAIL agent '$n' is not registered in hooks/register.tsx"; fail=1; }
+          done
+          exit $fail
+
   plugin:
     name: Plugin validation
     runs-on: ubuntu-latest
@@ -41,3 +105,22 @@ jobs:
 
       - name: Validate plugin manifest
         run: claude plugin validate .
+
+      - name: Run plugin hook tests
+        run: claude plugin test .
+
+  installers:
+    name: Installer syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install.sh parses
+        run: bash -n install.sh
+
+      - name: install.ps1 parses
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path install.ps1), [ref]$null, [ref]$null)
+          Write-Host "install.ps1 syntax OK"

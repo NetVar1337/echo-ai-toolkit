@@ -1,17 +1,39 @@
 # Offset reference
 
-Live sources — check these first after a patch before doing your own RE.
+> **EVERY OFFSET AND PATTERN IN THIS FILE IS AN ILLUSTRATIVE PLACEHOLDER.**
+> None of it is verified against a live build. Game offsets change with every patch;
+> pointer offsets change on nearly every patch. Treat every value below as *shape
+> documentation* — a reminder of which field names exist and what they mean — never as a
+> value you can copy into a script.
+>
+> **Verify each offset per game, per build, per patch before use.** A wrong offset reads
+> garbage or crashes the target.
+>
+> Verification workflow: `skills/offset-update-workflow/SKILL.md`.
+
+---
+
+## Where real offsets come from
+
+| Source | URL | Update cadence |
+|--------|-----|---------------|
+| a2x CS2 offsets | https://github.com/a2x/cs2-offsets | Within hours of a patch |
+| frk21 CS2 offset dumper | https://github.com/frk21/CS2-Offset-Dumper | Community-run |
+| sVathis Valorant dumper | https://github.com/sVathis/Valorant-Offset-Dumper | Community-run |
+| Chase-san Valorant structures | https://github.com/Chase-san/Valorant-Structures | Community-run |
+| dword64 Apex SDK | https://github.com/dword64/Apex-Legends-SDK-2021 | Community-run |
+| p0358 Apex offsets | https://github.com/p0358/apex-legends-offsets | Community-run |
+| Fortnite offset dumper | https://github.com/MissFortune-bot/Fortnite-Offset-Dumper | Community-run |
+
+Dumper-7 (Unreal) and Dumper-7-VGK (Valorant) are the toolchains that generate the
+offsets for those engines. See `skills/dumper7-sdk/SKILL.md` and
+`skills/echo-ecosystem/SKILL.md`.
 
 ---
 
 ## CS2 (Counter-Strike 2)
 
-| Source | URL | Update cadence |
-|--------|-----|---------------|
-| a2x CS2 offsets | https://github.com/a2x/cs2-offsets | Within hours of patch |
-| frk21 CS2 offset dumper | https://github.com/frk21/CS2-Offset-Dumper | Community-run |
-
-Key CS2 offset names (from a2x `offsets.json`):
+Field *names* below are stable; the *values* are placeholders.
 
 | Name | Module | What it is |
 |------|--------|-----------|
@@ -25,46 +47,56 @@ Key CS2 offset names (from a2x `offsets.json`):
 | `m_iTeamNum` | `client.dll` | Team number |
 | `m_hPlayerPawn` | `client.dll` | PlayerController → Pawn handle |
 
-Load at runtime instead of hardcoding volatile pointers:
+Load volatile pointers at runtime instead of hardcoding them — read the JSON the dumper
+produced, then resolve the module base yourself:
 
 ```angelscript
-json@ o = json.parse_file("cs2_offsets.json");
-uint32 dwEntityList   = uint32(o["client.dll"]["dwEntityList"]);
-uint32 dwViewMatrix   = uint32(o["client.dll"]["dwViewMatrix"]);
-uint32 m_iHealth      = uint32(o["client.dll"]["m_iHealth"]);
-uint32 m_vecAbsOrigin = uint32(o["client.dll"]["m_vecAbsOrigin"]);
+string raw;
+if (!file::read("cs2_offsets.json", raw)) return false;
+
+string err;
+json_obj@ o = json::parse(raw, err);
+if (o is null) {
+    alert::show("offsets json parse failed: " + err);
+    return false;
+}
+
+json_obj@ client = o.get_obj("client.dll");
+if (client is null) return false;
+
+uint32 dwEntityList   = client.get_uint("dwEntityList");
+uint32 dwViewMatrix   = client.get_uint("dwViewMatrix");
+uint32 m_iHealth      = client.get_uint("m_iHealth");
+uint32 m_vecAbsOrigin = client.get_uint("m_vecAbsOrigin");
+
+uint64 client_base = process::get_module_base("client.dll");
+if (client_base == 0) return false;
+uint64 entity_list = process::read_uint64(client_base + dwEntityList);
 ```
+
+`process::read_uint64` returns `0` on failure — always null-check the result before using
+it as a pointer.
 
 ---
 
 ## Valorant
 
-| Source | URL |
-|--------|-----|
-| sVathis Valorant dumper | https://github.com/sVathis/Valorant-Offset-Dumper |
-| Valorant structures | https://github.com/Chase-san/Valorant-Structures |
-
-Valorant uses a custom GObjects encryption. Offsets are RVAs from Dumper-7-VGK output. See `templates/valorant.as` for integration and `skills/echo-ecosystem.md` for Dumper-7-VGK setup.
-
-Key Valorant offsets (change each patch):
+Valorant uses a custom GObjects encryption. Offsets are RVAs from a Dumper-7-VGK output.
+See `templates/valorant.as` for integration and `skills/echo-ecosystem/SKILL.md` for
+Dumper-7-VGK setup.
 
 | Name | Notes |
 |------|-------|
-| GObjects (encrypted) | Resolved by Dumper-7-VGK decrypt stub |
+| GObjects (encrypted) | Resolved by a Dumper-7-VGK decrypt stub — never a raw pointer |
 | ViewMatrix | APlayerController → APlayerCameraManager + camera offset |
 | Actor root component | `AActor::RootComponent` → FVector world position |
-| Player health | Component offset — verify via Dumper-7-VGK each patch |
+| Player health | Component offset — re-verify with Dumper-7-VGK every patch |
 
 ---
 
 ## Apex Legends
 
-| Source | URL |
-|--------|-----|
-| dword64 Apex SDK | https://github.com/dword64/Apex-Legends-SDK-2021 |
-| Apex offsets community | https://github.com/p0358/apex-legends-offsets |
-
-Apex is a Source-engine fork. Key offsets:
+Apex is a Source-engine fork.
 
 | Name | What it is |
 |------|-----------|
@@ -79,26 +111,45 @@ Apex is a Source-engine fork. Key offsets:
 
 ## Fortnite (UE5)
 
-| Source | URL |
-|--------|-----|
-| Fortnite community offsets | https://github.com/MissFortune-bot/Fortnite-Offset-Dumper |
-
-Fortnite uses UE5 with EAC. GObjects is `TUObjectArray`. See `templates/ue5-sdk.as` for the traversal pattern. Key offsets generated by Dumper-7 on each patch.
+Fortnite uses UE5 with EAC. GObjects is `TUObjectArray`. See `templates/ue5-sdk.as` for
+the traversal pattern. Field offsets are generated by Dumper-7 on each patch.
 
 ---
 
 ## Struct field offsets vs. pointer offsets
 
-**Struct field offsets** (e.g. `m_iHealth = 0x334`) are stable across most patches — they only change when the game adds/removes a field. Hardcode these as named constants.
+**Struct field offsets** (e.g. `m_iHealth = 0x334`) are stable across most patches — they
+only change when the game adds or removes a field. Hardcode these as named constants,
+still verifying them against a fresh dump.
 
-**Pointer offsets** (e.g. `dwEntityList`) change on every patch because the linker places them at different addresses. Always load these from a JSON file or scan for them with `proc.scan_ida`.
+**Pointer offsets** (e.g. `dwEntityList`) change on every patch because the linker places
+them at a different address. Always load these from a JSON file produced by a dumper, or
+resolve them with a signature scan.
 
 ```angelscript
-// Stable — hardcode as named constant
+// Stable — hardcode as a named constant (still verify after a patch)
 const uint32 M_HEALTH = 0x334;
 
-// Volatile — scan or load from JSON
-uint64 entity_system = find_entity_system();   // uses proc.scan_ida internally
+// Volatile — resolve from a dumper JSON or a signature scan
+uint64 client_base = process::get_module_base("client.dll");
+if (client_base == 0) return false;
+
+uint64 sig = process::find_signature(client_base, "48 8B 05 ? ? ? ?");
+if (sig == 0) return false;
+uint64 entity_list = process::get_relative_address(sig, 3, 7);
 ```
 
-For the patch-update workflow see `skills/offset-update-workflow.md`.
+`process::find_signature` needs a base address — always fetch it with
+`process::get_module_base(name)` first. It returns `0` when nothing matches.
+
+---
+
+## Updating offsets after a patch
+
+Full procedure: `skills/offset-update-workflow/SKILL.md`. Short version:
+
+1. Confirm the patch broke the script — a scan returning `0` is the usual signal.
+2. Pull the new module and diff it against the old one (diaphora, radare2).
+3. Re-run the dumper or re-derive the signature from the diff.
+4. Update the JSON the script loads and the hardcoded field constants.
+5. Re-test every consumer of the changed offset.

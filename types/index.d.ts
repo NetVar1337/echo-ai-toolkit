@@ -5,10 +5,9 @@ export type AgentName =
   | 'echo-memory'
   | 'echo-anticheat'
   | 'echo-sdk'
-  | 'echo-reverse';
-
-declare module 'claude-code' {
-  interface PluginState {
-    'echo-ai-toolkit': { agent: AgentName | null }
-  }
-}
+  | 'echo-reverse'
+  | 'echo-config'
+  | 'echo-radar'
+  | 'echo-loot'
+  | 'echo-triggerbot'
+  | 'echo-scripts';

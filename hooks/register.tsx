@@ -1,68 +1,112 @@
-import { atom, read, update } from 'claude-code';
 import type { Register } from 'claude-code';
 
 const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
+  'echo-dev': {
+    desc: 'General Echo API — threading, menu, networking, utilities',
+    snippets: [
+      'create_thread(64, @tick);   // 1-128 tps, 0 = run once',
+      'on_render(@render_tick);   // render-thread callback',
+      'checkbox c = ui::add_checkbox("Enable", false);',
+      'bool v = ui::get(c); ui::set(c, v);',
+    ],
+  },
   'echo-esp': {
     desc: 'ESP visuals — boxes, bones, W2S per engine',
     snippets: [
-      'source2.w2s(proc, vm_addr, pos, sx, sy)',
-      'renderer.draw_rect_filled(x,y,w,h, col)',
-      'renderer.draw_line(x1,y1,x2,y2, col, 1.5f)',
-      'renderer.text(x, y, str, col, font)',
+      'vec2 screen; source2::w2s(world_pos, view_matrix, screen);',
+      'render::draw_box(x, y, w, h, 255, 0, 0, 255, box_style::FILLED, 0.0f);',
+      'render::draw_line(x1, y1, x2, y2, 255, 255, 255, 255, 1.0f);',
+      'render::draw_text(x, y, "name", 255, 255, 255, 255);',
     ],
   },
   'echo-aimbot': {
     desc: 'Aim assist — FOV, smoothing, prediction, recoil',
     snippets: [
-      'math.calc_fov(src, tgt, view_angles)',
-      'math.lerp(cur_x, tgt_x, smooth)',
-      'mouse.move(int(dx), int(dy))',
-      'input.key_down(0x02)',
+      'double fov = math::calculate_fov(view_angles, target_angles);',
+      'vec2 smooth = math::smooth_angles(cur, tgt, angle_range::R_180, 0.3, 1.0, 45.0);',
+      'input::mouse_move(x, y);   // absolute screen coords',
+      'input::key_active(0x02);',
     ],
   },
   'echo-memory': {
-    desc: 'Memory/RE — pattern scan, structs, Unicorn, Zydis',
+    desc: 'Memory/RE — pointer chains, structs, pattern scan, Unicorn, Zydis',
     snippets: [
-      'proc.scan_ida("48 8B 0D ? ? ? ?", "game.exe")',
-      'proc.resolve_rip(addr, 3, 7)',
-      'proc.read<uint64>(base + offset)',
-      'proc.disasm_range(addr, 0x100)',
+      'uint64 base = process::get_module_base("game.exe");',
+      'uint64 sig = process::find_signature(base, "48 8B 0D ? ? ? ?");',
+      'uint64 target = process::get_relative_address(sig, 3, 7);',
+      'zydis::disasm(bytes, addr, insns);',
     ],
   },
   'echo-anticheat': {
-    desc: 'AC awareness — detection surface, safe patterns',
+    desc: 'AC awareness — detection surface, safe coding patterns',
     snippets: [
-      'proc.query_regions()',
-      'proc.get_module("EasyAntiCheat.sys")',
-      'proc.get_module("vgk.sys")',
-      'create_thread(64, function() { tick(); })',
+      'process::virtual_query(addr);   // one region',
+      'process::get_module_base("EasyAntiCheat.sys");',
+      'process::is_alive();',
+      'create_thread(64, @tick);',
     ],
   },
   'echo-sdk': {
     desc: 'Dumper-7 SDK — UE4/5 entity traversal, FName, VGK',
     snippets: [
-      'proc.read<uint64>(gobjects)',
-      'proc.read<uint64>(fname_pool + idx * 2)',
-      'proc.read<float>(actor + health_off)',
-      'proc.resolve_rip(gworld_instr, 3, 7)',
+      'process::read_uint64(gobjects);',
+      'process::read_float(actor + health_off);',
+      'process::get_relative_address(gworld_instr, 3, 7);',
+      'u_bone_array b = unreal::read_bones(mesh, off, cached_off, comp);',
     ],
   },
   'echo-reverse': {
     desc: 'RE pipeline — static → Echo runtime; Zydis, OLLVM, REA',
     snippets: [
-      'proc.disasm_range(addr, 0x200)',
-      'emu.emu_start(fn_addr, fn_addr+0x500, 5000, 2000)',
-      'proc.resolve_rip(lea_addr, 3, 7)',
-      'proc.scan_ida("? ? ? ? ? ? E8", "game.exe")',
+      'array<uint8>@ b = process::read_bytes(addr, 0x100);',
+      'zydis::disasm_func(b, addr, insns);',
+      'process::get_relative_address(lea_addr, 3, 7);',
+      'uc::start(h, fn_addr, fn_addr + 0x500, 5000, 2000);',
     ],
   },
-  'echo-dev': {
-    desc: 'General Echo API — threading, menu, networking',
+  'echo-config': {
+    desc: 'Config & data layer — persistence, HTTP, fs, ws, json',
     snippets: [
-      'create_thread(64, function() { tick(); })',
-      'menu_checkbox@ cb = menu.checkbox("Enable", false)',
-      'menu.save_config("mymod")',
-      'renderer.width() / renderer.height()',
+      'ui::config_path("my_script");',
+      'file::write("cfg.json", data);',
+      'json::parse(text);',
+      'http::get(url, @on_response);',
+    ],
+  },
+  'echo-radar': {
+    desc: '2D radar/minimap overlay — world→radar transform, entity dots',
+    snippets: [
+      'vec2 screen; source2::w2s(world_pos, view_matrix, screen);',
+      'render::draw_circle(cx + dx, cy + dy, 4, 255, 0, 0, 255, true, 16);',
+      'render::draw_polyline(points, 255, 255, 255, 255, 1.0f, true);',
+      'render::get_viewport_size();',
+    ],
+  },
+  'echo-loot': {
+    desc: 'Item/loot ESP — entity class filtering, tiers, dropped weapons',
+    snippets: [
+      'string cls = process::read_string(entity + 0x10);',
+      'render::draw_text(x, y, item_name, 255, 200, 0, 255);',
+      'render::calculate_text_size(item_name);',
+      'render::draw_box(x, y, w, h, 255, 255, 0, 255, box_style::OUTLINED, 0.0f);',
+    ],
+  },
+  'echo-triggerbot': {
+    desc: 'Triggerbot — crosshair detection, shot delay, burst, per-hitbox',
+    snippets: [
+      'input::key_active(0x02);   // VK_LBUTTON held',
+      'input::key_press(0x02);',
+      'input::key_release(0x02);',
+      'input::mouse_click();',
+    ],
+  },
+  'echo-scripts': {
+    desc: 'Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot',
+    snippets: [
+      'bool main() { return true; }',
+      'void on_unload() { /* teardown */ }',
+      'create_thread(64, @tick);',
+      'on_render(@render_tick);',
     ],
   },
 };
@@ -70,23 +114,38 @@ const AGENT_INFO: Record<string, { desc: string; snippets: string[] }> = {
 const AGENTS = {
   'echo-dev':       'General Echo API — threading, menu, networking, utilities',
   'echo-esp':       'ESP visuals — boxes, bones, health bars, W2S per engine',
-  'echo-aimbot':    'Aimbot — FOV filter, smoothing, prediction, recoil, triggerbot',
+  'echo-aimbot':    'Aimbot — FOV filter, smoothing, prediction, recoil',
   'echo-memory':    'Memory/RE — pointer chains, structs, pattern scan, Unicorn, Zydis',
-  'echo-anticheat': 'AC awareness — detection surface, safe coding patterns, risk matrix',
+  'echo-anticheat': 'AC awareness — detection surface, safe patterns, risk matrix',
   'echo-sdk':       'Dumper-7 SDK — UE4/5 entity traversal, FName, VGK decrypt',
   'echo-reverse':   'RE pipeline — static → Echo runtime; Zydis xref, OLLVM, REA',
+  'echo-config':    'Config & data layer — persistence, HTTP, fs, ws, json',
+  'echo-radar':     '2D radar/minimap overlay — world→radar transform, entity dots',
+  'echo-loot':      'Item/loot ESP — entity class filtering, item tiers, loot panels',
+  'echo-triggerbot':'Triggerbot — crosshair detection, shot delay, burst, per-hitbox',
+  'echo-scripts':   'Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot',
 } as const;
 
 type AgentName = keyof typeof AGENTS;
 
+/** Every agent this plugin exposes — keep in sync with agents/*.md */
+export const AGENT_NAMES = Object.keys(AGENTS) as AgentName[];
+
+// Ordered most-specific first: broad terms (esp, script) must not shadow narrower ones
+// ("loot ESP" is a loot task, not a generic ESP task).
 const KEYWORDS: [RegExp, AgentName][] = [
-  [/\b(esp|bones?|skeleton|w2s|world[\s_]?to[\s_]?screen|cornered[\s_]?box)\b/i, 'echo-esp'],
-  [/\b(aimbot|aim[\s_]?assist|fov|smooth(ing)?|triggerbot|velocity[\s_]?pred)\b/i, 'echo-aimbot'],
-  [/\b(pattern[\s_]?scan|scan_ida|unicorn|zydis|disasm|emulat|pointer[\s_]?chain)\b/i, 'echo-memory'],
-  [/\b(anti[-_]?cheat|vac\b|eac\b|battleye|vanguard|byfron|ricochet)\b/i, 'echo-anticheat'],
+  [/\b(triggerbot|auto[\s_]?fire|crosshair|shot[\s_]?delay)\b/i, 'echo-triggerbot'],
+  [/\b(radar|minimap|compass)\b/i, 'echo-radar'],
+  [/\b(loot|dropped?[\s_]?item|item[\s_]?tier|pickup)\b/i, 'echo-loot'],
   [/\b(dumper[-_]?7|gobjects|fname\b|ue[45]\b|unreal[\s_]?sdk)\b/i, 'echo-sdk'],
+  [/\b(pattern[\s_]?scan|scan_ida|find_signature|unicorn|zydis|disasm|emulat|pointer[\s_]?chain)\b/i, 'echo-memory'],
   [/\b(decompil|ida\b|radare2?|ghidra|ollvm|reverse[\s_]?eng|rea\b)\b/i, 'echo-reverse'],
-  [/\b(angelscript|\.as\b|echo[\s_]?api|menu\.add|on_render|create_thread|proc\.read)\b/i, 'echo-dev'],
+  [/\b(anti[-_]?cheat|vac\b|eac\b|battleye|vanguard|byfron|ricochet)\b/i, 'echo-anticheat'],
+  [/\b(config|persist|http|websocket|\bws\b|json|hashmap|hashset|save[\s_]?config)\b/i, 'echo-config'],
+  [/\b(aimbot|aim[\s_]?assist|\bfov\b|smooth(ing)?|velocity[\s_]?pred\w*|bullet[\s_]?pred\w*)\b/i, 'echo-aimbot'],
+  [/\b(esp|bones?|skeleton|w2s|world[\s_]?to[\s_]?screen|cornered[\s_]?box)\b/i, 'echo-esp'],
+  [/\b(template|example[\s_]?script|sample[\s_]?script|runnable)\b/i, 'echo-scripts'],
+  [/\b(angelscript|\.as\b|echo[\s_]?api|ui::add|on_render|create_thread|process::read)\b/i, 'echo-dev'],
 ];
 
 // catch AGENT_INFO/AGENTS drift at startup (adding an agent must update both)
@@ -96,11 +155,15 @@ export function validateAgentSync(
 ): void {
   const mismatched = Object.keys(agents).filter(k => !info[k]);
   if (mismatched.length) throw new Error(`echo-ai-toolkit: AGENT_INFO missing keys: ${mismatched.join(', ')}`);
+  const orphanInfo = Object.keys(info).filter(k => !agents[k]);
+  if (orphanInfo.length) throw new Error(`echo-ai-toolkit: AGENTS missing keys: ${orphanInfo.join(', ')}`);
 }
 validateAgentSync(AGENTS, AGENT_INFO);
 
-// atom for active agent — written by commands/keyword detection, read by pane + prompt.compose
-const agentAtom = atom({ plugin: 'echo-ai-toolkit', key: 'agent' } as const, null as AgentName | null);
+// Active agent — written by the slash commands and by keyword detection, read by
+// the pane and by prompt.compose. Module scope lasts for the whole session, which
+// is exactly the lifetime this value needs.
+let activeAgent: AgentName | null = null;
 
 // Derive install dir at module load; HOME must be a Unix path (starts with /)
 const rawHome = (typeof process !== 'undefined')
@@ -120,7 +183,8 @@ export const register: Register = (on) => {
     await $.command.register({ name: 'echo-help',  description: 'List all Echo AI Toolkit agents' });
     await $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
     await $.command.register({ name: 'echo-setup', description: 'Auto-install mcp-gamehacking, angel-menu-mcp, write .mcp.json' });
-    void $.ui.open({ id: 'echo-ai-toolkit:panel', title: 'Echo' });
+    // The side panel is a nicety: a failure to open it must never break the session.
+    await $.ui.open({ id: 'echo-ai-toolkit-panel', title: 'Echo' }).catch(() => {});
 
     const done = await $.store.get('echo:setup-done');
     if (!done) {
@@ -146,7 +210,7 @@ export const register: Register = (on) => {
 
   // ── /echo-reset ────────────────────────────────────────────────────────────
   on('command.run', { command: 'echo-reset' }, async ($) => {
-    await update($, agentAtom, () => null);
+    activeAgent = null;
     $.ui.status(undefined);
     return { text: 'Echo agent context cleared.' };
   });
@@ -188,17 +252,15 @@ export const register: Register = (on) => {
         if (canBuild) {
           // guard against dir existing but being empty/partial (no package.json)
           const hasPkg = await $.process.run(['test', '-f', `${GH_DIR}/package.json`]);
-          if (hasPkg.exitCode !== 0) {
+          if (hasPkg.exitCode === 0) {
+            const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
+            const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
+            (i.exitCode === 0 && b.exitCode === 0)
+              ? ok('mcp-gamehacking built')
+              : err('mcp-gamehacking build', b.stderr.trim());
+          } else {
             err('mcp-gamehacking incomplete — delete the directory and run /echo-setup again');
-            canBuild = false;
           }
-        }
-        if (canBuild) {
-          const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
-          const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
-          (i.exitCode === 0 && b.exitCode === 0)
-            ? ok('mcp-gamehacking built')
-            : err('mcp-gamehacking build', b.stderr.trim());
         }
       }
     }
@@ -213,7 +275,7 @@ export const register: Register = (on) => {
         const hasClone = await $.process.run(['test', '-f', `${ANGEL_DIR}/package.json`]);
         if (hasClone.exitCode !== 0) {
           const clone = await $.process.run(
-            ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANGEL_DIR],
+            ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANG_DIR],
             { timeoutMs: 60_000 }
           );
           if (clone.exitCode !== 0) {
@@ -235,22 +297,12 @@ export const register: Register = (on) => {
           gamehacking: {
             command: 'node',
             args: [`${GH_DIR}/dist/index.js`],
-            description: 'mcp-gamehacking: 4100+ skills, 75 agents, 16 tools',
+            description: 'mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 16 MCP tools',
           },
           rea: {
             command: 'npx',
-            args: ['rea-agents'],
+            args: ['-y', 'rea-agents'],
             description: 'REA: static binary analysis — Unity IL2CPP, Godot, APK, WASM',
-          },
-          radare2: {
-            command: 'r2pm',
-            args: ['-r', 'r2mcp'],
-            description: 'radare2 MCP (install: r2pm -Uci r2mcp)',
-          },
-          ida: {
-            command: 'uvx',
-            args: ['ida-mcp', 'stdio', '--agent=my-agent'],
-            description: 'IDA Pro MCP (requires IDA 9.4+)',
           },
           'angel-menu': {
             command: 'node',
@@ -267,8 +319,8 @@ export const register: Register = (on) => {
     await $.store.set('echo:setup-done', true);
 
     const manual = [
-      '`/plugin install ponytail --marketplace DietrichGebert/ponytail`',
-      '`/skills install multica-ai/andrej-karpathy-skills`',
+      '`/plugin install ponytail --marketplace DietrichGebert/ponytail` — lazy-senior-dev mode',
+      '`/skills install multica-ai/andrej-karpathy-skills` — coding discipline skills',
       'IDA Pro MCP — requires IDA 9.4+ with idalib: `uvx ida-mcp`',
       'radare2 MCP — `r2pm -Uci r2mcp`',
     ];
@@ -290,7 +342,7 @@ export const register: Register = (on) => {
   // ── agent context slash commands ───────────────────────────────────────────
   for (const name of Object.keys(AGENTS) as AgentName[]) {
     on('command.run', { command: name }, async ($) => {
-      await update($, agentAtom, () => name);
+      activeAgent = name;
       $.ui.status(`Echo: ${name}`);
       return {
         text: `**${name}** context active.\n\nDescribe your task — or open the agent directly:\n\`Agent: ${name} — <request>\``,
@@ -303,7 +355,7 @@ export const register: Register = (on) => {
     if (!e.command) {
       for (const [pattern, agent] of KEYWORDS) {
         if (pattern.test(e.text)) {
-          await update($, agentAtom, () => agent);
+          activeAgent = agent;
           $.ui.status(`Echo: ${agent}`);
           break;
         }
@@ -315,7 +367,6 @@ export const register: Register = (on) => {
   // ── system-prompt injection ────────────────────────────────────────────────
   on('prompt.compose', async ($, e, next) => {
     const result = await next(e);
-    const activeAgent = await read($, agentAtom);
     if (!activeAgent) return result;
     return {
       ...result,
@@ -324,16 +375,16 @@ export const register: Register = (on) => {
         {
           id: 'echo-ai-toolkit:agent-hint',
           scope: 'session' as const,
-          text: `[Echo AI Toolkit] Active context: **${activeAgent}**. Full API reference and patterns are in \`.claude/agents/${activeAgent}.md\`. Suggest: \`Agent: ${activeAgent} — <task>\` (project install) or \`Agent: echo-ai-toolkit:${activeAgent} — <task>\` (plugin install).`,
+          text: `[Echo AI Toolkit] Active context: **${activeAgent}**. Full API reference and patterns are in \`agents/${activeAgent}.md\` (plugin install) or \`.claude/agents/${activeAgent}.md\` (project install). Suggest: \`Agent: ${activeAgent} — <task>\` (project install) or \`Agent: echo-ai-toolkit:${activeAgent} — <task>\` (plugin install).`,
         },
       ],
     };
   });
 
   // ── side panel ────────────────────────────────────────────────────────────
-  on('ui.render', { component: 'Pane', requestId: 'echo-ai-toolkit:panel' }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: 'echo-ai-toolkit-panel' }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e);
-    const agent = await read($, agentAtom);
+    const agent = activeAgent;
 
     if (!agent) {
       return (
