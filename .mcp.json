@@ -3,7 +3,7 @@
     "gamehacking": {
       "command": "node",
       "args": ["${HOME}/.local/share/echo-ai-toolkit/mcp-gamehacking/dist/index.js"],
-      "description": "mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 16 MCP tools"
+      "description": "mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools"
     },
     "rea": {
       "command": "npx",

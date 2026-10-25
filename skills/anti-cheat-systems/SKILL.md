@@ -53,7 +53,7 @@ Behavior is also judged server-side: input timing, movement telemetry, and accou
 
 ## Echo's exposure surface
 
-Echo is an **external** overlay: it reads the target process from outside and never injects code, loads a driver, or patches the game image. What an integrity system can observe:
+Echo is an **external** overlay: it accesses the target process from outside and never injects code, loads a driver, or patches the game image. Echo's API *can* write to target memory (`process::write_*`) — writing is a policy decision, not an API limitation. What an integrity system can observe:
 
 1. A `ReadProcessMemory`-style handle from the overlay process to the game process.
 2. The overlay process itself appearing in process enumeration.
@@ -90,7 +90,7 @@ bool main() {
 **Read only what you need.**
 - Cache values in script globals and refresh them at a modest rate; a 64 Hz thread re-reading every entity of a 64-player match generates far more traffic than a 4 Hz cache refreshed incrementally.
 - Use `process::read_buffer` for multi-field reads of one struct instead of many separate reads.
-- Never write to the target process from an overlay. `process::write_*` exists, but a passive overlay has no legitimate use for it.
+- Never write to the target process from an overlay. `process::write_*` exists in the API, but a passive overlay has no legitimate use for it — writing to a protected target is against policy, not technically blocked.
 
 **Do not inject synthetic input.**
 - Never call `input::key_press`, `input::key_release`, `input::key_tap`, `input::mouse_move`, or `input::mouse_click` against a protected game. Server-side input validation and client-side synthetic-input detection both exist specifically for this, and no user-visible feature justifies it.

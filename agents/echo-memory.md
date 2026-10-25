@@ -58,7 +58,6 @@ one read per field.
 ```angelscript
 // Read a buffer from process memory (one round trip for the whole region)
 memory_buffer@ buf = process::read_buffer(entity_addr, 0x200); // 512 bytes
-if (buf is null) return false;
 
 // Vector typed reads from a buffer offset
 vec2 v2 = buf.read_vec2_float(0x10);    // 2 floats
@@ -70,14 +69,19 @@ int32 hp = buf.read_int32(0x344);
 float f  = buf.read_float(0x150);
 
 // Pattern: read the whole entity struct once per tick, then index into it
-void read_entity_batch(uint64 ent, EntityData@ out) {
+void read_entity_batch(uint64 ent, EntityData@ dest) {
     memory_buffer@ buf = process::read_buffer(ent, 0x500);
     if (buf is null) return;
-    out.hp     = buf.read_int32(PlayerOffsets::hp);
-    out.team   = buf.read_int32(PlayerOffsets::team);
-    out.alive  = buf.read_uint8(PlayerOffsets::life_state) == 0;
-    out.origin = buf.read_vec3_float(PlayerOffsets::origin);
-    out.vel    = buf.read_vec3_float(PlayerOffsets::velocity);
+    dest.hp     = buf.read_int32(PlayerOffsets::hp);
+    dest.team   = buf.read_int32(PlayerOffsets::team);
+    dest.alive  = buf.read_uint8(PlayerOffsets::life_state) == 0;
+    dest.origin = buf.read_vec3_float(PlayerOffsets::origin);
+    dest.vel    = buf.read_vec3_float(PlayerOffsets::velocity);
+}
+
+bool memory_buffer_vector_reads() {
+    if (buf is null) return false;
+    return true;
 }
 ```
 
@@ -157,30 +161,36 @@ memory_region r = process::virtual_query(target_addr);
 bool is_executable  = r.executable;
 bool is_writable    = r.writable;
 bool is_present     = r.present;
-console::log(util::format_string("region base={} size={} present={} exec={} write={}",
-                                 util::to_hex(r.base), r.size, r.present, r.executable, r.writable));
 
 // Enumerate forward: when present is false, base/size still describe the unmapped hole,
 // so advance by base + size to walk every region including gaps.
+
+void memory_region_enumeration_virtual() {
+    console::log(util::format_string("region base={} size={} present={} exec={} write={}",
+                                     util::to_hex(r.base), r.size, r.present, r.executable, r.writable));
+}
 ```
 
 ## Process dump (offline analysis)
 
 ```angelscript
 // Dump the main process image into the "dmp" folder inside the scripts folder
-process::dump("main.bin");
 
 // Dump a specific named module — useful for client.dll / engine.dll separately
-process::dump("client.dll", "client.bin");
 
 // Enumerate and dump all modules for offline diffing:
 array<module_entry>@ mods = process::get_module_list();
-if (mods is not null) {
-    for (uint i = 0; i < mods.length(); i++) {
-        process::dump(mods[i].name, mods[i].name + ".bin");
-        console::log(util::format_string("Dumped {} base={} size={}KB",
-                                         mods[i].name, util::to_hex(mods[i].base),
-                                         mods[i].size / 1024));
+
+void process_dump_offline_analysis() {
+    process::dump("main.bin");
+    process::dump("client.dll", "client.bin");
+    if (mods !is null) {
+        for (uint i = 0; i < mods.length(); i++) {
+            process::dump(mods[i].name, mods[i].name + ".bin");
+            console::log(util::format_string("Dumped {} base={} size={}KB",
+                                             mods[i].name, util::to_hex(mods[i].base),
+                                             mods[i].size / 1024));
+        }
     }
 }
 ```
@@ -201,7 +211,6 @@ API speaks JSON over that socket.
 // Opens a WebSocket client to the given URL and starts a background receive loop.
 // Requires an attached process; only one connection may be open at a time.
 bool opened = process::open_socket("ws://127.0.0.1:9000");
-if (!opened) alert::show_tag("Memory socket failed to open", "error");
 
 // The socket speaks JSON over UTF-8 frames. Every request carries a "type" and an
 // optional integer "id" that is echoed back in the response:
@@ -214,7 +223,6 @@ if (!opened) alert::show_tag("Memory socket failed to open", "error");
 // { "type": "resolve_relative", "id": 8, "address": "0x...", "offset": 3, "inst_size": 7 }
 
 // ── Client mode: subscribe to an external command/config server ─────────────
-ws::connect("ws://localhost:9001", @ws_open, @ws_msg, @ws_dc, @ws_err);
 
 void ws_open() {
     ws::send("{\"type\": \"hello\"}");
@@ -230,6 +238,11 @@ void ws_msg(string msg) {
 
 void ws_dc() { alert::show_tag("Config server disconnected", "warn"); }
 void ws_err(string err) { console::error("WS error: " + err); }
+
+void websocket_ipc_process_open() {
+    if (!opened) alert::show_tag("Memory socket failed to open", "error");
+    ws::connect("ws://localhost:9001", @ws_open, @ws_msg, @ws_dc, @ws_err);
+}
 ```
 
 ## Unicorn emulation for obfuscated reads
@@ -281,7 +294,7 @@ array<uint64> find_callers(uint64 module_base, uint64 target_fn) {
         disasm_insn@ ins = insns[0];
         if (ins.text.substr(0, 4) == "call") {
             uint64 resolved = process::get_relative_address(addr, 1, ins.length);
-            if (resolved == target_fn) results.push_back(addr);
+            if (resolved == target_fn) results.insertLast(addr);
         }
         addr += ins.length;
     }
@@ -303,7 +316,7 @@ array<uint64> find_xrefs(uint64 module_base, uint64 target_addr) {
         // Pattern: MOV reg,[reg+0xOFFSET] → the offset IS the struct field offset
         if (ins.text.find("[r") >= 0) {
             uint64 resolved = process::get_relative_address(addr, 3, ins.length);
-            if (resolved == target_addr) results.push_back(addr);
+            if (resolved == target_addr) results.insertLast(addr);
         }
         addr += ins.length;
     }
@@ -317,12 +330,12 @@ array<uint64> find_xrefs(uint64 module_base, uint64 target_addr) {
 // USER CODE — turn a string into a space-separated hex pattern ("41 42 00")
 string bytes_to_pattern(string s) {
     string hex = util::hex_encode(s).to_upper();
-    string out = "";
+    string hex_out = "";
     for (uint i = 0; i + 1 < hex.length(); i += 2) {
-        if (out.length() > 0) out += " ";
-        out += hex.substr(i, 2);
+        if (hex_out.length() > 0) hex_out += " ";
+        hex_out += hex.substr(i, 2);
     }
-    return out + " 00";
+    return hex_out + " 00";
 }
 
 void find_string_xref(uint64 module_base, string target_str) {

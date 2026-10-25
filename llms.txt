@@ -119,7 +119,8 @@ bool main() {
 
 ## Process / memory
 
-```angelscript
+```cpp
+// Host-side types (C++ structs), not AngelScript script classes:
 struct attach_data { uint64 pid; uint64 peb_address; uint64 base_address; }
 struct module_entry { string name; uint64 base; uint64 size; }
 struct memory_region { uint64 base; uint64 size; bool present; bool writable; bool executable; }
@@ -394,6 +395,15 @@ in `math::`.
 ## Data structures
 
 ```angelscript
+// AngelScript array<T> — reference type; `=` copies the buffer shallowly
+array<uint64> a;                // value array
+array<uint64>@ h;               // handle to an array object (null-able)
+// methods: length() resize(n) reverse() insertAt(i,v) insertLast(v)
+//          removeAt(i) removeLast() removeRange(start,count)
+//          sortAsc() sortDesc() sort(cmp) find(v) findByRef(v)
+// These are the only array methods — no C++-style push/pop, no snake_case insert/remove.
+// Out-parameters take the VALUE form: array<uint64> &out, never array<uint64>@ &out.
+
 // JSON
 json_obj@ json::array();
 json_obj@ json::parse(string text, string &out error);   // null on failure
@@ -478,7 +488,8 @@ array<zip_entry>@ util::zip_parse(string data);  // flat zips only
 
 ## Networking
 
-```angelscript
+```cpp
+// Host-side type (C++ struct), not an AngelScript script class:
 struct http_response { int status_code; string body; string error; }
 
 void http::get(string url, response_callback@ cb);   // callback form: main() ONLY
@@ -575,7 +586,8 @@ vec2 smooth = math::smooth_angles(cur, aim, angle_range::R_180, 0.3, 1.0, 45.0);
 
 ## Anti-cheat surface
 
-Echo is external and read-only by design.
+Echo is external and can write to target memory (`process::write_bytes` and friends) — but
+writing to a protected target is against policy.
 
 - Never write to game memory on EAC/BattlEye/Vanguard targets.
 - Never snap the cursor straight to the target — smooth over multiple ticks.
@@ -601,3 +613,5 @@ Echo is external and read-only by design.
 | `templates/unity-il2cpp.as` | Unity IL2CPP ESP |
 | `templates/valorant.as` | Valorant ESP (VGK external) |
 | `templates/fortnite.as` | Fortnite ESP (UE5/EAC) |
+| `templates/esp-preview.as` | `esp_layout` namespace drop-in preview helper |
+| `templates/web-mv.as` | web-mv HTTP memory viewer endpoint |

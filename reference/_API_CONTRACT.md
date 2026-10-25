@@ -124,6 +124,62 @@ None of it compiles against the real Echo runtime. The old API names below do **
     template and mark it as user code, not as API.
 12. **Do not keep both APIs.** Migrate fully — no comments showing "old way" side by side.
 
+## AngelScript language rules (Echo embeds AngelScript 2.x)
+
+These are language facts, not Echo API. Getting them wrong means the script does not compile.
+
+| Wrong | Right |
+|---|---|
+| `struct Foo { ... };` | `class Foo { ... };` — `struct` is not a keyword |
+| `array<Foo> items;` | `array<Foo@> items;` — script classes are reference types |
+| `a.push_back(v)` | `a.insertLast(v)` |
+| `a.pop_back()` | `a.removeLast()` |
+| `a.insert_at(i, v)` | `a.insertAt(i, v)` |
+| `a.remove_at(i)` | `a.removeAt(i)` |
+| `a.sort()` | `a.sortAsc()` / `a.sortDesc()` / `a.sort(function(a,b){...})` |
+| `void()@ cb = @fn;` | `thread_callback@ cb = @fn;` — a funcdef must be declared |
+| `h == null` | `h is null` |
+| `a.size()` | `a.length()` |
+
+The registered array's full method set:
+`length()`, `resize(uint)`, `reverse()`, `insertAt(uint, T)`, `insertLast(T)`,
+`removeAt(uint)`, `removeLast()`, `removeRange(uint, uint)`, `sortAsc()`, `sortDesc()`,
+`sort(compareFunc, ...)`, `find(T)`, `findByRef(T)`.
+
+Other language facts:
+- Arrays are reference types; `=` is a **shallow** copy of the buffer.
+- `array<T>` is a value, `array<T>@` is a handle to the array object.
+- Only **declarations** are allowed at file scope. Any executable statement must live
+  inside a function.
+- `create_thread(tps, cb)` with `tps` 1–128 may only be called from `main()`; `tps` 0 runs
+  the callback once and exits.
+- There are no exceptions. Indexing an array out of range is a hard error, not a catchable
+  exception.
+- AngelScript has no `sin`/`cos`/`sqrt`/`abs`/`min`/`max` builtins — use `vec2.length()`,
+  `math::forward_vector()`, `math::angles_to_vec()` and explicit user-code helpers.
+
+Ground truth: <https://www.angelcode.com/angelscript/sdk/docs/manual/doc_datatypes_arrays.html>
+
+Additional grammar facts (all verified against the AngelScript 2.38.0 compiler):
+
+| Construct | Verdict |
+|---|---|
+| `int x[3] = {1,2,3};` | **Illegal.** Use `array<int> x = {1,2,3};` |
+| `float m[16];` as a class member | **Illegal.** Use `array<float>` |
+| `void()@ cb = @fn;` | **Illegal.** Use a declared funcdef: `thread_callback@ cb = @fn;` |
+| `x is not null` | **Illegal.** Use `x !is null` / `x is null` |
+| `float &hp` (bare `&`) | **Illegal on a primitive.** Use `float &out hp` (note the space) |
+| `EntityData@ out` | **Illegal** — `out` is a reserved keyword |
+| nested function definitions | **Illegal.** Hoist to file scope or make it a class method |
+| `class X { ... }` | Correct. `struct` is not a keyword — not even at file scope |
+| `array<X>` of a script class | Legal, but holds values. Use `array<X@>` for handle semantics |
+| `create_thread(tps, @fn)` | Only from `main()`, and only for `tps` 1–128 |
+| `m4[1][1]` on a matrix | Legal — `matrix4x4` is host-registered with 2-D indexing |
+
+The compile check is `python3 scripts/check_angelscript.py`; it builds every
+`templates/*.as` against an Echo API stub and grammar-checks the doc blocks.
+
+
 ## CANONICAL SNIPPETS (copy these exactly)
 
 ### Script skeleton

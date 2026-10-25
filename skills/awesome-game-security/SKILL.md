@@ -27,25 +27,40 @@ read_subagent("pattern-scanner")
 **Key resources:**
 - [Cheat Engine](https://github.com/cheat-engine/cheat-engine) — gold standard memory scanner/debugger
 - [ReClass.NET](https://github.com/ReClassNET/ReClass.NET) — live struct recovery from memory
-- [mem](https://github.com/0x1F9F1/mem) — fast pattern scanning library (C++)
-- [hazedumper](https://github.com/frk1/hazedumper) — CS:GO/CS2 offset dumper
+- [mem](https://github.com/0x1F9F1/mem) — collection of C++11 reverse-engineering headers (pattern scanning, memory access)
+- [hazedumper](https://github.com/frk1/hazedumper) — CS:GO offset dumper; **CS:GO only**, no CS2 support (last push 2024-03)
 
 **Echo integration:**
 ```angelscript
-// Pattern scan with IDA wildcards — the scanner needs a base address first
-uint64 base = process::get_module_base("client.dll");
-if (base == 0) return false;
+// Offsets are UNVERIFIED PLACEHOLDERS from one community dump — re-derive with a
+// current cs2-dumper run before use, they change with every game update.
+const uint64 OFF_PAWN = 0x60C;   // local player -> pawn (placeholder)
+const uint64 OFF_HP   = 0x344;   // m_iHealth           (placeholder)
+const uint64 OFF_TEAM = 0x3CB;   // m_iTeamNum          (placeholder)
 
-uint64 hit = process::find_signature(base, "48 8B 0D ? ? ? ? 48 85 C9");
-if (hit == 0) return false;
-uint64 entity_list = process::get_relative_address(hit, 3, 7);
+bool read_local_state(uint32 local_idx, float &out hp, int32 &out team) {
+    // Pattern scan with IDA wildcards — the scanner needs a base address first
+    uint64 base = process::get_module_base("client.dll");
+    if (base == 0) return false;
 
-// ReClass-style struct walk
-uint64 local = process::read_uint64(entity_list + 0x10 * local_idx);
-if (local == 0) return false;
-uint64 pawn  = process::read_uint64(local + 0x60C);
-if (pawn == 0) return false;
-float health = process::read_float(pawn + 0x334);
+    uint64 hit = process::find_signature(base, "48 8B 0D ?? ?? ?? ?? 48 85 C9");
+    if (hit == 0) return false;
+
+    // get_relative_address returns the address OF the operand, so read it to get
+    // the pointer the instruction actually loads.
+    uint64 entity_list = process::read_uint64(process::get_relative_address(hit, 3, 7));
+    if (entity_list == 0) return false;
+
+    // ReClass-style struct walk
+    uint64 local = process::read_uint64(entity_list + uint64(local_idx) * 0x10);
+    if (local == 0) return false;
+    uint64 pawn = process::read_uint64(local + OFF_PAWN);
+    if (pawn == 0) return false;
+
+    hp       = process::read_float(pawn + OFF_HP);
+    team     = process::read_int32(pawn + OFF_TEAM);
+    return true;
+}
 ```
 
 ---
@@ -67,7 +82,7 @@ search_skills("vac detection mechanisms")
 
 **Key resources:**
 - Community reversals of BattlEye, EAC, Vanguard, VAC, Ricochet, FACEIT — see gmh5225/awesome-game-security#anti-cheat section
-- [EasyAntiCheat-Reversing](https://github.com/TheCruZ/EasyAntiCheat-Reversing) — EAC driver internals
+- [EasyAntiCheat-Reversing](https://github.com/gmh5225/EAC-EasyAntiCheat-Reversing) — EAC driver internals
 
 **Echo surface (what kernel-level AC can see about Echo):**
 ```angelscript
@@ -77,14 +92,17 @@ search_skills("vac detection mechanisms")
 // 3. Discord overlay (not Echo's code)
 //
 // Module presence is checked via the loaded-module list.
-array<module_entry>@ mods = process::get_module_list();
-if (mods is null) return false;
+bool log_integrity_modules() {
+    array<module_entry>@ mods = process::get_module_list();
+    if (mods is null) return false;
 
-for (uint i = 0; i < mods.length(); i++) {
-    string n = mods[i].name;
-    if (n == "EasyAntiCheat.sys" || n == "vgk.sys" || n == "BEClient.dll") {
-        console::log("integrity module loaded: " + n);
+    for (uint i = 0; i < mods.length(); i++) {
+        string n = mods[i].name;
+        if (n == "EasyAntiCheat.sys" || n == "vgk.sys" || n == "BEClient.dll") {
+            console::log("integrity module loaded: " + n);
+        }
     }
+    return true;
 }
 ```
 
@@ -135,7 +153,7 @@ search_skills("UE5 GObjects 2024")
 - [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) — UE4/5 scripting framework
 - [FModel](https://github.com/4sval/FModel) — UE4/5 asset browser
 
-See `skills/dumper7-sdk.md` for full traversal patterns and `templates/ue5-sdk.as` / `templates/valorant.as`.
+See `skills/dumper7-sdk/SKILL.md` for full traversal patterns and `templates/ue5-sdk.as` / `templates/valorant.as`.
 
 ---
 
@@ -160,14 +178,20 @@ search_skills("global-metadata.dat")
 
 **Echo integration:**
 ```angelscript
-// After running REA inspect_unity_il2cpp on global-metadata.dat:
-uint64 il2cpp_base = process::get_module_base("GameAssembly.dll");
-if (il2cpp_base == 0) return false;
+// After running REA inspect_unity_il2cpp on global-metadata.dat.
+// A native scan yields a CODE address, never a managed class pointer — the class
+// pointer is what the matched instruction loads, so resolve the operand and read it.
+uint64 find_il2cpp_class() {
+    uint64 il2cpp_base = process::get_module_base("GameAssembly.dll");
+    if (il2cpp_base == 0) return 0;
 
-uint64 camera_class = process::find_signature(
-    il2cpp_base, "48 8B 05 ? ? ? ? 48 85 C0 74 ?"
-);
-if (camera_class == 0) return false;
+    uint64 code_addr = process::find_signature(
+        il2cpp_base, "48 8B 05 ?? ?? ?? ?? 48 85 C0 74 ??"
+    );
+    if (code_addr == 0) return 0;
+
+    return process::read_uint64(process::get_relative_address(code_addr, 3, 7));
+}
 ```
 
 See `templates/unity-il2cpp.as` for the full pattern.
@@ -190,7 +214,7 @@ search_skills("cs2 offsets")
 ```
 
 **Key resources:**
-- [a2x CS2 offsets](https://github.com/a2x/cs2-offsets) — live CS2 offset JSON
+- [a2x CS2 dumper](https://github.com/a2x/cs2-dumper) — live CS2 offset JSON
 - [source2gen](https://github.com/neverlosecc/source2gen) — Source 2 schema SDK gen
 
 See `templates/esp-bones.as` (full CS2 ESP) and `reference/offsets.md`.
@@ -212,14 +236,15 @@ read_subagent("pattern-scanner")
 ```
 
 **Key resources:**
-- [IDA Pro](https://hex-rays.com/ida-pro/) + [ida-mcp](https://github.com/HexRaysSA/ida-mcp) — industry standard; wired in `.mcp.json`
+- [IDA Pro](https://hex-rays.com/ida-pro/) + [ida-mcp](https://github.com/HexRaysSA/ida-mcp) — industry standard; ida-mcp is **not** in this repo's `.mcp.json` — add it yourself if you have an IDA licence
 - [Ghidra](https://github.com/NationalSecurityAgency/ghidra) + [SuperGhidra](https://github.com/yuatemycat/SuperGhidra) — NSA open-source
-- [radare2](https://github.com/radareorg/radare2) + [radare2-mcp](https://github.com/radareorg/radare2-mcp) — wired in `.mcp.json`
+- [radare2](https://github.com/radareorg/radare2) + [radare2-mcp](https://github.com/radareorg/radare2-mcp) — radare2-mcp is **not** in this repo's `.mcp.json` — add it yourself
 - [Binary Ninja](https://binary.ninja/) — modern decompiler
 - [x64dbg](https://github.com/x64dbg/x64dbg) — Windows debugger
 - [Cutter](https://github.com/rizinorg/cutter) — radare2 GUI
 
-All three MCP-wired tools (ida, radare2, gamehacking) are in `.mcp.json`.
+This repo's `.mcp.json` wires exactly three servers: `gamehacking`, `rea` and `angel-menu`.
+ida-mcp, radare2-mcp and Hetty are optional — add them to your own client config.
 
 ---
 
@@ -242,7 +267,7 @@ search_skills("vmprotect handler analysis")
 - [Triton](https://github.com/JonathanSalwan/Triton) — symbolic execution
 - [de4dot](https://github.com/de4dot/de4dot) — .NET deobfuscator
 
-Full devirt workflow: `skills/devirt-workflow.md`.
+Full devirt workflow: `skills/devirt-workflow/SKILL.md`.
 
 ---
 
@@ -260,39 +285,42 @@ search_skills("AOB scan")
 
 **Key resources:**
 - [sig-maker](https://github.com/A200K/IDA-Pro-SigMaker) — IDA plugin: one click → IDA-style sig
-- [ps-mem](https://github.com/0x1F9F1/mem) — optimized AOB scanner
+- [mem](https://github.com/0x1F9F1/mem) — C++11 reverse-engineering headers with an AOB scanner (same repo as above; there is no project called "ps-mem")
 
 **Multi-tier sig pattern for patch resilience:**
 ```angelscript
-uint64 base = process::get_module_base("client.dll");
-if (base == 0) return false;
+uint64 find_client_sig() {
+    uint64 base = process::get_module_base("client.dll");
+    if (base == 0) return 0;
 
-uint64 addr = 0;
+    uint64 addr = 0;
 
-// Tier 1: exact bytes (breaks on minor patch)
-addr = process::find_signature(base, "48 89 5C 24 10 48 89 74");
+    // Tier 1: exact bytes (breaks on minor patch)
+    addr = process::find_signature(base, "48 89 5C 24 10 48 89 74");
 
-// Tier 2: skip volatile prefix, anchor on stable opcode sequence
-if (addr == 0)
-    addr = process::find_signature(base, "? ? ? ? ? ? ? ? 57 48 83 EC 20 48 8B 0D ? ? ? ?");
+    // Tier 2: skip volatile prefix, anchor on stable opcode sequence
+    if (addr == 0)
+        addr = process::find_signature(base, "?? ?? ?? ?? ?? ?? ?? ?? 57 48 83 EC 20 48 8B 0D ?? ?? ?? ??");
 
-// Tier 3: anchor on a stable string in the module, then decode around it
-if (addr == 0) {
-    uint64 str = process::find_signature(base, "43 6C 69 65 6E 74"); // "Client"
-    if (str != 0) {
-        array<uint8>@ bytes = process::read_bytes(str - 0x40, 0x80);
-        if (bytes is null) return false;
+    // Tier 3: anchor on a stable string in the module, then decode around it
+    if (addr == 0) {
+        uint64 str = process::find_signature(base, "43 6C 69 65 6E 74"); // "Client"
+        if (str != 0) {
+            array<uint8>@ bytes = process::read_bytes(str - 0x40, 0x80);
+            if (bytes is null) return 0;
 
-        array<disasm_insn@> insns;
-        if (zydis::disasm(bytes, str - 0x40, insns)) {
-            for (uint i = 0; i < insns.length(); i++) {
-                if (insns[i].text.find("Client") >= 0) {
-                    addr = insns[i].runtime_address;
-                    break;
+            array<disasm_insn@> insns;
+            if (zydis::disasm(bytes, str - 0x40, insns)) {
+                for (uint i = 0; i < insns.length(); i++) {
+                    if (insns[i].text.find("Client") >= 0) {
+                        addr = insns[i].runtime_address;
+                        break;
+                    }
                 }
             }
         }
     }
+    return addr;
 }
 ```
 
@@ -356,7 +384,7 @@ search_skills("wireshark game analysis")
 ```
 
 **Key resources:**
-- [Hetty](https://github.com/dstotijn/hetty) — HTTP proxy; wired in `.mcp.json`
+- [Hetty](https://github.com/dstotijn/hetty) — HTTP proxy; optional, **not** in this repo's `.mcp.json` — add it yourself
 - [mitmproxy](https://mitmproxy.org/) — MITM proxy
 - [Frida](https://frida.re/) — SSL unpinning + runtime packet hooks
 

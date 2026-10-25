@@ -162,7 +162,7 @@ int aim_bone(int mode) {
 
 ```angelscript
 // Linear: divide delta by factor (1 = instant, 10+ = smooth)
-void smooth_linear(float dp, float dy, float factor, float &out_mx, float &out_my) {
+void smooth_linear(float dp, float dy, float factor, float &out mx, float &out my) {
     float sens = 1.0f * 0.022f;   // verify per game
     out_mx = (dy / factor) / sens;
     out_my = (dp / factor) / sens;
@@ -212,11 +212,12 @@ vec3 read_velocity(uint64 entity) {
 const uint64 OFF_PUNCH_PITCH = 0x1450;
 const uint64 OFF_PUNCH_YAW   = 0x1454;
 
-void apply_recoil(uint64 local_player, float &inout dp, float &inout dy) {
+void apply_recoil(uint64 local_player, float dp, float dy,
+                  float &out out_dp, float &out out_dy) {
     float punch_pitch = process::read_float(local_player + OFF_PUNCH_PITCH);
     float punch_yaw   = process::read_float(local_player + OFF_PUNCH_YAW);
-    dp -= punch_pitch * 2.0f;
-    dy -= punch_yaw   * 2.0f;
+    out_dp = dp - punch_pitch * 2.0f;
+    out_dy = dy - punch_yaw   * 2.0f;
 }
 ```
 
@@ -237,7 +238,7 @@ void triggerbot_tick(double fov_to_best_target) {
 ```angelscript
 const int BT_FRAMES = 16;
 
-struct BoneFrame {
+class BoneFrame {
     array<vec3> pos;
     uint64 timestamp;
     int    entity_index;
@@ -270,7 +271,10 @@ float jitter() { return util::random_float(-0.3f, 0.3f); }
 float mx_capped = clampf(mx, -20.0f, 20.0f);
 
 // Seed randomizer at startup for reproducible jitter patterns per session
-util::seed_random(uint64(util::time_now() & 0xFFFF));
+
+void timing_and_jitter() {
+    util::seed_random(uint64(util::time_now() & 0xFFFF));
+}
 ```
 
 ## Key bind pattern
@@ -291,9 +295,12 @@ void update_toggle() {
 }
 
 // Synthetic key events (send, not observe)
-input::key_press(0x41);   // key down
-input::key_release(0x41); // key up
-input::key_tap(0x41);     // down + up atomically
+
+void key_bind_pattern() {
+    input::key_press(0x41);   // key down
+    input::key_release(0x41); // key up
+    input::key_tap(0x41);     // down + up atomically
+}
 ```
 
 ## Full aim-assist skeleton
@@ -373,7 +380,7 @@ void aim_tick() {
     vec2 tgt = math::calculate_angle(local_origin, pred);
     float dp = float(math::angle_diff(view_pitch, tgt.x));
     float dy = float(math::angle_diff(view_yaw,   tgt.y));
-    apply_recoil(local_player_addr, dp, dy);
+    apply_recoil(local_player_addr, dp, dy, dp, dy);
 
     // Cap per-tick movement (user code — math::clamp_angles only normalizes pitch/yaw range)
     float max_step = 15.0f;

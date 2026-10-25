@@ -86,6 +86,20 @@ BANNED: list[tuple[str, str]] = [
     (r"\bvoid\s+main\s*\(\s*\)",                "void main()"),
 ]
 
+# ── AngelScript language semantics that the docs must not get wrong ──────────
+# Ground truth: https://www.angelcode.com/angelscript/sdk/docs/manual/doc_datatypes_arrays.html
+# AngelScript has no built-in array — the host registers one. The registered
+# array's methods are camelCase; the snake_case spellings below do not exist.
+BANNED_LANGUAGE: list[tuple[str, str]] = [
+    (r"\.push_back\s*\(",                        "array.push_back() — the method is insertLast()"),
+    (r"\.pop_back\s*\(",                         "array.pop_back() — the method is removeLast()"),
+    (r"\.insert_at\s*\(",                        "array.insert_at() — the method is insertAt()"),
+    (r"\.remove_at\s*\(",                        "array.remove_at() — the method is removeAt()"),
+    (r"\.sort\s*\(\s*\)",                        "array.sort() with no argument — use sortAsc()/sortDesc()"),
+    (r"\bstruct\s+[A-Z]\w*\s*\{",                "struct — AngelScript script classes are declared with `class`"),
+    (r"\bvoid\s*\(\s*\)\s*@",                    "void()@ — a function-handle type must come from a declared funcdef"),
+]
+
 # Files that legitimately quote the old API (the correction contract documents it).
 ALLOW_BANNED_IN = {
     "reference/_API_CONTRACT.md",
@@ -158,6 +172,9 @@ def check_banned(files: list[Path], root: Path) -> list[tuple[str, int, str, str
             scan = strip_inline_code(line)
             for pattern, label in BANNED:
                 if re.search(pattern, scan, re.IGNORECASE):
+                    violations.append((r, n, label, line.strip()[:120]))
+            for pattern, label in BANNED_LANGUAGE:
+                if re.search(pattern, scan):
                     violations.append((r, n, label, line.strip()[:120]))
     return violations
 

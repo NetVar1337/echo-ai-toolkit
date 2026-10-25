@@ -15,46 +15,50 @@ The simplest durable config pattern: write a JSON file once per setting change; 
 ```angelscript
 const string CFG_PATH = "config.json";
 
-json_obj@ g_cfg = null;
+class config_store {
+    json_obj@ g_cfg = null;
 
-json_obj@ build_default_config() {
-    json_obj@ c = json_obj();
-    c.set("fov",      8.0f);
-    c.set("smooth",   5.0f);
-    c.set("bone",     0);
-    c.set("esp_on",   true);
-    c.set("aim_on",   false);
-    return c;
-}
-
-// Load at startup — fall back to defaults if the file is missing or malformed
-void load_config() {
-    string raw;
-    if (!file::read(CFG_PATH, raw)) {
-        g_cfg = build_default_config();
-        save_config();
-        return;
+    json_obj@ build_default_config() {
+        json_obj@ c = json_obj();
+        c.set("fov",      8.0f);
+        c.set("smooth",   5.0f);
+        c.set("bone",     0);
+        c.set("esp_on",   true);
+        c.set("aim_on",   false);
+        return c;
     }
-    string err;
-    g_cfg = json::parse(raw, err);
-    if (g_cfg is null) {
-        alert::show_tag("Config parse failed: " + err, "warn");
-        g_cfg = build_default_config();
+
+    // Load at startup — fall back to defaults if the file is missing or malformed
+    void load_config() {
+        string raw;
+        if (!file::read(CFG_PATH, raw)) {
+            g_cfg = build_default_config();
+            save_config();
+            return;
+        }
+        string err;
+        g_cfg = json::parse(raw, err);
+        if (g_cfg is null) {
+            alert::show_tag("Config parse failed: " + err, "warn");
+            g_cfg = build_default_config();
+        }
     }
+
+    void save_config() {
+        if (g_cfg is null) return;
+        file::write(CFG_PATH, json::stringify(g_cfg, true));
+    }
+
+    // Read typed values with fallback:
+    float get_float(string key, float default_val) {
+        if (g_cfg is null || !g_cfg.has(key)) return default_val;
+        return g_cfg.get_float(key);
+    }
+    int  get_int(string key, int def)   { return (g_cfg is null || !g_cfg.has(key)) ? def : g_cfg.get_int(key); }
+    bool get_bool(string key, bool def) { return (g_cfg is null || !g_cfg.has(key)) ? def : g_cfg.get_bool(key); }
 }
 
-void save_config() {
-    if (g_cfg is null) return;
-    file::write(CFG_PATH, json::stringify(g_cfg, true));
-}
-
-// Read typed values with fallback:
-float get_float(string key, float default_val) {
-    if (g_cfg is null || !g_cfg.has(key)) return default_val;
-    return g_cfg.get_float(key);
-}
-int  get_int(string key, int def)   { return (g_cfg is null || !g_cfg.has(key)) ? def : g_cfg.get_int(key); }
-bool get_bool(string key, bool def) { return (g_cfg is null || !g_cfg.has(key)) ? def : g_cfg.get_bool(key); }
+config_store g_cfg_store;
 ```
 
 ## Offset file caching (JSON + file)
@@ -260,10 +264,13 @@ bool should_process(uint64 ent_addr) {
 
 // Track observed player IDs across a round (ban list, friend list, etc.)
 hash_set_int32@ known_players = create_hash_set_int32();
-known_players.insert(player_id);
-if (!known_players.contains(new_id)) {
-    known_players.insert(new_id);
-    alert::show(util::format_string("New player: {}", new_id));
+
+void hash_set_dedup_filtering() {
+    known_players.insert(player_id);
+    if (!known_players.contains(new_id)) {
+        known_players.insert(new_id);
+        alert::show(util::format_string("New player: {}", new_id));
+    }
 }
 ```
 
@@ -291,11 +298,14 @@ void load_offset_pack(string zip_path) {
 
 // Read an individual JSON file extracted from the pack:
 string raw;
-if (file::read("offsets/cs2_offsets.json", raw)) {
-    string err;
-    json_obj@ offsets = json::parse(raw, err);
-    if (offsets is not null) {
-        uint32 hp_off = offsets.get_uint("m_iHealth");
+
+void zip_pack_loading_offline() {
+    if (file::read("offsets/cs2_offsets.json", raw)) {
+        string err;
+        json_obj@ offsets = json::parse(raw, err);
+        if (offsets !is null) {
+            uint32 hp_off = offsets.get_uint("m_iHealth");
+        }
     }
 }
 ```

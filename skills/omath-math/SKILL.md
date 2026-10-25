@@ -12,19 +12,32 @@ This skill maps omath's formulas to Echo AngelScript equivalents. Echo provides 
 `source2::w2s`, `source::w2s`, `unreal::w2s`, `unity::w2s`, `iw_engine::w2s` natively; omath is the
 reference for the underlying math.
 
+> **Offsets, patterns and layout constants in this document are ILLUSTRATIVE PLACEHOLDERS.**
+> They describe the shape of each access, not a current build. The omath formulas are
+> general; the game-specific values (field offsets, FNamePool layout, base addresses) are
+> unverified placeholders — re-verify every one of them against your target after each
+> game patch.
+
 ---
 
 ## W2S per engine
 
-Every Echo W2S helper has the same shape:
+Most Echo W2S helpers have the same shape:
 
 ```angelscript
 bool <engine>::w2s(vec3 world_pos, <view state>, vec2 &out screen_pos)
 ```
 
-It writes the screen position into the out-parameter and returns `false` when the point is
+They write the screen position into the out-parameter and return `false` when the point is
 off-screen or behind the camera. **Always check the return value** — the out-parameter is
 meaningless on failure.
+
+`iw_engine::w2s` is the exception: it also needs the camera location and both FOV axes.
+
+```angelscript
+bool iw_engine::w2s(vec3 world_pos, vec3 camera_location, matrix3x3 view_matrix,
+                     float fov_x, float fov_y, vec2 &out screen_pos)
+```
 
 ### Source 2 (`source2::w2s`)
 
@@ -71,7 +84,7 @@ vec2 screen;
 if (!unreal::w2s(world_pos, cache, screen)) continue;
 ```
 
-omath's `unreal::w2s` reads from APlayerCameraManager (see `skills/dumper7-sdk.md`) for the
+omath's `unreal::w2s` reads from APlayerCameraManager (see `skills/dumper7-sdk/SKILL.md`) for the
 camera location, rotation and FOV; `f_view_info` is the Echo equivalent of that state.
 
 omath formula reference:
@@ -103,7 +116,7 @@ uint32 prefab_id = unity::rust_prefab_id("assets/bundled/prefabs/autospawn/resou
 ```angelscript
 // 3x3 rotation matrix: row0 = axis_forward, row1 = axis_right, row2 = axis_up
 matrix3x3 view_matrix;
-view_matrix.read(address);
+if (!view_matrix.read(address)) return false;   // read() returns bool
 
 vec2 screen;
 if (!iw_engine::w2s(world_pos, camera_location, view_matrix, fov_x, fov_y, screen)) continue;
@@ -116,7 +129,7 @@ Echo has no built-in for these. Use `matrix4x4`:
 ```angelscript
 // Frostbite: read ViewProjMatrix (4x4) from GameRenderer
 matrix4x4 vp;
-vp.read(renderer + OFF_VIEWPROJMATRIX);
+if (!vp.read(renderer + OFF_VIEWPROJMATRIX)) return;   // PLACEHOLDER offset
 
 // matrix4x4 elements are plain floats: vp[row][col].
 // The row/column order must match the engine's matrix layout
@@ -237,12 +250,13 @@ omath's template wraps a base address with typed field accessors. Echo replaces 
 //        float hp    = player.get<float>(PlayerTrait::health_offset);
 
 // Echo equivalent (user code):
+// The 0x330 / 0x138 / 0x3B8 offsets below are PLACEHOLDERS — verify per build.
 class Player {
     uint64 addr;
     Player(uint64 a) { addr = a; }
-    float health()   { return process::read_float(addr + 0x330); }
-    vec3  position() { vec3 p; p.read_float(addr + 0x138); return p; }
-    int   team()     { return process::read_int32(addr + 0x3B8); }
+    float health()   { return process::read_float(addr + 0x330); }   // PLACEHOLDER offset
+    vec3  position() { vec3 p; p.read_float(addr + 0x138); return p; }   // PLACEHOLDER offset
+    int   team()     { return process::read_int32(addr + 0x3B8); }   // PLACEHOLDER offset
 }
 ```
 
@@ -258,11 +272,15 @@ omath's scanner finds a byte pattern in a memory region and returns the offset. 
 ```angelscript
 // IDA-style pattern (wildcards are ? or ??)
 uint64 base = process::get_module_base("game.exe");
+if (base == 0) return false;                              // module not found
+
 uint64 result = process::find_signature(base, "48 8B 05 ? ? ? ? 48 8B 0C C8");
+if (result == 0) return false;                            // pattern not found
 
 // Byte-mask style: sig holds the bytes, mask uses x for match and ? for wildcard
-// 48 8B 05 ?? ?? ?? ?? 48 8B 0C C8
-uint64 masked = process::find_signature(base, "488B0500000000488B0CC8", "xxx???xxxxxx");
+// 48 8B 05 ?? ?? ?? ?? 48 8B 0C C8  → 11 bytes, so the mask must be 11 chars
+uint64 masked = process::find_signature(base, "488B0500000000488B0CC8", "xxx????xxxx");
+if (masked == 0) return false;
 
 // All matches in a module
 array<uint64>@ all = process::find_signatures(base, "48 8B 0D ? ? ? ?");
@@ -287,13 +305,14 @@ while (addr < 0x7FFFFFFFFFFF) {
 ## UE name resolution (FNamePool)
 
 omath ships its own FName resolver (an omath function, not part of the Echo API) — see
-`skills/dumper7-sdk.md` for the full Echo implementation. Summary:
+`skills/dumper7-sdk/SKILL.md` for the full Echo implementation. Summary (the FNamePool
+offsets and the entry stride are PLACEHOLDERS — they differ per UE version and per game):
 
 ```angelscript
-// fname_index = process::read_uint32(uobject + 0x18)
+// fname_index = process::read_uint32(uobject + 0x18)          // PLACEHOLDER offset
 // chunk_i = (fname_index >> 16) & 0xFF
 // idx_i   = fname_index & 0xFFFF
-// chunk   = process::read_uint64(pool + 0x10 + chunk_i * 8)
+// chunk   = process::read_uint64(pool + 0x10 + chunk_i * 8)   // PLACEHOLDER offset
 // name starts at chunk + idx_i * stride + 2 (skip 2-byte header)
 ```
 

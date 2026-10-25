@@ -152,7 +152,7 @@ Copy any `.as` file into `%AppData%\Roaming\scripts\` and reopen the in-game men
 
 | Doc | Contents |
 |---|---|
-| [`reference/api.md`](reference/api.md) | Complete API reference — all 24 namespaces, every signature, return semantics, caveats |
+| [`reference/api.md`](reference/api.md) | Complete API reference — all 22 function namespaces, every signature, return semantics, caveats |
 | [`llms.txt`](llms.txt) | Single-file context bundle for GPT-4o, Gemini, and local models — paste as context |
 | [`prompts/system-prompt.md`](prompts/system-prompt.md) | Portable system prompt for non-Claude clients |
 | [`reference/offsets.md`](reference/offsets.md) | Offset/pattern reference (placeholders — verify per patch) |
@@ -163,7 +163,7 @@ Copy any `.as` file into `%AppData%\Roaming\scripts\` and reopen the in-game men
 
 ### mcp-gamehacking
 
-4100+ skills, 75 specialist agents, 16 MCP tools.
+4100+ skills, 75 specialist agents, 19+ MCP tools.
 
 ```bash
 git clone https://github.com/1llu50ry/mcp-gamehacking

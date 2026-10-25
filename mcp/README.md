@@ -12,13 +12,14 @@ Run `/echo-setup` in Claude Code — it clones, builds mcp-gamehacking, and writ
 
 ---
 
-## Available MCP tools (16)
+## Available MCP tools (19+)
 
 ### Workflow tools
 | Tool | What it does |
 |------|-------------|
 | `research_technique` | End-to-end research on a technique; returns ranked skills by relevance |
 | `analyze_project` | Full analysis of a skill's source code and SKILL.md |
+| `compare_projects` | Side-by-side comparison of two cheat projects: architecture, techniques, features, detection surface |
 | `get_agent_briefing` | Loads an agent definition + its subagents and plugins |
 
 ### Skill tools
@@ -28,7 +29,21 @@ Run `/echo-setup` in Claude Code — it clones, builds mcp-gamehacking, and writ
 | `read_skill` | Read a skill's SKILL.md |
 | `read_source` | Read source code in 50KB pages |
 | `search_skills` | Scored keyword search across names, descriptions, topics |
+| `search_by_game` | Find skills/projects targeting a specific game |
+| `search_by_engine` | Find skills/projects targeting a specific game engine |
+| `skill_changelog` | Compare offsets between two projects targeting the same game |
 | `skill_stats` | Library statistics |
+
+### Offset / source tools
+| Tool | What it does |
+|------|-------------|
+| `find_offset` | Cross-reference a game offset, pattern, or struct name across all archived source code |
+| `find_function` | Search for a function definition/declaration across all source archives |
+| `find_similar` | Find projects similar to a given one via topic/description overlap |
+| `get_file_tree` | Parse a project's source.txt and show its file/directory tree |
+| `grep_sources` | Full-text search across all archived source projects (regex) |
+| `extract_offsets` | Parse a project's source for all hex offsets with surrounding context |
+| `export_offsets` | Collect all hex offsets for one game across all skills and export as a C++ header |
 
 ### Component tools
 | Tool | What it does |

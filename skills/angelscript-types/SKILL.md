@@ -38,10 +38,11 @@ array<uint8>@ a = process::read_bytes(addr, 64);
 array<uint8>@ b = a;    // b and a point to the same array
 ```
 
-Assigning a **value** array copies the elements (deep copy):
+Assigning a **value** array performs a shallow copy of the buffer — it is not a deep copy.
+Element values are copied, but handle elements (`array<X@>`) stay shared:
 ```angelscript
 array<uint8> a = {1, 2, 3};
-array<uint8> b = a;    // b is an independent copy
+array<uint8> b = a;    // b holds the same element values
 ```
 
 `process::attach()` does **not** return a handle — it returns a plain struct:
@@ -102,17 +103,30 @@ array<uint64> addrs = {0x1234, 0x5678}; // initializer list
 
 // Access
 addrs.length()                          // uint — no .size(), no .getSize()
-addrs[i]                                // no bounds check — crash if OOB
+addrs[i]                                // out-of-range index raises an exception
 addrs.insertLast(val)                   // append
+addrs.insertAt(uint i, val)             // insert at index
+addrs.removeAt(uint i)                  // remove at index
+addrs.removeLast()                      // remove last element
+addrs.removeRange(uint start, uint count)
+addrs.resize(uint n)
+addrs.reverse()
+addrs.sortAsc()                         // ascending — `sort` always needs a comparator
+addrs.sortDesc()
+addrs.sort(compareFunc)                 // custom comparator
+addrs.find(val)                         // index of first match, negative if none
+addrs.findByRef(val)                    // index of matching reference
 
-// Passing arrays — use @& in / &out for efficiency
-void process_list(array<uint64>@ &in addrs) { ... }
-bool get_results(array<uint64>@ &out results) { ... }
+// Passing arrays — `const ... &in` for inputs, `... &out` for outputs
+void process_list(const array<uint64>@ &in addrs) { ... }
+bool get_results(array<uint64> &out results) { ... }
 ```
 
 **`array<T>@` vs `array<T>`:**
-- `array<T>@` — handle to an array object; can be null; use for return values and out-params
-- `array<T>` — value array; always valid; use for local variables
+- `array<T>@` — handle to an array object; can be null; use for return values and for
+  holding a reference to an array object
+- `array<T>` — value array; always valid; use for local variables and for out-params
+  (`array<T> &out` — an out-param is never a handle)
 
 Echo API functions that return arrays return handles, so null-check them:
 ```angelscript
@@ -146,11 +160,17 @@ bool main() {
 }
 ```
 
-A function handle has a *funcdef* type (`void()@` for a void, no-arg function):
+A function handle's type comes from a declared *funcdef* — there is no `void()` type.
+Echo's callback funcdef for `create_thread`/`on_render` is `thread_callback`:
 
 ```angelscript
-void()@ cb = @my_tick;                // stored handle
-create_thread(64, cb);
+void thread_callback() {}            // funcdef declaration
+
+bool main() {
+    thread_callback@ cb = @my_tick;   // stored handle
+    create_thread(64, cb);            // ticking threads are created from main()
+    return true;
+}
 ```
 
 Anonymous functions are written inline as `function(...) { ... }`:
@@ -170,9 +190,10 @@ it was written in. Share state through globals, a `mutex@`, or an `atomic_*@` in
 
 ```angelscript
 // BAD — the inner function cannot see the local `count`
-void bad_example() {
+bool bad_example() {
     int count = 0;
     create_thread(64, function() { count++; });   // not a captured local
+    return true;
 }
 
 // GOOD — a global, guarded by a mutex
@@ -300,7 +321,8 @@ Team t = Team::CT;
 if (int(t) == 3) { ... }
 ```
 
-A class instance is a value type; `Entity@ e = ...` gives a handle to it.
+A script class is a reference type: `Entity e = ...` creates an instance and `Entity@ e`
+is a handle to it. An array of class instances therefore holds handles — `array<Entity@>`.
 
 ---
 
@@ -329,7 +351,7 @@ p.write_float(address);
 // Matrix element access and memory reads
 matrix4x4 m4;
 float v = m4[1][1];
-m4[0][0] = 1.0;
+m4[0][0] = 1.0f;
 bool ok = m4.read(address);        // 16 floats from the attached process
 bool ok2 = m4.read_double(address);
 ```

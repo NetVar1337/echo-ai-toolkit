@@ -9,7 +9,8 @@ description: The lazy-senior-dev philosophy used throughout this toolkit: minimu
 
 Active in this toolkit by default. Install the plugin for automatic enforcement:
 ```
-/plugin install ponytail --marketplace DietrichGebert/ponytail
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
 ```
 
 ---
@@ -58,7 +59,8 @@ Finish every part the task needs — callers, null checks, the thing that uses w
 // Good: changed only the scan pattern on line 12
 
 // shortcut: single game target — no multi-game offset routing; add if porting to Apex
-const uint32 OFF_HEALTH = 0x334;
+// placeholder offset — verify per game, per patch (canonical repo value: 0x344)
+const uint32 OFF_HEALTH = 0x344;
 ```
 
 A `shortcut:` comment names the known limit and when to upgrade — that's a decision, not tech debt.
@@ -79,7 +81,7 @@ A `shortcut:` comment names the known limit and when to upgrade — that's a dec
 ## What never to cut
 
 - Null checks on every pointer read from external process memory (`if (ptr == 0) return;`)
-- Error handling that prevents a crash when `process::read_*` fails on an unmapped page
+- Error handling that detects failed reads (`process::read_*` returns default values) instead of mistaking them for data
 - Any guard before a multi-level deref chain
 
 ---

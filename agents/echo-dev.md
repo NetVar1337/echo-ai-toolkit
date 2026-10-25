@@ -21,26 +21,29 @@ You are an expert in the Echo Universal API (branded "Angel"). You write clean, 
 
 ```angelscript
 // Fixed-rate thread: 1–128 tps; 0 = run once
-create_thread(64, @tick);   // 64 tps
-create_thread(0,  @setup);  // once
 
 // Render hook (called every frame)
-on_render(@draw);
 
 // Mutex
 mutex@ m = create_mutex();
-m.lock();         // exclusive
-m.unlock();
-m.lock_shared();  // shared read
-m.unlock_shared();
-m.try_lock();     // non-blocking, returns bool
 
 // Atomic
 atomic_int32@ counter = atomic_int32(0);
-counter.store(1);
 int v = counter.load();
-counter.exchange(2);
-counter.compare_exchange(expected, desired);
+
+void threading() {
+    create_thread(64, @tick);   // 64 tps
+    create_thread(0,  @setup);  // once
+    on_render(@draw);
+    m.lock();         // exclusive
+    m.unlock();
+    m.lock_shared();  // shared read
+    m.unlock_shared();
+    m.try_lock();     // non-blocking, returns bool
+    counter.store(1);
+    counter.exchange(2);
+    counter.compare_exchange(expected, desired);
+}
 ```
 
 ## Shared snapshot (lock-free inter-thread data sharing)
@@ -117,7 +120,6 @@ The process API is global — `process::attach` binds the script to a target; th
 ```angelscript
 // Attach by name or PID. Returns an attach_data value, not a handle.
 attach_data ad = process::attach("game.exe");
-if (ad.pid == 0) { console::error("attach failed"); return false; }
 uint64 base = ad.base_address;
 
 // Module info
@@ -131,11 +133,9 @@ float  hp  = process::read_float(base + 0x1A2B);
 uint64 hp2 = process::read_uint64(base + 0x1A2B);
 int32  team = process::read_int32(base + 0x1A2B);
 string name = process::read_string(base + 0x1A2B);   // null-terminated, 256 char max
-process::write_float(base + 0x1A2B, 100.0f);
 
 // Bulk region read — one round trip, then typed offsets into the buffer
 memory_buffer@ buf = process::read_buffer(base + 0x100, 0x200);
-if (buf is null) return false;
 int32 hp_from_buf = buf.read_int32(0x10);
 vec3  pos         = buf.read_vec3_float(0x20);
 
@@ -152,11 +152,18 @@ bool is_exec = r.executable;
 
 // Liveness + teardown
 bool alive = process::is_alive();
-process::detach();
 
 // Module dumps
-process::dump("game.bin");
-process::dump("client.dll", "client.bin");
+
+bool process_memory() {
+    if (ad.pid == 0) { console::error("attach failed"); return false; }
+    process::write_float(base + 0x1A2B, 100.0f);
+    if (buf is null) return false;
+    process::detach();
+    process::dump("game.bin");
+    process::dump("client.dll", "client.bin");
+    return true;
+}
 ```
 
 ## Disassembly (Zydis)
@@ -164,27 +171,30 @@ process::dump("client.dll", "client.bin");
 ```angelscript
 // Read bytes, then disassemble them
 array<uint8>@ bytes = process::read_bytes(addr, 64);
-if (bytes is null) return;
 array<disasm_insn@> insns;
-if (!zydis::disasm(bytes, addr, insns)) return;
-for (uint i = 0; i < insns.length(); i++) {
-    disasm_insn@ ins = insns[i];
-    print(util::to_hex(ins.runtime_address) + " " + ins.text);
 
-    // Typed operands
-    for (uint8 j = 0; j < ins.operand_count_visible; j++) {
-        disasm_operand op = ins.get_op(j);
-        if (op.type == op_type::reg)
-            print("  reg: " + zydis::reg_name(op.reg));
-        if (op.type == op_type::imm)
-            print("  imm: " + util::to_hex(op.imm_value));
+void disassembly_zydis() {
+    if (bytes is null) return;
+    if (!zydis::disasm(bytes, addr, insns)) return;
+    for (uint i = 0; i < insns.length(); i++) {
+        disasm_insn@ ins = insns[i];
+        print(util::to_hex(ins.runtime_address) + " " + ins.text);
+
+        // Typed operands
+        for (uint8 j = 0; j < ins.operand_count_visible; j++) {
+            disasm_operand op = ins.get_op(j);
+            if (op.type == op_type::reg)
+                print("  reg: " + zydis::reg_name(op.reg));
+            if (op.type == op_type::imm)
+                print("  imm: " + util::to_hex(op.imm_value));
+        }
     }
-}
 
-// Disassemble a whole function (stops at the first ret/iret)
-array<disasm_insn@> fn_insns;
-if (zydis::disasm_func(bytes, addr, fn_insns)) {
-    for (uint i = 0; i < fn_insns.length(); i++) print(fn_insns[i].text);
+    // Disassemble a whole function (stops at the first ret/iret)
+    array<disasm_insn@> fn_insns;
+    if (zydis::disasm_func(bytes, addr, fn_insns)) {
+        for (uint i = 0; i < fn_insns.length(); i++) print(fn_insns[i].text);
+    }
 }
 ```
 
@@ -193,28 +203,32 @@ if (zydis::disasm_func(bytes, addr, fn_insns)) {
 ```angelscript
 // Standalone handle
 uint64 h = uc::create();
-if (h == 0) return false;
-uc::mem_map(h, 0x1000, 0x1000, uc::prot::all);
 array<uint8> code = { 0x48, 0x89, 0xF8, 0xC3 };   // mov rax, rdi ; ret
-uc::mem_write(h, 0x1000, code);
-uc::reg_write64(h, x86_reg::rip, 0x1000);
-uc::reg_write64(h, x86_reg::rdi, 0xDEADBEEF);
 int rc = uc::start(h, 0x1000, 0x1000 + 0x100, 1000000, 0);
 uint64 rax = 0;
-uc::reg_read64(h, x86_reg::rax, rax);
-uc::close(h);
 
 // Handle backed by the attached process (pages faulted in on demand)
 uint64 hp = uc::create_process();
-if (hp == 0) return false;
-uc::setup_stack(hp, 0x7FF000000000, 0x10000, 0x7FF000008000);
-uc::hook_code(hp, @on_insn);
-uc::start(hp, fn_addr, fn_addr + 0x200, 1000000, 5000);
-uc::close(hp);
 
 // Hook signature: bool code_hook_fn(uint64 h, uint64 address, uint32 size)
 bool on_insn(uint64 h, uint64 address, uint32 size) {
     return true; // return false to stop emulation
+}
+
+bool unicorn_emulator() {
+    if (h == 0) return false;
+    uc::mem_map(h, 0x1000, 0x1000, uc::prot::all);
+    uc::mem_write(h, 0x1000, code);
+    uc::reg_write64(h, x86_reg::rip, 0x1000);
+    uc::reg_write64(h, x86_reg::rdi, 0xDEADBEEF);
+    uc::reg_read64(h, x86_reg::rax, rax);
+    uc::close(h);
+    if (hp == 0) return false;
+    uc::setup_stack(hp, 0x7FF000000000, 0x10000, 0x7FF000008000);
+    uc::hook_code(hp, @on_insn);
+    uc::start(hp, fn_addr, fn_addr + 0x200, 1000000, 5000);
+    uc::close(hp);
+    return true;
 }
 ```
 
@@ -263,33 +277,40 @@ void draw() {
 
 ```angelscript
 // Built-in fonts: set the active font from inside the render callback
-render::update_font(fonts::TAHOMA, 14);
-render::update_font(fonts::PROGGY, 16);
 
 // Custom font: load raw font bytes (e.g. from disk), then select it
 array<uint8> font_bytes;
 array<uint8>@ raw = file::read_bytes("fonts/Inter.ttf");
-if (raw is null) return false;
-for (uint i = 0; i < raw.length(); i++) font_bytes.push_back(raw[i]);
 
 font_handle fnt;
-if (!render::load_font(font_bytes, fnt, font_hint::AUTO)) return false;
-render::update_font(fnt, 14);
+
+bool fonts() {
+    render::update_font(fonts::TAHOMA, 14);
+    render::update_font(fonts::PROGGY, 16);
+    if (raw is null) return false;
+    for (uint i = 0; i < raw.length(); i++) font_bytes.insertLast(raw[i]);
+    if (!render::load_font(font_bytes, fnt, font_hint::AUTO)) return false;
+    render::update_font(fnt, 14);
+    return true;
+}
 ```
 
 ## Alerts
 
 ```angelscript
 // Simple overlay notification (auto-dismissed after a few seconds)
-alert::show("Attached successfully");
-alert::show("Custom Color", 255, 100, 100);
 
 // Tagged notification (tag drives icon / color in overlay)
-alert::show_tag("Pattern broken", "warn");   // tag: "info", "warn", "error"
-alert::show_tag("Offset updated", "info");
 
 // Dismiss by tag (removes all notifications with that tag)
-alert::dismiss("warn");
+
+void alerts() {
+    alert::show("Attached successfully");
+    alert::show("Custom Color", 255, 100, 100);
+    alert::show_tag("Pattern broken", "warn");   // tag: "info", "warn", "error"
+    alert::show_tag("Offset updated", "info");
+    alert::dismiss("warn");
+}
 ```
 
 ## Menu
@@ -373,7 +394,6 @@ uint64 up  = util::tickcount();
 double  dt = util::time_ms(start_ms, end_ms);
 
 // Random — seed for reproducible sequences per session
-util::seed_random(uint64(1234));
 int   ri  = util::random_int(0, 100);
 float rf  = util::random_float(0.0f, 1.0f);
 double rd = util::random_double(0.0, 1.0);
@@ -391,6 +411,10 @@ string hs  = util::to_hex(addr);      // "0x7ff6..." with prefix
 // Formatting — {} placeholders only, up to 8 arguments
 string s = util::format_string("{} + {} = {}", 1, 2, 3);
 string t = util::format_string("{:.2}", 1.23456);
+
+void utilities() {
+    util::seed_random(uint64(1234));
+}
 ```
 
 ## Networking
@@ -410,16 +434,19 @@ bool main() {
 }
 
 // WebSocket client — module-level functions, not an object
-ws::connect("wss://example.com/ws", @on_open, @on_message, @on_disconnect, @on_error);
-ws::send("hello");
 bool connected = ws::is_connected();
-ws::reconnect();
-ws::disconnect();
 
 void on_open() { }
 void on_message(string msg) { }
 void on_disconnect() { }
 void on_error(string msg) { }
+
+void networking() {
+    ws::connect("wss://example.com/ws", @on_open, @on_message, @on_disconnect, @on_error);
+    ws::send("hello");
+    ws::reconnect();
+    ws::disconnect();
+}
 ```
 
 ## Data Structures
@@ -428,45 +455,44 @@ void on_error(string msg) { }
 // JSON — one object type for objects and arrays
 string err;
 json_obj@ obj = json::parse("{\"key\": 42}", err);
-if (obj is null) { console::error("parse failed: " + err); return; }
 int    v  = obj.get_int("key");
 float  f  = obj.get_float("score");
 string s  = obj.get_string("name");
 bool   b  = obj.get_bool("flag");
-obj.set("name", "Echo");
-obj.set("count", 5);
-string out = json::stringify(obj, true);
+string out_json = json::stringify(obj, true);
 array<string>@ keys = obj.keys();
 
 // Hash map (uint64 key → typed value)
 hash_map@ m = create_hash_map();
-m.set_int32(1, 42);
 int32 got;
 bool ok = m.get_int32(1, got);
 bool has = m.contains(1);
-m.erase(1);
 
 // Hash set — fast membership test; variants per type
 hash_set_uint64@ seen_entities = create_hash_set_uint64();
-seen_entities.insert(entity_addr);
 bool already_seen = seen_entities.contains(entity_addr);
-seen_entities.erase(entity_addr);
 
 hash_set_int32@  seen_ids  = create_hash_set_int32();
 hash_set_float@  seen_vals = create_hash_set_float();
+
+void data_structures() {
+    if (obj is null) { console::error("parse failed: " + err); return; }
+    obj.set("name", "Echo");
+    obj.set("count", 5);
+    m.set_int32(1, 42);
+    m.erase(1);
+    seen_entities.insert(entity_addr);
+    seen_entities.erase(entity_addr);
+}
 ```
 
 ## Math / Vectors
 
 ```angelscript
 vec3 pos = vec3(0, 0, 0);
-pos.read_float(addr);          // read 3 floats from process memory
-pos.write_float(addr);
 
 matrix4x4 view = matrix4x4();
-view.read(addr);
 matrix3x3 m3 = matrix3x3();
-m3.read(addr);
 
 vec3 dir = math::forward_vector(vec2(0, 90));
 vec2 ang = math::vec_to_angles(dir);
@@ -482,6 +508,13 @@ vec2   sm   = math::smooth_angles(cur, tgt, angle_range::R_180, 0.3, 1.0, 45.0);
 vec2 ue_aim = math::unreal_calculate_angle(camera_rot, camera_pos, target_pos);
 vec2 ue_sm  = math::unreal_smooth_rotation(camera_rot, camera_pos, target_pos, 0.12, 1.0, 45.0);
 double ue_fov = math::unreal_calculate_fov(camera_rot, camera_pos, target_pos);
+
+void math_vectors() {
+    pos.read_float(addr);          // read 3 floats from process memory
+    pos.write_float(addr);
+    view.read(addr);
+    m3.read(addr);
+}
 ```
 
 ## Engine Helpers (world-to-screen)
@@ -490,11 +523,14 @@ Every W2S helper writes to an out-parameter and returns `bool` (false = behind c
 
 ```angelscript
 vec2 screen;
-if (!source::w2s(world_pos, view_matrix, screen)) return;
-if (!source2::w2s(world_pos, view_matrix, screen)) return;
-if (!unity::w2s(world_pos, view_matrix, screen)) return;
-if (!unreal::w2s(world_pos, view_cache, screen)) return;
-if (!iw_engine::w2s(world_pos, cam_loc, view_matrix3x3, fov_x, fov_y, screen)) return;
+
+void engine_helpers_world_to() {
+    if (!source::w2s(world_pos, view_matrix, screen)) return;
+    if (!source2::w2s(world_pos, view_matrix, screen)) return;
+    if (!unity::w2s(world_pos, view_matrix, screen)) return;
+    if (!unreal::w2s(world_pos, view_cache, screen)) return;
+    if (!iw_engine::w2s(world_pos, cam_loc, view_matrix3x3, fov_x, fov_y, screen)) return;
+}
 ```
 
 ## Filesystem (sandboxed)
@@ -503,28 +539,31 @@ Paths are relative to the script data directory; max file size 512 MB, at most t
 
 ```angelscript
 string content;
-if (file::read("config.json", content)) print(content);
-file::write("log.txt", "line\n");
-file::append("log.txt", "more\n");
 bool exists = file::exists("config.json");
-file::remove("log.txt");
 
 uint64 size;
-file::size("log.txt", size);
 
 array<uint8>@ raw = file::read_bytes("offsets.bin");
-file::write_bytes("dump.bin", raw);
 
-dir::create("logs");
 bool d_exists = dir::exists("logs");
 array<string>@ listing = dir::list("logs");
 
 // ZIP parsing — takes raw zip bytes, entries are flat (no subdirectories)
 string zip_bytes;
-if (file::read("pack.zip", zip_bytes)) {
-    array<zip_entry>@ entries = util::zip_parse(zip_bytes);
-    for (uint i = 0; i < entries.length(); i++)
-        console::log(entries[i].name);
+
+void filesystem_sandboxed() {
+    if (file::read("config.json", content)) print(content);
+    file::write("log.txt", "line\n");
+    file::append("log.txt", "more\n");
+    file::remove("log.txt");
+    file::size("log.txt", size);
+    file::write_bytes("dump.bin", raw);
+    dir::create("logs");
+    if (file::read("pack.zip", zip_bytes)) {
+        array<zip_entry>@ entries = util::zip_parse(zip_bytes);
+        for (uint i = 0; i < entries.length(); i++)
+            console::log(entries[i].name);
+    }
 }
 ```
 
@@ -536,25 +575,28 @@ safe-zone masks, custom FOV indicators, or clipping ESP elements to screen bound
 ```angelscript
 // Create a path container and add a polygon to it
 clip_paths@ poly = clip_paths();
-poly.add_path(pts);                 // pts: array<vec2>
 
 // Inflate / deflate (positive = grow, negative = shrink)
-poly.inflate(4.0, join_type::ROUND, end_type::ET_POLYGON);
 
 // Simplify (remove near-collinear points, epsilon in pixels)
-poly.simplify(1.5);
 
 // Boolean operations — combine two path containers
 clip_paths@ screen_bounds = clip_paths();
-screen_bounds.add_path(screen_rect_pts);
-poly.boolean_op(screen_bounds, clip_type::INTERSECTION, fill_rule::NON_ZERO);
 
 // Merge overlapping paths within this container
-poly.union_self(fill_rule::NON_ZERO);
 
 // Read the result back and render it
-for (uint i = 0; i < poly.path_count(); i++) {
-    render::draw_polyline(poly.get_path(i), 0, 200, 0, 255, 1.0f, true);
+
+void clip_paths_polygon_clipping() {
+    poly.add_path(pts);                 // pts: array<vec2>
+    poly.inflate(4.0, join_type::ROUND, end_type::ET_POLYGON);
+    poly.simplify(1.5);
+    screen_bounds.add_path(screen_rect_pts);
+    poly.boolean_op(screen_bounds, clip_type::INTERSECTION, fill_rule::NON_ZERO);
+    poly.union_self(fill_rule::NON_ZERO);
+    for (uint i = 0; i < poly.path_count(); i++) {
+        render::draw_polyline(poly.get_path(i), 0, 200, 0, 255, 1.0f, true);
+    }
 }
 ```
 
@@ -567,10 +609,6 @@ For decrypt loops and hash reconstruction that require 128-bit SIMD or bit manip
 array<uint8> a = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 array<uint8> b = {16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1};
 array<uint8> c;
-mm_xor_si128(a, b, c);        // XOR
-mm_shuffle_epi8(a, b, c);     // byte shuffle
-mm_add_epi32(a, b, c);        // add packed int32
-mm_set_epi32(1, 2, 3, 4, c);
 
 // Bit rotation / byte swap
 uint32 r32 = rol32(value, 13);
@@ -585,6 +623,13 @@ int tz  = tzcnt32(value);
 
 // Typical use: FNV1a hash reconstruction for string comparison
 uint64 h = hash::fnv1a(s);
+
+void simd_bit_operations() {
+    mm_xor_si128(a, b, c);        // XOR
+    mm_shuffle_epi8(a, b, c);     // byte shuffle
+    mm_add_epi32(a, b, c);        // add packed int32
+    mm_set_epi32(1, 2, 3, 4, c);
+}
 ```
 
 ## Full script skeleton

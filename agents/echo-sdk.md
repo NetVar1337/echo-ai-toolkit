@@ -42,12 +42,10 @@ public:
 
 **FTransform layout** (Engine_structs.hpp):
 ```cpp
-struct FTransform {
-    // offset 0x00 — Rotation    (FQuat,    16 bytes)
-    // offset 0x10 — Translation (FVector,  12 bytes)  ← world position
-    // offset 0x20 — Scale3D     (FVector,  12 bytes)
-    // Total: 0x30 (48 bytes)
-};
+// Engine_structs.hpp — FTransform, 0x30 (48 bytes) total:
+//   offset 0x00 — Rotation    (FQuat,    16 bytes)
+//   offset 0x10 — Translation (FVector,  12 bytes)  ← world position
+//   offset 0x20 — Scale3D     (FVector,  12 bytes)
 ```
 
 ## Using SDK offsets in Echo AngelScript
@@ -64,7 +62,10 @@ struct FTransform {
 uint64 root    = process::read_uint64(actor_addr + 0x130);
 uint64 tf_addr = root + 0x1C0;
 vec3  world_pos;
-world_pos.read_float(tf_addr + 0x10);
+
+void using_sdk_offsets_in() {
+    world_pos.read_float(tf_addr + 0x10);
+}
 ```
 
 ## UE4/UE5 entity list traversal
@@ -85,9 +86,12 @@ uint64 actors_data  = process::read_uint64(level + 0xA0);
 int32  actors_count = process::read_int32(level + 0xA8);
 
 // ── 4. Iterate actors ──────────────────────────────────────────────────────
-for (int32 i = 0; i < actors_count; i++) {
-    uint64 actor = process::read_uint64(actors_data + uint64(i) * 8);
-    if (actor == 0) continue;
+
+void ue4_ue5_entity_list() {
+    for (int32 i = 0; i < actors_count; i++) {
+        uint64 actor = process::read_uint64(actors_data + uint64(i) * 8);
+        if (actor == 0) continue;
+    }
 }
 ```
 
@@ -100,14 +104,17 @@ uint64 gobjects   = process::get_relative_address(
 uint64 chunks_ptr = process::read_uint64(gobjects + 0x00);
 uint32 num_elems  = process::read_uint32(gobjects + 0x14);
 
-for (uint32 i = 0; i < num_elems; i++) {
-    uint32 ci = i / 0x10000;
-    uint32 oi = i % 0x10000;
-    uint64 chunk = process::read_uint64(chunks_ptr + uint64(ci) * 8);
-    if (chunk == 0) continue;
-    uint64 obj = process::read_uint64(chunk + uint64(oi) * 0x18);
-    if (obj == 0) continue;
-    // UObject +0x18 = FName ComparisonIndex (uint32)
+
+void fchunkedfixeduobjectarray_gobjects_ue4_21() {
+    for (uint32 i = 0; i < num_elems; i++) {
+        uint32 ci = i / 0x10000;
+        uint32 oi = i % 0x10000;
+        uint64 chunk = process::read_uint64(chunks_ptr + uint64(ci) * 8);
+        if (chunk == 0) continue;
+        uint64 obj = process::read_uint64(chunk + uint64(oi) * 0x18);
+        if (obj == 0) continue;
+        // UObject +0x18 = FName ComparisonIndex (uint32)
+    }
 }
 ```
 
@@ -135,19 +142,22 @@ uint64 local_p   = process::read_uint64(lp_data);
 uint64 pc        = process::read_uint64(local_p + 0x30);
 uint64 cam_mgr   = process::read_uint64(pc + 0x440);
 
-vec3 cam_loc; cam_loc.read_float(cam_mgr + 0x1490);
-vec3 cam_rot; cam_rot.read_float(cam_mgr + 0x149C);
 float cam_fov = process::read_float(cam_mgr + 0x14A8);
 
 // Build the view cache once per frame, then project with unreal::w2s
 f_view_info view_info;
-view_info.location = cam_loc;
-view_info.rotation = cam_rot;
-view_info.fov      = cam_fov;
 f_view_cache vc    = build_view_cache(view_info, false);
 
 vec2 screen;
 bool on = unreal::w2s(world_pos, vc, screen);
+
+void unreal_w2s_camera_from() {
+    vec3 cam_loc; cam_loc.read_float(cam_mgr + 0x1490);
+    vec3 cam_rot; cam_rot.read_float(cam_mgr + 0x149C);
+    view_info.location = cam_loc;
+    view_info.rotation = cam_rot;
+    view_info.fov      = cam_fov;
+}
 ```
 
 ## Cached bone reads (f_view_cache / unreal::read_bones)
@@ -159,13 +169,16 @@ For high-frequency bone access, use the view cache to avoid re-reading FTransfor
 // read_bones(skeletal_mesh, bone_array_offset, bone_array_cached_offset, component_offset)
 // Offsets below are PLACEHOLDERS — regenerate per build.
 u_bone_array bones = unreal::read_bones(mesh_addr, 0x580, 0x0, 0x280);
-if (bones.valid()) {
-    vec3 head   = bones[9];
-    vec3 chest  = bones[7];
-    vec3 pelvis = bones[5];
-    uint n      = bones.count();
+
+void cached_bone_reads_f_2() {
+    if (bones.valid()) {
+        vec3 head   = bones[9];
+        vec3 chest  = bones[7];
+        vec3 pelvis = bones[5];
+        uint n      = bones.count();
+    }
+    // The cache reflects the state at read time — rebuild it each frame.
 }
-// The cache reflects the state at read time — rebuild it each frame.
 ```
 
 ## Source 2 schema-based offset extraction
@@ -185,7 +198,7 @@ bool load_offsets(string path) {
     if (!file::read(path, raw)) return false;
     string err;
     g_offsets = json::parse(raw, err);
-    return g_offsets is not null;
+    return g_offsets !is null;
 }
 
 // Use exactly like a hard-coded offset
@@ -219,8 +232,11 @@ int32 team = process::read_int32(player_obj + PLAYER_TEAM);
 uint64 tf_obj   = process::read_uint64(player_obj + PLAYER_TRANSFORM);
 uint64 tf_cache = process::read_uint64(tf_obj + 0x38); // TransformAccess cached data
 vec3  pos;
-pos.read_float(tf_cache + 0x08); // LocalPosition within TransformData
 // Exact offsets depend on the Unity version — verify against the REA output
+
+void unity_il2cpp_via_rea() {
+    pos.read_float(tf_cache + 0x08); // LocalPosition within TransformData
+}
 ```
 
 ## Valorant / Dumper-7-VGK — GObjects decrypt
@@ -238,26 +254,30 @@ When it breaks (`Decrypted pointer is unreadable`):
 **Emulating the decrypt in Echo:**
 ```angelscript
 attach_data ad = process::attach("VALORANT-Win64-Shipping.exe");
-if (ad.pid == 0) return false;
 
 uint64 base = process::get_module_base("VALORANT-Win64-Shipping.exe");
 uint64 fn   = base + DECRYPT_FN_OFFSET;   // PLACEHOLDER — module-relative offset from your RE
 
 uint64 h = uc::create_process();
-if (h == 0) return false;
-uc::setup_stack(h, 0x7FF000000000, 0x10000, 0x7FF000008000);
-uc::reg_write64(h, x86_reg::rcx, encrypted_ptr);
 
 int rc = uc::start(h, fn, fn + 0x200, 1000000, 500);
-if (rc != uc::error::ok) {
-    console::error(util::format_string("emulation failed: {}", uc::last_error(h)));
-    uc::close(h);
-    return false;
-}
 
-uint64 decrypted = 0;
-uc::reg_read64(h, x86_reg::rax, decrypted);
-uc::close(h);
+bool valorant_dumper_7_vgk() {
+    if (ad.pid == 0) return false;
+    if (h == 0) return false;
+    uc::setup_stack(h, 0x7FF000000000, 0x10000, 0x7FF000008000);
+    uc::reg_write64(h, x86_reg::rcx, encrypted_ptr);
+    if (rc != uc::error::ok) {
+        console::error(util::format_string("emulation failed: {}", uc::last_error(h)));
+        uc::close(h);
+        return false;
+    }
+
+    uint64 decrypted = 0;
+    uc::reg_read64(h, x86_reg::rax, decrypted);
+    uc::close(h);
+    return true;
+}
 ```
 
 ## Offset update workflow after a game patch

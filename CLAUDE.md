@@ -64,7 +64,7 @@ Apply to all Echo scripts — see `skills/karpathy-coding/SKILL.md`:
 
 Wired by `/echo-setup` (or the installer) into `~/.local/share/echo-ai-toolkit/`:
 
-**gamehacking** — 4100+ skills, 75 agents, 16 tools:
+**gamehacking** — 4100+ skills, 75 agents, 19+ tools:
 ```
 research_technique("cs2 entity system")
 get_agent_briefing("cs2-specialist")

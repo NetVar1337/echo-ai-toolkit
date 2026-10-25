@@ -1213,14 +1213,28 @@ Concatenation with `+` works. `formatInt(value, "0H", 16)` formats an integer.
 
 ### array\<T\>
 
-`a.length()`, `a.push_back(val)`, `a.pop_back()`, `a.insert_at(uint i, val)`,
-`a.remove_at(uint i)`, `a.resize(uint n)`, `a[i]` (no bounds check — crashes if
-`i >= length()`), `a.sort()`. Arrays of handles (`array<entity@>`) store references.
+`a.length()`, `a.resize(uint n)`, `a.reverse()`, `a.insertAt(uint i, val)`,
+`a.insertLast(val)`, `a.removeAt(uint i)`, `a.removeLast()`,
+`a.removeRange(uint start, uint count)`, `a.sortAsc()`, `a.sortDesc()`,
+`a.sort(compareFunc)`, `a.find(val)`, `a.findByRef(val)`.
+Those are the only array methods. There are no C++-style push/pop methods, no snake_case
+insert/remove variants, and the comparator form of `sort` is the only one.
+
+`a[i]` raises an exception when `i >= a.length()`. Echo scripts are exception-free, so an
+out-of-range index is a hard error — check the length before indexing.
+
+Arrays are reference types: `=` performs a shallow copy of the buffer, not a deep copy.
+Arrays of handles (`array<entity@>`) store references, so the elements stay shared.
 
 ### Handles
 
 `mutex@ m = create_mutex();`, `array<uint8>@ bytes = process::read_bytes(addr, 16);`.
 `is null` is the null check — never `== null`.
+
+`array<T>@` is a handle to a reference-type array object: it can be null, it is what Echo
+API functions that return arrays give you, and assigning it copies the reference rather
+than the buffer. The plain value form `array<T>` is never null and is what out-parameters
+take — write `array<T> &out`, not `array<T>@ &out`.
 
 ---
 

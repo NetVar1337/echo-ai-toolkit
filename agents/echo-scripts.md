@@ -28,7 +28,7 @@ slider       esp_dist;
 
 mutex@       ent_mx = create_mutex();
 
-struct ED {
+class ED {
     float sx0, sy0, sw, sh;
     int   hp;
     bool  visible;
@@ -139,7 +139,7 @@ void tick() {
         ed.visible = process::read_uint8(ent + OFF_SPOT) != 0;
         ed.name = pname;
         ed.dist = dist;
-        local.push_back(ed);
+        local.insertLast(ed);
     }
     ent_mx.lock(); g_ents = local; ent_mx.unlock();
 }
@@ -313,8 +313,8 @@ slider   loot_dist;
 
 mutex@   loot_mx = create_mutex();
 
-struct LootItem { string name; float dist; float sx, sy; bool vis; }
-array<LootItem> g_loot;
+class LootItem { string name; float dist; float sx, sy; bool vis; }
+array<LootItem@> g_loot;
 
 hash_set_uint32@ g_loot_ids = create_hash_set_uint32();
 
@@ -358,7 +358,7 @@ void tick_loot() {
     int32  ent_count = process::read_int32(ent_mgr + 0x18);
     uint64 ent_list  = process::read_uint64(ent_mgr + 0x10);
 
-    array<LootItem> items;
+    array<LootItem@> items;
     for (int i = 0; i < ent_count; i++) {
         uint64 ent = process::read_uint64(ent_list + uint64(i) * 8);
         if (ent == 0) continue;
@@ -377,18 +377,18 @@ void tick_loot() {
         bool vis = false;
         if (vm.read(g_cam + 0x30)) vis = unity::w2s(wp, vm, screen);
 
-        LootItem it;
+        LootItem@ it = LootItem();
         it.name = util::format_string("Item_{}", unity::rust_prefab_id(asset_path));
         it.dist = d;
         it.sx   = screen.x;
         it.sy   = screen.y;
         it.vis  = vis;
-        items.push_back(it);
+        items.insertLast(it);
     }
 
     // USER CODE — insertion sort by distance
     for (uint i = 1; i < items.length(); i++) {
-        LootItem key = items[i];
+        LootItem@ key = items[i];
         int j = int(i) - 1;
         while (j >= 0 && items[j].dist > key.dist) {
             items[j + 1] = items[j];
@@ -403,7 +403,7 @@ void tick_loot() {
 void draw_loot() {
     if (!ui::get(loot_on)) return;
     loot_mx.lock_shared();
-    array<LootItem> snap = g_loot;
+    array<LootItem@> snap = g_loot;
     loot_mx.unlock_shared();
 
     render::update_font(fonts::TAHOMA, 11);

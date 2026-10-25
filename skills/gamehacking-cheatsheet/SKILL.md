@@ -32,14 +32,14 @@ get_agent_briefing("<specialist>")
 | **AOBScan for ASLR busting** | `process::find_signature(base, "48 8B ? ...")` | `research_technique("IDA pattern scanning ASLR")` |
 | **CE Auto Assembler code injection** | N/A — Echo is external | `get_agent_briefing("injection-specialist")` |
 | **Stealth DLL injection** | N/A — Echo uses Discord overlay | `research_technique("manual map DLL injection")` |
-| **PEB unlinking / sig evasion** | N/A — Echo's surface is OpenProcess only | `research_technique("DKOM process hiding")` |
+| **PEB unlinking / sig evasion** | N/A — Echo's surface is an OpenProcess read handle | `research_technique("DKOM process hiding")` |
 | **Dynamic function discovery (Frida)** | `zydis::disasm_func(bytes, rip, insns)` + Unicorn trace | `research_technique("dynamic function discovery")` |
 | **RTTI salvage** | `process::find_signature` for the vtable pattern, then decode | `research_technique("RTTI vtable recovery")` |
 | **Heap spray / allocation tracking** | `process::virtual_query` + byte-pattern scan | `research_technique("heap object discovery")` |
 | **Memory map diffing** | Compare `process::virtual_query` snapshots | `research_technique("memory region diffing")` |
 | **vtable hook detection** | Scan vtable entries, compare to module `.text` range | `research_technique("vtable integrity check")` |
 | **IAT hook detection** | Read IAT entries, verify they point into module `.text` | `research_technique("IAT hook detection")` |
-| **Speedhack (time manipulation)** | N/A — Echo doesn't write game memory | `research_technique("game speed manipulation")` |
+| **Speedhack (time manipulation)** | N/A — Echo *can* write target memory, but writing to a protected game is against policy | `research_technique("game speed manipulation")` |
 | **Wallhack via depth/stencil** | N/A — Echo is an overlay renderer only | `research_technique("wallhack rendering bypass")` |
 | **Signal/interrupt-driven scan** | Use tick timer + `process::find_signature` | `research_technique("scan timing optimization")` |
 | **Thread injection** | N/A | `research_technique("thread injection CreateRemoteThread")` |
@@ -111,7 +111,9 @@ research_technique("OLLVM control flow flattening")
 ```angelscript
 // Cheat Engine: base + [off1] → [off2] → [off3] → value
 // Echo equivalent (user code):
-uint64 follow_chain(uint64 base, array<uint64>@ offsets) {
+uint64 follow_chain(uint64 base, array<uint64> &in offsets) {
+    if (offsets.length() == 0) return 0;
+
     uint64 ptr = base;
     for (uint i = 0; i < offsets.length() - 1; i++) {
         ptr = process::read_uint64(ptr + offsets[i]);
@@ -141,16 +143,16 @@ uint64 find_entity_system() {
 
     // Tier 1: full exact pattern
     uint64 addr = process::find_signature(client, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 48 8B 01");
-    if (addr != 0) return process::get_relative_address(addr, 3, 7);
+    if (addr != 0) return process::read_uint64(process::get_relative_address(addr, 3, 7));
 
     // Tier 2: relax first bytes, anchor on stable suffix
     addr = process::find_signature(client, "? ? ? ? ? ? ? 48 85 C9 74 ? 48 8B 01");
-    if (addr != 0) return process::get_relative_address(addr, 0, 7);
+    if (addr != 0) return process::read_uint64(process::get_relative_address(addr, 0, 7));
 
     // Tier 3: byte-mask form
-    // 48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01
-    addr = process::find_signature(client, "488B0D000000004885C97400488B01", "xxx???xxxxx?xxxx");
-    if (addr != 0) return process::get_relative_address(addr, 3, 7);
+    // 48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01  → 15 bytes, 15 mask chars
+    addr = process::find_signature(client, "488B0D000000004885C97400488B01", "xxx????xxxx?xxx");
+    if (addr != 0) return process::read_uint64(process::get_relative_address(addr, 3, 7));
 
     return 0; // shortcut: no json fallback here; add if all tiers break post-patch
 }
@@ -168,7 +170,9 @@ if (!zydis::disasm(bytes, str_addr - 0x40, insns)) return 0;
 for (uint i = 0; i < insns.length(); i++) {
     disasm_operand op = insns[i].get_op(0);
     if (op.type == op_type::mem && op.mem_has_disp) {
-        uint64 target = uint64(op.mem_disp);
+        // mem_disp is a signed DISPLACEMENT, not an absolute address.
+        // The absolute target is the displacement added to the end of the instruction.
+        uint64 target = insns[i].runtime_address + insns[i].length + uint64(op.mem_disp);
         if (target == str_addr) return insns[i].runtime_address;
     }
 }
@@ -184,9 +188,13 @@ return 0;
 // 1. Locate vtable via IDA pattern (stable — vtable is in .rdata)
 // PLACEHOLDER pattern and offsets
 uint64 game = process::get_module_base("game.exe");
+if (game == 0) return;
+
 uint64 vtable = process::find_signature(game, "? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? 48 8D 05");
 if (vtable == 0) return;
-vtable = process::get_relative_address(vtable, 18, 22);   // adjust for your binary
+// get_relative_address gives the ADDRESS OF the pointer — read it for the vtable value
+vtable = process::read_uint64(process::get_relative_address(vtable, 18, 22));   // adjust for your binary
+if (vtable == 0) return;
 
 // 2. Walk the mapped regions looking for objects that start with this vtable
 uint64 addr = 0;
@@ -307,11 +315,11 @@ void on_result(http_response@ res) {
         return;
     }
 
-    float cx = j.get_float("cx");   // center x of best target bbox
-    float cy = j.get_float("cy");   // center y
+    float cx = j.get_float("cx");   // center x of best target bbox (screen pixels)
+    float cy = j.get_float("cy");   // center y (screen pixels)
 
-    vec2 vp = render::get_viewport_size();
-    input::mouse_move(int(cx - vp.x * 0.5f), int(cy - vp.y * 0.5f));
+    // mouse_move takes ABSOLUTE screen coordinates, not a delta
+    input::mouse_move(int(cx), int(cy));
 }
 
 // http::post is only callable from main()
@@ -380,11 +388,11 @@ For each cheatsheet technique, the corresponding awesome-game-security resource 
 
 | Technique | awesome-game-security category | Echo skill |
 |---|---|---|
-| Memory hacking | gmh5225/awesome-game-security#memory | `skills/awesome-game-security.md#memory-hacking` |
-| Anti-cheat analysis | gmh5225/awesome-game-security#anti-cheat | `skills/awesome-game-security.md#anti-cheat` |
-| RE tools | gmh5225/awesome-game-security#tools | `skills/reverse-engineering-tools.md` |
-| VMP / OLLVM | gmh5225/awesome-game-security#protections | `skills/devirt-workflow.md` |
-| UE4/UE5 SDK | gmh5225/awesome-game-security#unreal | `skills/dumper7-sdk.md` |
-| Unity IL2CPP | gmh5225/awesome-game-security#unity | `skills/awesome-game-security.md#engine-internals--unity` |
-| Pattern scanning | gmh5225/awesome-game-security#signature | `skills/awesome-game-security.md#signatures--pattern-scanning` |
-| Kernel / driver | gmh5225/awesome-game-security#kernel | `skills/awesome-game-security.md#kernel--driver-level` |
+| Memory hacking | gmh5225/awesome-game-security | `skills/awesome-game-security/SKILL.md` |
+| Anti-cheat analysis | gmh5225/awesome-game-security | `skills/awesome-game-security/SKILL.md` |
+| RE tools | gmh5225/awesome-game-security | `skills/reverse-engineering-tools/SKILL.md` |
+| VMP / OLLVM | gmh5225/awesome-game-security | `skills/devirt-workflow/SKILL.md` |
+| UE4/UE5 SDK | gmh5225/awesome-game-security | `skills/dumper7-sdk/SKILL.md` |
+| Unity IL2CPP | gmh5225/awesome-game-security | `skills/awesome-game-security/SKILL.md` |
+| Pattern scanning | gmh5225/awesome-game-security | `skills/awesome-game-security/SKILL.md` |
+| Kernel / driver | gmh5225/awesome-game-security | `skills/awesome-game-security/SKILL.md` |

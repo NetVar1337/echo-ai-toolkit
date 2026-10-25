@@ -210,7 +210,9 @@ void tick() {
     }
 
     // Sort: tier desc, then dist asc
-    // Bubble sort (small array, ponytail-approved)
+    // Bubble sort (small array, ponytail-approved).
+    // buf holds handles: the handle VALUES are swapped, so the two slots end
+    // up pointing at the original two entries.
     for (uint a = 0; a < buf.length(); a++) {
         for (uint b = a + 1; b < buf.length(); b++) {
             if (int(buf[a].tier) < int(buf[b].tier) ||

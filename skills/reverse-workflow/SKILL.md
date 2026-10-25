@@ -7,6 +7,12 @@ description: End-to-end reverse-engineering workflow for Echo: from an unknown b
 
 End-to-end workflow: from binary to working Echo AngelScript. Integrates reverse-skill, REA, Zydis, and Unicorn.
 
+> **Signatures, module offsets, struct field offsets and build numbers in this document are
+> ILLUSTRATIVE PLACEHOLDERS.** They show the shape of each step, not a current build. Every
+> game-specific value (`client.dll+0xABC123`, `OFF_HEALTH 0x330`, the example patterns and the
+> `1.38.0.0` build string) is unverified — re-derive it against your own target and re-verify
+> after every game patch.
+
 ---
 
 ## Decision tree: which tool first?
@@ -15,7 +21,7 @@ End-to-end workflow: from binary to working Echo AngelScript. Integrates reverse
 Have binary / game target
          │
          ├── Unity IL2CPP?
-         │       └── REA global-metadata.dat analysis → class/method offsets → Echo process::read_*
+         │       └── REA inspect_il2cpp_metadata (global-metadata.dat) → class/method offsets → Echo process::read_*
          │
          ├── Unreal Engine (UE4/UE5)?
          │       └── Run Dumper-7 → CppSDK → read offsets from headers → echo-sdk agent
@@ -31,7 +37,8 @@ Have binary / game target
          │       └── Heavy (OLLVM/VMProtect): Unicorn trace → echo-reverse agent
          │
          ├── Android APK?
-         │       └── REA inspect_apk_signature + IL2CPP or smali RE
+         │       └── REA inspect_android_package / _class / _method for smali RE
+         │           (inspect_apk_signature is for APK *signing schemes*, not code)
          │
          └── WASM?
                  └── REA inspect_wasm_artifact
@@ -56,14 +63,16 @@ Have binary / game target
 
 ### REA (Reverse Engineer Anything) MCP
 
-Install: `npm install --global rea-agents && npx rea-agents setup`
+Install: `npx rea-agents setup` (the `rea` MCP server in this repo's `.mcp.json` already
+runs `npx -y rea-agents`, so the package is fetched on first connect).
 
 ```
 REA targets and tools:
-  Unity IL2CPP (versions 24–39) → class/method name → offset
+  Unity IL2CPP (versions 24, 27, 29, 31, 39) → inspect_il2cpp_metadata → class/method name → offset
   Godot PCK                     → resource and scene extraction
   Native binary                 → Hopper/Ghidra/IDA pseudocode + symbols
-  Android APK                   → inspect_apk_signature, manifest, smali
+  Android APK                   → inspect_android_package / _class / _method (smali)
+                                   inspect_apk_signature (APK signing schemes only)
   WASM                          → inspect_wasm_artifact → exports, imports, memory layout
   HAR/pcap/mitmdump              → HTTP/WebSocket protocol reverse
   SQLite                        → schema + table browsing
@@ -82,13 +91,16 @@ Convert an IDA/Binary Ninja function start into an Echo-ready `process::find_sig
 
 ```angelscript
 // Pattern format: space-separated hex bytes, ? = wildcard byte
-uint64 base = process::get_module_base("game.exe");
-if (base == 0) return false;
+bool find_function(uint64 &out result) {
+    uint64 base = process::get_module_base("game.exe");
+    if (base == 0) return false;
 
-uint64 result = process::find_signature(base, "48 89 5C 24 ? 57 48 83 EC 20 48 8B F9");
-if (result == 0) {
-    alert::show("Pattern broken after patch");
-    return false;
+    result = process::find_signature(base, "48 89 5C 24 ? 57 48 83 EC 20 48 8B F9");
+    if (result == 0) {
+        alert::show("Pattern broken after patch");
+        return false;
+    }
+    return true;
 }
 ```
 
@@ -101,34 +113,38 @@ if (result == 0) {
 Use Echo's Zydis disassembler to extract struct offsets from a live process:
 
 ```angelscript
-uint64 base = process::get_module_base("game.exe");
-if (base == 0) return false;
+bool log_struct_offsets() {
+    uint64 base = process::get_module_base("game.exe");
+    if (base == 0) return false;
 
-// Find the function that accesses the struct field you want
-uint64 fn = process::find_signature(base, "48 8B ? ? ? ? ? 48 85 ? 74 ?");
-if (fn == 0) return false;
+    // Find the function that accesses the struct field you want
+    uint64 fn = process::find_signature(base, "48 8B ? ? ? ? ? 48 85 ? 74 ?");
+    if (fn == 0) return false;
 
-// Decode the function
-array<uint8>@ bytes = process::read_bytes(fn, 0x400);
-if (bytes is null) return false;
+    // Decode the function
+    array<uint8>@ bytes = process::read_bytes(fn, 0x400);
+    if (bytes is null) return false;
 
-array<disasm_insn@> insns;
-if (!zydis::disasm(bytes, fn, insns)) return false;
+    array<disasm_insn@> insns;
+    if (!zydis::disasm(bytes, fn, insns)) return false;
 
-for (uint i = 0; i < insns.length(); i++) {
-    disasm_insn@ ins = insns[i];
+    for (uint i = 0; i < insns.length(); i++) {
+        disasm_insn@ ins = insns[i];
 
-    // Look for memory operands with positive small offsets → struct field accesses
-    // Pattern: MOV reg, [reg+0xNN] where 0xNN < 0x1000
-    for (uint8 opIdx = 0; opIdx < ins.operand_count_visible; opIdx++) {
-        disasm_operand op = ins.get_op(opIdx);
-        if (op.type != op_type::mem) continue;
-        if (!op.mem_has_disp) continue;
-        if (op.mem_disp <= 0 || op.mem_disp >= 0x1000) continue;
+        // Look for memory operands with positive small offsets → struct field accesses
+        // Pattern: MOV reg, [reg+0xNN] where 0xNN < 0x1000
+        for (uint8 opIdx = 0; opIdx < ins.operand_count_visible; opIdx++) {
+            disasm_operand op = ins.get_op(opIdx);
+            if (op.type != op_type::mem) continue;
+            if (!op.mem_has_disp) continue;
+            // op.mem_disp is a signed DISPLACEMENT, not an absolute address
+            if (op.mem_disp <= 0 || op.mem_disp >= 0x1000) continue;
 
-        console::log("  " + util::to_hex(ins.runtime_address) + ": " + ins.text +
-                     " disp=" + util::to_hex(uint64(op.mem_disp)));
+            console::log("  " + util::to_hex(ins.runtime_address) + ": " + ins.text +
+                         " disp=" + util::to_hex(uint64(op.mem_disp)));
+        }
     }
+    return true;
 }
 ```
 
@@ -161,7 +177,8 @@ bool on_insn(uint64 h, uint64 addr, uint32 size) {
     string text = insns[0].text;
     if (text.find("mov eax, ") == 0 || text.find("mov rax, ") == 0) {
         uint64 state = 0;
-        uc::reg_read64(h, x86_reg::rax, state);
+        // reg_read64 returns bool — an unchecked failure would log a fake 0 state.
+        if (!uc::reg_read64(h, x86_reg::rax, state)) return true;
         g_state_count++;
         file::append("ollvm_states.txt", util::to_hex(state) + "\n");
     }
@@ -189,12 +206,17 @@ bool trace_ollvm(string sig) {
 
     // 3. Hook: record state variable transitions for the OLLVM dispatcher
     uc::hook_code(h, @on_insn);
-    int err = uc::start(h, fn, fn + 0x2000, 10000, 0);
+    // timeout is MICROSECONDS: 10000000 = 10 s, enough for an OLLVM dispatcher trace
+    int err = uc::start(h, fn, fn + 0x2000, 10000000, 0);
     uc::close(h);
+    if (err != uc::error::ok) {
+        console::log("emulation stopped early, uc error " + util::to_hex(uint64(err)));
+        return false;
+    }
 
     // ollvm_states.txt now holds the sequence of OLLVM states → map to real code blocks
     console::log("OLLVM states traced: " + util::to_hex(g_state_count));
-    return err == uc::error::ok;
+    return true;
 }
 ```
 
@@ -219,12 +241,13 @@ bool decrypt_pointer(string sig, uint64 encrypted_ptr, uint64 &out decrypted) {
 
     uc::reg_write64(h, x86_reg::rcx, encrypted_ptr);   // arg0
 
-    uc::start(h, decrypt_fn, decrypt_fn + 0x400, 5000, 0);
+    // timeout is MICROSECONDS: 1000000 = 1 s for a single small decrypt routine
+    int err = uc::start(h, decrypt_fn, decrypt_fn + 0x400, 1000000, 0);
 
     decrypted = 0;
-    uc::reg_read64(h, x86_reg::rax, decrypted);
+    bool ok = err == uc::error::ok && uc::reg_read64(h, x86_reg::rax, decrypted);
     uc::close(h);
-    return true;
+    return ok;
 }
 ```
 
@@ -241,14 +264,21 @@ After a game update:
 5. **Verify** — read a known-good value (health ≈ 100 at spawn, entity count 1–50)
 
 ```angelscript
-// Pattern update: change only this one string
-uint64 client_base = process::get_module_base("client.dll");
-if (client_base == 0) return false;
+// Pattern update: change only the signature string inside this function
+bool find_entity_system(uint64 &out entity_sys) {
+    uint64 client_base = process::get_module_base("client.dll");
+    if (client_base == 0) return false;
 
-uint64 hit = process::find_signature(client_base, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 48");  // ← update this
-if (hit == 0) return false;
+    uint64 hit = process::find_signature(client_base, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 48");  // ← update this
+    if (hit == 0) return false;
 
-uint64 entity_sys = process::get_relative_address(hit, 3, 7);
+    uint64 operand_addr = process::get_relative_address(hit, 3, 7);
+    if (operand_addr == 0) return false;
+
+    // get_relative_address returns the ADDRESS OF the operand, not the pointer it holds
+    entity_sys = process::read_uint64(operand_addr);
+    return entity_sys != 0;
+}
 ```
 
 ---
@@ -258,9 +288,11 @@ uint64 entity_sys = process::get_relative_address(hit, 3, 7);
 For each found offset, record in script header comment:
 
 ```angelscript
-// offsets from Dumper-7 v1.38, game build 1.38.0.0 (2025-10-15)
+// UNVERIFIED PLACEHOLDERS — re-derive every value below for your own target and patch.
+// offsets from Dumper-7 v7.x (e.g. 7.4.x), game build <your-build> (2025-10-15)
 // GEntitySystem sig: "48 8B 0D ? ? ? ? 48 85 C9 74 ?" → client.dll+0xABC123 (RIP+3/7)
-// OFF_HEALTH 0x330: confirmed via Zydis decode of PlayerPawn::TakeDamage function
+// OFF_HEALTH 0x330: claim "confirmed via Zydis decode" only after you re-run Stage 3
+// on PlayerPawn::TakeDamage for the current build — the value above is not evidence.
 ```
 
 This survives the next patch: you know what to re-verify and where the original evidence was.

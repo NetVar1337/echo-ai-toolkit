@@ -135,11 +135,14 @@ uint64 view_matrix_addr = process::get_relative_address(view_matrix_sig, 3, 7);
 
 // Read the matrix as floats
 matrix4x4 vm;
-if (!vm.read(view_matrix_addr)) return;
 
 // Built-in Source 2 W2S — writes to an out-param and returns bool
 vec2 screen;
 bool on = source2::w2s(world_pos, vm, screen);
+
+void source_2_view_matrix() {
+    if (!vm.read(view_matrix_addr)) return;
+}
 ```
 
 ## Unreal Engine 4/5
@@ -155,9 +158,12 @@ uint64 level      = process::read_uint64(world + 0x30);   // PersistentLevel
 uint64 actors_data = process::read_uint64(level + 0xA0);   // TArray.Data
 int    actors_count = process::read_int32(level + 0xA8);   // TArray.Num
 
-for (int i = 0; i < actors_count; i++) {
-    uint64 actor = process::read_uint64(actors_data + uint64(i) * 8);
-    if (actor == 0) continue;
+
+void entity_list_actors() {
+    for (int i = 0; i < actors_count; i++) {
+        uint64 actor = process::read_uint64(actors_data + uint64(i) * 8);
+        if (actor == 0) continue;
+    }
 }
 ```
 
@@ -172,7 +178,10 @@ int    n_bones = process::read_int32(mesh     + 0x588); // — PLACEHOLDER
 // Each FTransform = 48 bytes: scale(vec3+pad), rotation(quat), translation(vec3+pad)
 uint64 addr = bones + uint64(bone_index) * 48;
 vec3 t;
-t.read_float(addr + 32);
+
+void unreal_bone_reading_uskeletalmeshcomponent() {
+    t.read_float(addr + 32);
+}
 ```
 
 ### Cached bone reads (f_view_cache / unreal::read_bones)
@@ -182,22 +191,25 @@ For high-frequency reads, use the view cache to avoid repeated pointer chasing p
 ```angelscript
 // Build the cache once per frame — f_view_info holds camera location, rotation and fov
 f_view_info view_info;
-view_info.location = vec3(0, 0, 0);
-view_info.rotation = vec3(0, 0, 0);
-view_info.fov      = 90.0f;
 f_view_cache vc    = build_view_cache(view_info, false);
 
 // Cached bone read with fallback:
 // read_bones(skeletal_mesh, bone_array_offset, bone_array_cached_offset, component_offset)
 u_bone_array bones = unreal::read_bones(mesh_addr, 0x580, 0x0, 0x280);
-if (bones.valid()) {
-    vec3 head = bones[9];   // index by raw bone index
-    uint  n   = bones.count();
-}
-
-// W2S against the cached view
-vec2 screen;
 bool on = unreal::w2s(world_pos, vc, screen);
+
+void cached_bone_reads_f() {
+    view_info.location = vec3(0, 0, 0);
+    view_info.rotation = vec3(0, 0, 0);
+    view_info.fov      = 90.0f;
+    if (bones.valid()) {
+        vec3 head = bones[9];   // index by raw bone index
+        uint  n   = bones.count();
+    }
+
+    // W2S against the cached view
+    vec2 screen;
+}
 ```
 
 ## Unity
@@ -209,8 +221,11 @@ bool on = unity::w2s(world_pos, vm, screen);
 
 // 2D bounding box from a set of bone screen positions (Unity-specific helper)
 bbox_2d bb = render::calculate_2d_bbox_unity(origin, center, extents, vm);
-if (bb.valid) {
-    // bb.x, bb.y, bb.width, bb.height
+
+void unity() {
+    if (bb.valid) {
+        // bb.x, bb.y, bb.width, bb.height
+    }
 }
 ```
 
@@ -232,7 +247,6 @@ uint32 prefab_id = unity::rust_prefab_id(asset_path);
 ```angelscript
 // IW engine W2S — camera location, 3x3 view matrix and both FOV axes
 matrix3x3 cam_mat;
-cam_mat.read(cam_matrix_addr);
 vec2 screen;
 bool vis = iw_engine::w2s(world_pos, camera_location, cam_mat, fov_x, fov_y, screen);
 
@@ -247,15 +261,19 @@ uint64 cg_entities = process::get_relative_address(cg_sig, 3, 7);
 const int ENT_STRIDE  = 0x4D8; // centity_t size — PLACEHOLDER
 const int MAX_CLIENTS = 64;
 
-for (int i = 0; i < MAX_CLIENTS; i++) {
-    uint64 ent   = cg_entities + uint64(i) * ENT_STRIDE;
-    int pos_type = process::read_int32(ent + 0x04); // 0 = slot empty
-    if (pos_type == 0) continue;
-    vec3 origin;
-    origin.read_float(ent + 0x08); // lerpOrigin — PLACEHOLDER
-    vec2 screen;
-    if (!iw_engine::w2s(origin, camera_location, cam_mat, fov_x, fov_y, screen)) continue;
-    // draw ESP at screen.x, screen.y
+
+void iw_engine_call_of() {
+    cam_mat.read(cam_matrix_addr);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        uint64 ent   = cg_entities + uint64(i) * ENT_STRIDE;
+        int pos_type = process::read_int32(ent + 0x04); // 0 = slot empty
+        if (pos_type == 0) continue;
+        vec3 origin;
+        origin.read_float(ent + 0x08); // lerpOrigin — PLACEHOLDER
+        vec2 screen;
+        if (!iw_engine::w2s(origin, camera_location, cam_mat, fov_x, fov_y, screen)) continue;
+        // draw ESP at screen.x, screen.y
+    }
 }
 ```
 
@@ -280,7 +298,10 @@ void draw_cornered_box(float x, float y, float w, float h, float thick,
 }
 
 // Built-in alternative: box_style::CORNERED takes the corner ratio as 'rounding' (0.05–0.45)
-render::draw_box(int(x), int(y), int(w), int(h), r, g, b, a, box_style::CORNERED, 0.25f);
+
+void cornered_box() {
+    render::draw_box(int(x), int(y), int(w), int(h), r, g, b, a, box_style::CORNERED, 0.25f);
+}
 ```
 
 ### Health bar (gradient)
@@ -323,11 +344,14 @@ void draw_skeleton(array<float> &in sx, array<float> &in sy, array<bool> &in val
 
 ```angelscript
 // Fonts: set the active font from inside the render callback
-render::update_font(fonts::TAHOMA, 13);
 
 void draw_label(float sx, float sy, string name, float dist, int r, int g, int b, int a) {
     string label = util::format_string("{} [{}m]", name, int(dist));
     render::draw_text_outlined(int(sx), int(sy - 16.0f), label, r, g, b, a);
+}
+
+void name_tag_distance() {
+    render::update_font(fonts::TAHOMA, 13);
 }
 ```
 
@@ -345,16 +369,19 @@ void draw_snapline(float sx, float sy, int r, int g, int b, int a) {
 ```angelscript
 // Filled convex polygon (FOV indicator, zone marker)
 array<vec2> pts;
-pts.push_back(vec2(cx,     cy));
-pts.push_back(vec2(cx + r, cy + r));
-pts.push_back(vec2(cx - r, cy + r));
-render::draw_convex_poly(pts, 255, 0, 0, 60, true);
 
 // Filled concave polygon (irregular custom shapes)
-render::draw_concave_poly(pts, 0, 200, 0, 80);
 
 // Polyline — connected segments without fill
-render::draw_polyline(pts, 255, 255, 0, 200, 1.5f, false);
+
+void polygon_shapes() {
+    pts.insertLast(vec2(cx,     cy));
+    pts.insertLast(vec2(cx + r, cy + r));
+    pts.insertLast(vec2(cx - r, cy + r));
+    render::draw_convex_poly(pts, 255, 0, 0, 60, true);
+    render::draw_concave_poly(pts, 0, 200, 0, 80);
+    render::draw_polyline(pts, 255, 255, 0, 200, 1.5f, false);
+}
 ```
 
 ## Color grading by distance / visibility
@@ -374,7 +401,7 @@ void esp_color(bool visible, bool team, float dist, float max_dist,
 ## Full tick+render skeleton (mutex-safe)
 
 ```angelscript
-struct EntityData {
+class EntityData {
     float sx_head, sy_head;
     float sx_feet, sy_feet;
     array<float> bsx;
@@ -402,7 +429,7 @@ void tick() {
 
         EntityData@ ed = EntityData();
         // populate ed fields ...
-        local.push_back(ed);
+        local.insertLast(ed);
     }
     g_ent_mx.lock();
     g_entities = local;
@@ -450,7 +477,7 @@ void build_world_bvh(array<vec3> &in verts, array<int> &in indices) {
         t.p1 = verts[indices[i]];
         t.p2 = verts[indices[i + 1]];
         t.p3 = verts[indices[i + 2]];
-        tris.push_back(t);
+        tris.insertLast(t);
     }
     world_bvh.add_triangles(tris);
     if (!world_bvh.build()) console::error("BVH build failed");
@@ -463,10 +490,13 @@ bool is_bone_visible(vec3 cam, vec3 bone) {
 
 // One-off intersection tests — ray_triangle takes a triangle, origin, direction and max_t
 triangle t;
-t.p1 = vec3(0, 0, 0);
-t.p2 = vec3(1, 0, 0);
-t.p3 = vec3(0, 1, 0);
 bool hit = trace::ray_triangle(t, cam, bone.subtract(cam), 1.0);
+
+void bvh_occlusion_culling_geometry() {
+    t.p1 = vec3(0, 0, 0);
+    t.p2 = vec3(1, 0, 0);
+    t.p3 = vec3(0, 1, 0);
+}
 ```
 
 ## Distance culling

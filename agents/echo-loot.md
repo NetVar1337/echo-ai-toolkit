@@ -68,7 +68,6 @@ int get_weapon_id(uint64 weapon_ent) {
 // USER CODE — resolve the actor's UClass → FName → FNamePool entry.
 // Offsets are PLACEHOLDERS — regenerate with Dumper-7.
 uint64 uclass    = process::read_uint64(actor + 0x10);
-if (uclass == 0) return "";
 uint32 fname_idx = process::read_uint32(uclass + 0x18);
 return fname_to_string(fname_idx); // USER CODE — implement via FNamePool lookup
 
@@ -81,6 +80,11 @@ bool is_loot_actor(string classname) {
            contains(classname, "DroppedItem")||
            contains(classname, "WorldItem")  ||
            contains(classname, "LootCrate");
+}
+
+bool ue4_5_actor_class() {
+    if (uclass == 0) return "";
+    return true;
 }
 ```
 
@@ -175,16 +179,16 @@ void draw_loot_entity(float sx, float sy, float dist, string item_name,
 ## Loot list panel (sorted overlay)
 
 ```angelscript
-struct LootEntry {
+class LootEntry {
     string name;
     float  dist;
     ItemTier tier;
 }
 
 // USER CODE — insertion sort keeps the tier order then the distance order
-void update_loot_list(array<LootEntry> &inout entries) {
+void update_loot_list(array<LootEntry@> &inout entries) {
     for (uint i = 1; i < entries.length(); i++) {
-        LootEntry key = entries[i];
+        LootEntry@ key = entries[i];
         int j = int(i) - 1;
         while (j >= 0) {
             LootEntry@ cur = entries[j];
@@ -199,7 +203,7 @@ void update_loot_list(array<LootEntry> &inout entries) {
     if (entries.length() > 12) entries.resize(12);
 }
 
-void draw_loot_panel(const array<LootEntry> &in entries) {
+void draw_loot_panel(const array<LootEntry@> &in entries) {
     render::update_font(fonts::TAHOMA, 12);
     float px = 20.0f, py = 300.0f;
     render::draw_box(int(px - 4.0f), int(py - 4.0f), 200, int(entries.length() * 16.0f + 8.0f),
@@ -222,7 +226,7 @@ void draw_loot_panel(const array<LootEntry> &in entries) {
 const uint64 OFF_ORIGIN = 0x1294;
 
 void tick_loot(uint64 entity_list_addr) {
-    array<LootEntry> entries;
+    array<LootEntry@> entries;
 
     for (int i = 0; i < 512; i++) {
         uint64 ent = source2::get_controller(entity_list_addr, uint64(i));
@@ -240,11 +244,11 @@ void tick_loot(uint64 entity_list_addr) {
         float dist = g_local_origin.distance(wpos);
         if (dist > DIST_HIDE) continue;
 
-        LootEntry e;
+        LootEntry@ e = LootEntry();
         e.name = cs2_weapon_name(wid); // USER CODE — map wid → string from a schema dump
         e.dist = dist;
         e.tier = t;
-        entries.push_back(e);
+        entries.insertLast(e);
     }
 
     update_loot_list(entries);
@@ -261,7 +265,7 @@ void tick_loot(uint64 entity_list_addr) {
 const uint64 ROOT_COMPONENT_OFFSET = 0x130;
 
 void tick_loot_ue4() {
-    array<LootEntry> entries;
+    array<LootEntry@> entries;
     for (int i = 0; i < g_actors_count; i++) {
         uint64 actor = process::read_uint64(g_actors_data + uint64(i) * 8);
         if (actor == 0) continue;
@@ -276,11 +280,11 @@ void tick_loot_ue4() {
         float dist = g_local_origin.distance(wpos);
         if (dist > DIST_HIDE) continue;
 
-        LootEntry e;
+        LootEntry@ e = LootEntry();
         e.name = cls;
         e.dist = dist;
         e.tier = TIER_COMMON;
-        entries.push_back(e);
+        entries.insertLast(e);
     }
     update_loot_list(entries);
     g_ent_mx.lock();

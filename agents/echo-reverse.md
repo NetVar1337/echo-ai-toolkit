@@ -65,41 +65,47 @@ Use Echo's built-in Zydis disassembler to trace from a known string to a struct 
 // The pattern below is a PLACEHOLDER — re-derive it from your own binary.
 uint64 base = process::get_module_base("game.exe");
 uint64 str_addr = process::find_signature(base, "43 6C 6F 73 65 44 69 73 72 65 67 61 72 64");
-if (str_addr == 0) { console::error("string not found"); return; }
 
 // Step 2: scan backward ~512 bytes for LEA/MOV instructions referencing this string
 array<uint8>@ bytes = process::read_bytes(str_addr - 512, 80);
-if (bytes is null) return;
 array<disasm_insn@> block;
-if (!zydis::disasm(bytes, str_addr - 512, block)) return;
 
-for (uint i = 0; i < block.length(); i++) {
-    disasm_insn@ ins = block[i];
-    // ins.text is the Intel-syntax disassembly; operands are available via get_op()
-    if (ins.text.find("lea") >= 0 || ins.text.find("mov") >= 0)
-        console::log(util::format_string("[{}] {}", ins.length, ins.text));
+
+void zydis_finding_offsets_from() {
+    if (str_addr == 0) { console::error("string not found"); return; }
+    if (bytes is null) return;
+    if (!zydis::disasm(bytes, str_addr - 512, block)) return;
+    for (uint i = 0; i < block.length(); i++) {
+        disasm_insn@ ins = block[i];
+        // ins.text is the Intel-syntax disassembly; operands are available via get_op()
+        if (ins.text.find("lea") >= 0 || ins.text.find("mov") >= 0)
+            console::log(util::format_string("[{}] {}", ins.length, ins.text));
+    }
+
+    // Step 3: resolve a RIP-relative LEA to get a pointer
+    // If LEA RCX,[RIP+0x1234] is at addr, the instruction is 7 bytes:
+    uint64 ptr = process::get_relative_address(lea_addr, 3, 7);
 }
-
-// Step 3: resolve a RIP-relative LEA to get a pointer
-// If LEA RCX,[RIP+0x1234] is at addr, the instruction is 7 bytes:
-uint64 ptr = process::get_relative_address(lea_addr, 3, 7);
 ```
 
 **Function-level xref:**
 ```angelscript
 // Decode the entire function containing an address
 array<uint8>@ fn_bytes = process::read_bytes(target_addr, 0x400);
-if (fn_bytes is null) return;
 array<disasm_insn@> fn;
-if (!zydis::disasm_func(fn_bytes, target_addr, fn)) {
-    console::error("could not decode function");
-    return;
-}
-for (uint i = 0; i < fn.length(); i++) {
-    disasm_insn@ ins = fn[i];
-    // Pattern: MOV reg,[reg+0xOFFSET] → the offset IS the struct field offset
-    if (ins.text.find("[r") >= 0)
-        console::log(ins.text);
+
+void zydis_finding_offsets_from_2() {
+    if (fn_bytes is null) return;
+    if (!zydis::disasm_func(fn_bytes, target_addr, fn)) {
+        console::error("could not decode function");
+        return;
+    }
+    for (uint i = 0; i < fn.length(); i++) {
+        disasm_insn@ ins = fn[i];
+        // Pattern: MOV reg,[reg+0xOFFSET] → the offset IS the struct field offset
+        if (ins.text.find("[r") >= 0)
+            console::log(ins.text);
+    }
 }
 ```
 
@@ -109,45 +115,47 @@ Use Echo's built-in Unicorn emulator to execute obfuscated decrypt functions wit
 
 ```angelscript
 attach_data ad = process::attach("game.exe");
-if (ad.pid == 0) return false;
 
 uint64 base     = process::get_module_base("game.exe");
 uint64 mod_size = process::get_module_size(base);
 
 // Find the decrypt function via a signature — PLACEHOLDER, re-derive per build
 uint64 decrypt_fn = process::find_signature(base, "48 89 5C 24 ? 57 48 83 EC 20 48 8B F9");
-if (decrypt_fn == 0) { console::error("decrypt function not found"); return false; }
 
 // Create a handle backed by the attached process
 uint64 h = uc::create_process();
-if (h == 0) { console::error("uc::create_process failed"); return false; }
 
 // Stack
-uc::setup_stack(h, 0x7FF000000000, 0x10000, 0x7FF000008000);
 
 // Argument (encrypted pointer in RCX for x64 fastcall)
-uc::reg_write64(h, x86_reg::rcx, encrypted_ptr);
 
 // Execute the decrypt function (max 1s, max 2000 instructions)
 int rc = uc::start(h, decrypt_fn, decrypt_fn + 0x500, 1000000, 2000);
-if (rc != uc::error::ok) {
-    console::error(util::format_string("emulation failed: {}", uc::last_error(h)));
-    uc::close(h);
-    return false;
-}
 
-uint64 result = 0;
-uc::reg_read64(h, x86_reg::rax, result);
-console::log("Decrypted: " + util::to_hex(result));
-uc::close(h);
+bool unicorn_emulating_encrypted_obfuscated() {
+    if (ad.pid == 0) return false;
+    if (decrypt_fn == 0) { console::error("decrypt function not found"); return false; }
+    if (h == 0) { console::error("uc::create_process failed"); return false; }
+    uc::setup_stack(h, 0x7FF000000000, 0x10000, 0x7FF000008000);
+    uc::reg_write64(h, x86_reg::rcx, encrypted_ptr);
+    if (rc != uc::error::ok) {
+        console::error(util::format_string("emulation failed: {}", uc::last_error(h)));
+        uc::close(h);
+        return false;
+    }
+
+    uint64 result = 0;
+    uc::reg_read64(h, x86_reg::rax, result);
+    console::log("Decrypted: " + util::to_hex(result));
+    uc::close(h);
+    return true;
+}
 ```
 
 **OLLVM flattened dispatch loop:**
 ```angelscript
 // Hook code to trace the state machine's switch variable
 uint64 h = uc::create_process();
-uc::hook_code(h, @on_insn);
-uc::start(h, fn_addr, fn_addr + 0x1000, 1000000, 5000);
 
 // Hook signature: bool code_hook_fn(uint64 h, uint64 address, uint32 size)
 bool on_insn(uint64 h, uint64 address, uint32 size) {
@@ -162,6 +170,11 @@ bool on_insn(uint64 h, uint64 address, uint32 size) {
         uc::reg_read64(h, x86_reg::rax, eax);
     }
     return true;
+}
+
+void unicorn_emulating_encrypted_obfuscated_2() {
+    uc::hook_code(h, @on_insn);
+    uc::start(h, fn_addr, fn_addr + 0x1000, 1000000, 5000);
 }
 ```
 
@@ -196,22 +209,26 @@ Echo is **external** (no injection). It can't intercept function calls inline. U
 // New bytes at function start (from the new binary, first unique ~12 bytes):
 uint64 client_base = process::get_module_base("client.dll");
 uint64 entity_sys_ptr = process::find_signature(client_base, "48 8B 0D ? ? ? ? 48 85 C9 74 ? 48");
-if (entity_sys_ptr == 0) {
-    alert::show("Pattern broken — needs update after patch");
-    return false;
-}
-uint64 entity_sys = process::get_relative_address(entity_sys_ptr, 3, 7);
 
 // Validate: read the entity count at a known offset
 int32 count = process::read_int32(entity_sys + 0x10);
-if (count < 1 || count > 64) {
-    alert::show(util::format_string("Unexpected entity count: {} — offset may have changed", count));
+
+bool binary_diff_workflow_tracking() {
+    if (entity_sys_ptr == 0) {
+        alert::show("Pattern broken — needs update after patch");
+        return false;
+    }
+    uint64 entity_sys = process::get_relative_address(entity_sys_ptr, 3, 7);
+    if (count < 1 || count > 64) {
+        alert::show(util::format_string("Unexpected entity count: {} — offset may have changed", count));
+    }
+    return true;
 }
 ```
 
 ## VMP / Devirtualization toolchain
 
-For VMProtect-protected targets, use the devirt stack documented in `skills/echo-ecosystem.md`.
+For VMProtect-protected targets, use the devirt stack documented in `skills/echo-ecosystem/SKILL.md`.
 
 | Tool | Role |
 |------|------|

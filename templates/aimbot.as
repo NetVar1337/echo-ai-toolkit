@@ -143,7 +143,7 @@ void aim_tick() {
                          process::read_float(lp + OFF_VIEW_Y));
 
     // Select bone
-    int bones[3] = {BONE_HEAD, BONE_NECK, BONE_CHEST};
+    array<int> bones = {BONE_HEAD, BONE_NECK, BONE_CHEST};
     int target_bone = bones[int(ui::get(g_aim_bone))];
 
     // Find best target

@@ -140,7 +140,7 @@ ActorInfo@ read_actor(uint64 actor) {
     info.mesh   = mesh;
     info.root_pos = vec3(process::read_float(root + OFF_COMP_TRANS),
                          process::read_float(root + OFF_COMP_TRANS + 4),
-                         process->read_float(root + OFF_COMP_TRANS + 8));
+                         process::read_float(root + OFF_COMP_TRANS + 8));
     info.hp         = hp;
     info.hp_max     = hp_max;
     info.shield     = shield;
@@ -162,13 +162,12 @@ void draw() {
         vec2 foot;
         if (!unreal::w2s(e.root_pos, view, foot)) continue;
 
-        // Head position for box height
-        vec2 head = foot;
+        // Head position for box height — if the head bone cannot be projected
+        // the entity is skipped rather than drawn with a zero-height box.
         vec3 bone_pos;
-        if (get_bone(e.mesh, BONE_HEAD, bone_pos)) {
-            vec2 bone_screen;
-            if (unreal::w2s(bone_pos, view, bone_screen)) head = bone_screen;
-        }
+        if (!get_bone(e.mesh, BONE_HEAD, bone_pos)) continue;
+        vec2 head;
+        if (!unreal::w2s(bone_pos, view, head)) continue;
 
         float box_h = foot.y - head.y;
         if (box_h < 8.0f) continue;
@@ -211,14 +210,15 @@ void draw() {
 // ── skeleton ─────────────────────────────────────────────────────────────────
 
 void draw_skeleton(uint64 mesh, f_view_cache view) {
-    // 12 segments — full humanoid rig
+    // 12 segments — full humanoid rig. pa[i] is the from-bone and pb[i] the
+    // matching to-bone of segment i.
     const uint pairs_n = 12;
-    uint32[12] pa = {BONE_HEAD,    BONE_NECK,   BONE_CHEST,   BONE_L_UPPER,
-                     BONE_R_UPPER, BONE_L_UPPER, BONE_R_UPPER, BONE_PELVIS,
-                     BONE_PELVIS,  BONE_L_KNEE,  BONE_R_KNEE,  BONE_CHEST};
-    uint32[12] pb = {BONE_NECK,    BONE_CHEST,  BONE_PELVIS,  BONE_L_HAND,
-                     BONE_R_HAND,  BONE_L_KNEE, BONE_R_KNEE,  BONE_L_KNEE,
-                     BONE_R_KNEE,  BONE_L_FOOT, BONE_R_FOOT,  BONE_R_UPPER};
+    array<uint32> pa = {BONE_HEAD,    BONE_NECK,   BONE_CHEST,   BONE_L_UPPER,
+                        BONE_L_UPPER, BONE_L_HAND, BONE_CHEST,   BONE_R_UPPER,
+                        BONE_R_UPPER, BONE_R_HAND, BONE_PELVIS,  BONE_PELVIS};
+    array<uint32> pb = {BONE_NECK,    BONE_CHEST,  BONE_PELVIS,  BONE_L_HAND,
+                        BONE_L_KNEE,  BONE_L_FOOT, BONE_R_UPPER, BONE_R_HAND,
+                        BONE_R_KNEE,  BONE_R_FOOT, BONE_L_KNEE,  BONE_R_KNEE};
 
     for (uint i = 0; i < pairs_n; i++) {
         vec3 a, b;

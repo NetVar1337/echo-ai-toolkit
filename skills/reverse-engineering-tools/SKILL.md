@@ -61,7 +61,7 @@ Curated tooling for game RE work, sourced from awesome-game-security. Echo has Z
 | r2emu | Radare2 emulation mode |
 
 ### Frida for game hacking
-- `pcxxcq/frida-il2cpp-bridge` — IL2CPP method hooking via Frida
+- `vfsfitvnm/frida-il2cpp-bridge` — IL2CPP method hooking via Frida
 - `gmh5225/frida-il2cpp-datacollector` — ports CE monodatacollector to Android/iOS
 - Additional script collections: `0xdea/frida-scripts` and community Frida script repos
 

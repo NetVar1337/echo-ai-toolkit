@@ -26,14 +26,14 @@ const int HIP_L = 18; const int KNEE_L= 23; const int FOOT_L = 28;
 const int HIP_R = 33; const int KNEE_R= 38; const int FOOT_R = 43;
 
 // Pairs for skeleton draw: flat [from, to, from, to, ...]
-int BONE_PAIRS[30] = {
+array<int> BONE_PAIRS = {
     HEAD,NECK,  NECK,CHEST,  CHEST,SPINE,  SPINE,PELVIS,   // spine
     CHEST,SHL,  SHL,ELB_L,   ELB_L,HAND_L,                 // L arm
     CHEST,SHR,  SHR,ELB_R,   ELB_R,HAND_R,                 // R arm
     PELVIS,HIP_L, HIP_L,KNEE_L, KNEE_L,FOOT_L,              // L leg
     PELVIS,HIP_R, HIP_R,KNEE_R, KNEE_R,FOOT_R              // R leg
 };
-const int BONE_PAIR_COUNT = 15;
+const int BONE_PAIR_COUNT = 16;
 
 // ─── Shared entity data (written by tick, read by render) ────────────────────
 class EspEntity {
@@ -43,8 +43,14 @@ class EspEntity {
     int    hp;
     float  dist;
     string name;
-    float  sx[44]; float sy[44]; bool sv[44]; // bone screen positions
+    array<float> sx; array<float> sy; array<bool> sv; // bone screen positions
     float  box_x, box_y, box_w, box_h;
+
+    EspEntity() {
+        sx.resize(44);
+        sy.resize(44);
+        sv.resize(44);
+    }
 }
 
 array<EspEntity@> g_entities;
@@ -197,8 +203,12 @@ void tick() {
             vec2 screen;
             bool ok = source2::w2s(get_bone_pos(ent, b), vm, screen);
             ed.sv[b] = ok;
-            ed.sx[b] = screen.x;
-            ed.sy[b] = screen.y;
+            // w2s leaves the out-param untouched when it fails — only store
+            // the position when the conversion actually succeeded.
+            if (ok) {
+                ed.sx[b] = screen.x;
+                ed.sy[b] = screen.y;
+            }
         }
         head_ok = ed.sv[HEAD];
         feet_ok = ed.sv[FOOT_L] || ed.sv[FOOT_R];

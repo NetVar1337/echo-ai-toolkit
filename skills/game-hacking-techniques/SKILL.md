@@ -83,7 +83,8 @@ For DX overlay hooks (for non-Echo overlays): `ThirteenAG/UniversalD3DHook11`, `
 GameEntitySystem → m_pEntityList (ptr)
   chunk[i] = read(entity_list + (i >> 9) * 8)
   entity   = read(chunk + (i & 0x1FF) * 120)
-Max 512 entities (index 0–511); local player typically at index 0.
+512 entities per chunk (slot index is 9 bits, 0–511), not 512 entities total;
+local player typically at slot 0 of chunk 0.
 ```
 
 ### Unreal Engine 4/5
@@ -122,12 +123,19 @@ Bone matrix: entity + bone_matrix_offset; 12 floats per bone (3x4 row-major)
 | GDI+ / DWM | Low | Desktop Window Manager compositing |
 
 Echo renders through the Discord overlay, so all drawing goes through the `render::` namespace
-and only from inside the render thread:
+and only from inside the render thread. Register the callback with `on_render` — render calls
+are invalid anywhere else (only `render::get_fps`, `render::get_viewport_size` and
+`render::is_foreground` may be called from any context):
 
 ```angelscript
 void render_tick() {
     vec2 vp = render::get_viewport_size();
     render::draw_box(100, 100, 200, 50, 255, 0, 0, 255, box_style::FILLED, 0.0f);
+}
+
+bool main() {
+    on_render(@render_tick);
+    return true;
 }
 ```
 
@@ -163,19 +171,29 @@ Width = height * 0.45 (approximate for standing player).
 For tight box: project all bones, use min/max of screen coords.
 ```
 
-Echo can project an axis-aligned 3D box directly:
+Echo can project an axis-aligned 3D box directly. `render::calculate_2d_bbox` is a
+render-thread call like every other `render::` call except the three any-context
+getters — run it inside an `on_render` callback:
 
 ```angelscript
-bbox_2d box = render::calculate_2d_bbox(origin, mins, maxs, view_matrix);
-if (!box.valid) continue;
-render::draw_box(int(box.x), int(box.y), int(box.width), int(box.height),
-                 255, 0, 0, 255, box_style::OUTLINED, 0.0f);
+void render_tick() {
+    bbox_2d box = render::calculate_2d_bbox(origin, mins, maxs, view_matrix);
+    if (!box.valid) return;
+    render::draw_box(int(box.x), int(box.y), int(box.width), int(box.height),
+                     255, 0, 0, 255, box_style::OUTLINED, 0.0f);
+}
+
+bool main() {
+    on_render(@render_tick);
+    return true;
+}
 ```
 
 ### Bone rendering
 Connect adjacent bones with lines. Per engine:
 - Source 2: quaternion storage, use bone position only (skip rotation for ESP)
-- Unreal: FTransform = 48 bytes (16 scale/pad + 16 quat + 16 translation)
+- Unreal: FTransform = 48 bytes (16 quat rotation + 12 translation + 4 pad + 12 scale + 4 pad);
+  the translation — the bone position — is at entry + 0x10
 - Unity: Matrix4x4, position is column 3
 
 ---
@@ -237,8 +255,10 @@ Scan: iterate bytes, match opcode bytes exactly, skip wildcards
 
 ```angelscript
 uint64 base = process::get_module_base("game.exe");
+if (base == 0) return false;              // module not found
+
 uint64 addr = process::find_signature(base, "48 8B 05 ? ? ? ? 48 85 C0");
-if (addr == 0) { /* not found */ }
+if (addr == 0) return false;              // pattern not found
 ```
 
 ### Byte-mask style
@@ -246,18 +266,34 @@ if (addr == 0) { /* not found */ }
 Pattern: "\x48\x8B\x05\x00\x00\x00\x00\x48\x85\xC0"
 Mask:    "xxx????xxx"
 x = match, ? = wildcard
+The mask must be exactly as long as the pattern.
 ```
 
 ```angelscript
-// 48 8B 05 ?? ?? ?? ?? 48 85 C0
-uint64 addr = process::find_signature(base, "488B05000000004885C0", "xxx???xxxxx");
+// 48 8B 05 ?? ?? ?? ?? 48 85 C0  → 10 bytes, 10 mask chars
+uint64 addr = process::find_signature(base, "488B05000000004885C0", "xxx????xxx");
+if (addr == 0) return false;
 ```
 
 ### SIMD-accelerated
-Use SSE2/AVX2 to compare 16/32 bytes at once; Echo exposes the SSE intrinsics for this —
-`mm_cmpeq_epi8`, `mm_cmpeq_epi16`, `mm_cmpeq_epi32`, `mm_xor_si128`, `mm_and_si128`,
-`mm_or_si128`, plus byte extraction via `mm_extract_epi8` / `mm_extract_epi16`.
-All of them take `array<uint8>` operands of exactly 16 bytes.
+Echo exposes 128-bit SSE intrinsics for byte comparison — `mm_cmpeq_epi8`, `mm_cmpeq_epi16`,
+`mm_cmpeq_epi32` for compares and `mm_xor_si128`, `mm_and_si128`, `mm_or_si128` for logic.
+There is no AVX2 intrinsic; 256-bit YMM access is only available through the Unicorn
+emulator's `uc::reg_read256` / `uc::reg_write256`.
+
+The compare and logic intrinsics take **two** 16-byte `array<uint8>` operands and write the
+result into an `&out` parameter:
+
+```angelscript
+array<uint8> a = ...;   // 16 bytes
+array<uint8> b = ...;   // 16 bytes
+array<uint8> result;
+mm_cmpeq_epi8(a, b, result);   // result[i] = 0xFF where a[i] == b[i]
+```
+
+The extract intrinsics take one 16-byte array plus an index and return an int:
+`mm_extract_epi8(a, index)` (0..15), `mm_extract_epi16(a, index)` (0..7),
+`mm_extract_epi32(a, index)` (0..3), `mm_extract_epi64(a, index)` (0..1).
 
 ### Signature strategy
 - Aim for 8+ stable bytes surrounding the wildcard region

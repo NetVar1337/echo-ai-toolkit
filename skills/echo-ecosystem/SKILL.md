@@ -60,20 +60,46 @@ Built-in macros: `__BUILD_TIMESTAMP_STR__`, `__BUILD_UNIX_TS__`, `STRHASH("text"
 ## ESP Layout
 
 ### echo-esp-preview (speedsunderscore/echo-esp-preview)
-Drop-in `esp_preview.as` providing `g_preview` global and an `esp_layout` namespace. Register elements once in `bool main()`; query positions at render time. No game-specific types.
+Drop-in `esp_preview.as` providing a `g_preview` global object and an `esp_layout` namespace.
+Register elements once in `bool main()`; query positions at render time. No game-specific types.
 
-The `esp_layout::*` calls below belong to the third-party drop-in library, not to the Echo API — the library supplies the `color`, `label_info_t`, and `bar_info_t` types it declares.
+The registration and query calls live on the **`g_preview` class**; the `esp_layout` namespace
+only holds layout constants plus `bar_rect` / `label_bar_offset` / `anchor_for_side`. These
+calls belong to the third-party drop-in library, not to the Echo API — the library declares
+the `label_info_t`, `bar_info_t`, `image_info_t` and `box_info_t` types. (`color` is an
+Echo API type, not a library one.)
 
 ```angelscript
-// Register inside bool main():
-esp_layout::register_bounding_box(@check_fn, color_occluded, color_visible);
-int name_id   = esp_layout::register_label("name", true, col, col_occ, LABEL_POS_TOP, FONT_DEFAULT, 14.0f);
-int health_id = esp_layout::register_bar(true, col_hp, col_hp_occ, BAR_POS_LEFT);
-int icon_id   = esp_layout::register_image(true, @tex, image_pos, size);
+// SIDE_TOP/SIDE_RIGHT/SIDE_BOTTOM/SIDE_LEFT are your own constants: 0 = top,
+// 1 = right, 2 = bottom, 3 = left.
+int g_name_id   = 0;
+int g_health_id = 0;
+int g_icon_id   = 0;
 
-// Query at render time:
-label_info_t@ info = esp_layout::get_label_info(name_id);
-bar_info_t@   bar  = esp_layout::get_bar_info(health_id);
+// Register once, from bool main():
+bool main() {
+    g_preview.register_bounding_box(g_box_enabled, g_box_col, g_box_col_occluded);
+
+    g_name_id = g_preview.register_label(
+        "name", g_name_enabled, g_name_col, g_name_col_occluded,
+        SIDE_TOP, fonts::TAHOMA, 13);          // font_size is an int
+
+    g_health_id = g_preview.register_bar(
+        g_bar_enabled, g_bar_col, g_bar_col_occluded, SIDE_LEFT);
+
+    g_icon_id = g_preview.register_image(g_icon_enabled, g_icon_tex, SIDE_TOP, 32);
+
+    g_preview.load("esp_preview.json");
+    return true;
+}
+
+// Query at render time — the getters return the info type BY VALUE:
+void draw_preview() {
+    label_info_t info = g_preview.get_label_info(g_name_id);
+    bar_info_t   bar  = g_preview.get_bar_info(g_health_id);
+    box_info_t   box  = g_preview.get_box_info();
+    image_info_t img  = g_preview.get_image_info(g_icon_id);
+}
 ```
 
 See `templates/esp-preview.as` for a working starter.
@@ -139,7 +165,7 @@ VTIL v2 — redesigned IR. Cleaner block/instruction representation; intended su
 Dynamic binary analysis framework with symbolic execution, taint analysis, and SMT solving.
 
 ```python
-from triton import TritonContext, ARCH, MODE
+from triton import TritonContext, ARCH, MODE, Instruction
 ctx = TritonContext(ARCH.X86_64)
 ctx.setMode(MODE.ALIGNED_MEMORY, True)
 

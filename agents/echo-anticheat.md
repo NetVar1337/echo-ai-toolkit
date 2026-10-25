@@ -132,13 +132,17 @@ uninitialised memory, and a smaller observable footprint.
 
 ```angelscript
 // GOOD: a tick rate that matches the data's actual update rate
-create_thread(32, @tick);  // 32 tps
 
 // GOOD: read a struct once and index into it, instead of one read per field
 memory_buffer@ buf = process::read_buffer(entity_addr, 0x200);
-if (buf is null) return false;
 int32 hp   = buf.read_int32(0x344);   // offset is a PLACEHOLDER — verify per build
 vec3  origin = buf.read_vec3_float(0x1294);
+
+bool minimise_memory_traffic() {
+    create_thread(32, @tick);  // 32 tps
+    if (buf is null) return false;
+    return true;
+}
 ```
 
 ### Read only live memory
@@ -146,12 +150,16 @@ vec3  origin = buf.read_vec3_float(0x1294);
 ```angelscript
 // Check the region around an address before reading from it
 memory_region r = process::virtual_query(addr);
-if (!r.present) return false;
 
 // Validate a scanned address against the module's range
 uint64 base = process::get_module_base("client.dll");
 uint32 size = process::get_module_size(base);
-if (addr < base || addr >= base + size) return false; // stale or wrong signature
+
+bool read_only_live_memory() {
+    if (!r.present) return false;
+    if (addr < base || addr >= base + size) return false; // stale or wrong signature
+    return true;
+}
 ```
 
 ### Prefer the platform's supported APIs
@@ -165,7 +173,10 @@ the game's memory unnecessarily, and not patching anything in the target.
 int32 hp = process::read_int32(local_player + 0x344);
 
 // GOOD: draw with the overlay renderer, not with an injected graphics hook
-render::draw_box(x, y, w, h, 255, 0, 0, 255, box_style::FILLED, 0.0f);
+
+void prefer_the_platform_s() {
+    render::draw_box(x, y, w, h, 255, 0, 0, 255, box_style::FILLED, 0.0f);
+}
 ```
 
 ### Keep the overlay on the supported path
@@ -186,11 +197,14 @@ reads, surface errors through `alert::show_tag`, and refuse to act on garbage da
 
 ```angelscript
 int32 hp;
-if (!process::read_int32(local_player + 0x344, hp)) {
-    alert::show_tag("health read failed", "error");
-    return;
+
+void handle_failure_explicitly() {
+    if (!process::read_int32(local_player + 0x344, hp)) {
+        alert::show_tag("health read failed", "error");
+        return;
+    }
+    if (hp < 0 || hp > 100) return; // implausible value — do not draw from it
 }
-if (hp < 0 || hp > 100) return; // implausible value — do not draw from it
 ```
 
 ---
@@ -244,10 +258,13 @@ server-side or inside the game's own telemetry and is completely independent of 
 vec2 smoothed = math::smooth_angles(cur, tgt, angle_range::R_180, 0.3, 1.0, 45.0);
 
 // 2. Respect the weapon's rate of fire rather than firing every tick
-if (util::time_now() - g_last_shot_ms < g_min_interval_ms) return;
 
 // 3. Only act on data you have validated
-if (hp <= 0 || hp > 100) return;
+
+void behavioural_analysis_the_layer() {
+    if (util::time_now() - g_last_shot_ms < g_min_interval_ms) return;
+    if (hp <= 0 || hp > 100) return;
+}
 ```
 
 These are the same properties that make an assist feel correct to a human user: predictable rate, sane smoothing,

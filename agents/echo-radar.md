@@ -16,7 +16,7 @@ You build 2D radar overlays that map world positions to a flat screen panel usin
 The radar is a rectangle on screen. Each world position maps to a 2D point within it.
 
 ```angelscript
-struct RadarConfig {
+class RadarConfig {
     float cx, cy;     // radar center on screen (pixels)
     float radius;     // radar circle radius (pixels)
     float range;      // world units covered by the full radius
@@ -150,9 +150,9 @@ void draw_edge_indicator(const RadarConfig &in cfg, vec3 local_pos, vec3 ent_pos
     float px = nx * 5.0f, py = ny * 5.0f;
     float ox = -ny * 3.0f, oy = nx * 3.0f;
     array<vec2> tri;
-    tri.push_back(vec2(rim_x + px, rim_y + py));
-    tri.push_back(vec2(rim_x - px + ox, rim_y - py + oy));
-    tri.push_back(vec2(rim_x - px - ox, rim_y - py - oy));
+    tri.insertLast(vec2(rim_x + px, rim_y + py));
+    tri.insertLast(vec2(rim_x - px + ox, rim_y - py + oy));
+    tri.insertLast(vec2(rim_x - px - ox, rim_y - py - oy));
     render::draw_convex_poly(tri, r, g, b, a, true);
 }
 ```
@@ -208,11 +208,14 @@ void draw_radar() {
 
 ```angelscript
 // Registered in main():
-g_rotate = ui::add_checkbox("Rotate with player", true, "radar.rotate");
 
 void draw_radar() {
     g_radar.yaw = ui::get(g_rotate) ? g_local_yaw : 0.0f;
     // ...
+}
+
+void rotating_vs_north_up() {
+    g_rotate = ui::add_checkbox("Rotate with player", true, "radar.rotate");
 }
 ```
 

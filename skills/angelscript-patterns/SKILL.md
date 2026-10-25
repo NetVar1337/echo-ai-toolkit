@@ -30,7 +30,7 @@ bool main() {
         return false;
     }
 
-    create_thread(0, @tick);
+    create_thread(20, @tick);       // 20 Hz — tps 0 would run the callback once and exit
     on_render(@render_tick);
     return true;
 }
@@ -49,30 +49,26 @@ Read entities on a background thread; the render thread only reads the snapshot.
 ```angelscript
 mutex@ g_lock = create_mutex();
 
-struct Entity {
+class Entity {
     vec3  pos;
     float health;
     bool  valid;
 }
 
-array<Entity> g_entities;      // written by tick, read by render
+array<Entity@> g_entities;      // written by tick, read by render
 
 void tick() {
-    while (process::is_alive()) {
-        sleep(50);           // 20 Hz update rate
+    array<Entity@> snapshot;
+    // ... fill snapshot from process::read_* calls, allocating a fresh Entity per entry ...
 
-        array<Entity> snapshot;
-        // ... fill snapshot from process::read_* calls ...
-
-        g_lock.lock();
-        g_entities = snapshot;
-        g_lock.unlock();
-    }
+    g_lock.lock();
+    g_entities = snapshot;      // shallow buffer copy, done under the lock
+    g_lock.unlock();
 }
 
 void render_tick() {
     g_lock.lock();
-    array<Entity> local = g_entities;   // copy under lock
+    array<Entity@> local = g_entities;   // shallow buffer copy under the lock
     g_lock.unlock();
 
     for (uint i = 0; i < local.length(); i++) {
@@ -81,6 +77,11 @@ void render_tick() {
     }
 }
 ```
+
+`create_thread(20, @tick)` drives the tick callback at 20 Hz — do not add a `while`/`sleep`
+loop inside the callback, and do not pass `tps 0` (that runs the callback once and exits).
+Script classes are reference types, so each published entity must be a fresh instance; the
+array copy only copies the handles.
 
 ---
 
@@ -91,7 +92,7 @@ Raw reads can return garbage if the game is mid-update or the pointer is stale. 
 ```angelscript
 // Read a pointer and follow it; returns 0 on any bad step
 // (user code, not Echo API)
-uint64 safe_deref(uint64 base, array<uint32>@ offsets) {
+uint64 safe_deref(uint64 base, const array<uint32> &in offsets) {
     uint64 ptr = base;
     for (uint i = 0; i < offsets.length(); i++) {
         if (ptr == 0 || ptr < 0x10000) return 0;   // null / kernel space
@@ -101,8 +102,11 @@ uint64 safe_deref(uint64 base, array<uint32>@ offsets) {
 }
 
 // Usage: entity list pointer chain
+// ILLUSTRATIVE offsets — placeholders, re-derive them for your target
 array<uint32> chain = {0x18, 0x30, 0x8};
-uint64 entity_list = safe_deref(process::get_module_base("client.dll") + 0x1234, chain);
+uint64 client = process::get_module_base("client.dll");
+if (client == 0) return;                                  // module not loaded
+uint64 entity_list = safe_deref(client + 0x1234, chain);
 if (entity_list == 0) return;
 ```
 

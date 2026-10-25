@@ -23,16 +23,24 @@ CGameEntitySystem (singleton, accessed via pattern scan in client.dll)
   → chunk[i]      = read(entity_list + (i >> 9) * 8)
   → entity[j]     = read(chunk + (j & 0x1FF) * 120)
   → full index:   i = (chunk_idx << 9) | slot_idx
-  max 512 entities; local player usually at slot 0 of chunk 0
+  512 entities per chunk (slot_idx is 9 bits), not 512 entities total;
+  local player usually at slot 0 of chunk 0
 ```
 
 In Echo:
 
 ```angelscript
 uint64 client = process::get_module_base("client.dll");
-uint64 entity_list = process::find_signature(client, "48 8B 0D ? ? ? ?");
+if (client == 0) return false;
+
+uint64 sig = process::find_signature(client, "48 8B 0D ? ? ? ?");
+if (sig == 0) return false;
+
+// get_relative_address returns the ADDRESS OF the rip-relative operand,
+// so read the pointer it points at to get the entity list itself.
+uint64 rel = process::get_relative_address(sig, 3, 7);
+uint64 entity_list = process::read_uint64(rel);
 if (entity_list == 0) return false;
-uint64 entity_list_ptr = process::get_relative_address(entity_list, 3, 7);
 ```
 
 ### Schema / NetVar system
@@ -75,7 +83,7 @@ int32 team = process::read_int32(pawn + 0x3CB);  // PLACEHOLDER offset
 ```
 Located at a global in client.dll, accessible via pattern scan.
 Pattern: "48 8D 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ??"   ← PLACEHOLDER
-process::get_relative_address(addr, 3, 7)
+process::get_relative_address(addr, 3, 7)  → address of the matrix pointer
 Format: 4x4 row-major float[16]
 ```
 
@@ -84,10 +92,15 @@ In Echo:
 ```angelscript
 uint64 vm_addr = process::find_signature(client, "48 8D 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ??");
 if (vm_addr == 0) return false;
+
+// 48 8D 05 is a LEA — get_relative_address gives the address OF the
+// pointer, so read it to get the matrix address.
 uint64 vm_ptr = process::get_relative_address(vm_addr, 3, 7);
+uint64 vm = process::read_uint64(vm_ptr);
+if (vm == 0) return false;
 
 matrix4x4 view_matrix;
-view_matrix.read(vm_ptr);
+if (!view_matrix.read(vm)) return false;   // read() returns bool
 ```
 
 ### ConVar system
@@ -152,12 +165,12 @@ USkeletalMeshComponent:
   +0x580: SpaceBasesData (TArray<FTransform>)  ← bone world transforms   ← PLACEHOLDER
   +0x588: count                                            ← PLACEHOLDER
 
-FTransform (48 bytes):
-  +0x00: FQuat scale     (16 bytes: x,y,z,w)
-  +0x10: FQuat rotation  (16 bytes: x,y,z,w)
-  +0x20: FVector translation (12 bytes: x,y,z) + 4 pad
+FTransform (48 bytes = 0x30):
+  +0x00: FQuat rotation    (16 bytes: x,y,z,w)
+  +0x10: FVector translation (12 bytes: x,y,z) + 4 pad
+  +0x20: FVector scale3d   (12 bytes: x,y,z) + 4 pad
 
-To get bone position: SpaceBasesData.Data[i].translation
+To get bone position: SpaceBasesData.Data[i].translation  (at +0x10)
 ```
 
 Echo reads the transform through the `ftransform` type, or through the bone helper:
@@ -220,7 +233,7 @@ Echo's `unity::w2s` takes the camera matrix:
 
 ```angelscript
 matrix4x4 cam_matrix;
-cam_matrix.read(camera_addr + OFF_CAM_MATRIX);   // PLACEHOLDER offset
+if (!cam_matrix.read(camera_addr + OFF_CAM_MATRIX)) continue;   // PLACEHOLDER offset
 
 vec2 screen;
 if (!unity::w2s(world_pos, cam_matrix, screen)) continue;
@@ -261,7 +274,7 @@ Echo's `iw_engine::w2s` matches this layout directly:
 
 ```angelscript
 matrix3x3 view_matrix;
-view_matrix.read(refdef + REFDEF_VIEW_OFFSET);   // PLACEHOLDER offset
+if (!view_matrix.read(refdef + REFDEF_VIEW_OFFSET)) continue;   // PLACEHOLDER offset
 
 vec2 screen;
 if (!iw_engine::w2s(world_pos, camera_location, view_matrix, fov_x, fov_y, screen)) continue;
@@ -274,7 +287,7 @@ if (!iw_engine::w2s(world_pos, camera_location, view_matrix, fov_x, fov_y, scree
 | Engine | Format | Size | Position location |
 |--------|--------|------|-------------------|
 | Source 2 | position + orientation (stored separately) | 0x20/entry | entry + 0x10 (vec3) |
-| Unreal | FTransform (scale+quat+translate) | 48 bytes | entry + 0x20 (FVector) |
+| Unreal | FTransform (quat + translate + scale) | 48 bytes | entry + 0x10 (FVector translation) |
 | Unity IL2CPP | 4x4 float matrix | 64 bytes | column 3 (indices 12,13,14) |
 | IW (CoD) | 3x4 row-major rotation+translation | 48 bytes | last column (indices 3,7,11) |
 
@@ -301,12 +314,23 @@ bool world_to_screen(matrix4x4 vp, vec3 world_pos, vec2 &out screen) {
 }
 ```
 
-For axis-aligned 3D boxes Echo has a built-in projection:
+For axis-aligned 3D boxes Echo has a built-in projection. `render::calculate_2d_bbox` is a
+render-thread call — run it from an `on_render` callback (only `render::get_fps`,
+`render::get_viewport_size` and `render::is_foreground` may be called from any context):
 
 ```angelscript
-bbox_2d box = render::calculate_2d_bbox(origin, mins, maxs, view_matrix);
-if (!box.valid) continue;
-// box.x, box.y, box.width, box.height
+void render_tick() {
+    bbox_2d box = render::calculate_2d_bbox(origin, mins, maxs, view_matrix);
+    if (!box.valid) return;
+    // box.x, box.y, box.width, box.height
+    render::draw_box(int(box.x), int(box.y), int(box.width), int(box.height),
+                     255, 0, 0, 255, box_style::OUTLINED, 0.0f);
+}
+
+bool main() {
+    on_render(@render_tick);
+    return true;
+}
 ```
 
 ---

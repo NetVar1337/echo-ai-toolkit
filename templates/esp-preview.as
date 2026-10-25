@@ -56,6 +56,7 @@ class preview_entity {
 }
 
 array<preview_entity@> g_entities;
+mutex@ g_entities_mx = create_mutex();
 
 // Example entity source — replace with your own (process reads, SDK objects, ...)
 void refresh_entities() {
@@ -68,7 +69,11 @@ void refresh_entities() {
     e.m_alive = true;
     e.m_visible = true;
     next.insertLast(e);
+    // The tick thread publishes the list; the render thread reads it — the
+    // mutex keeps the two from racing on the shared array.
+    g_entities_mx.lock();
     g_entities = next;
+    g_entities_mx.unlock();
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
@@ -124,8 +129,14 @@ void draw() {
     // Draw the in-menu preview widget itself
     g_preview.draw();
 
-    for (uint i = 0; i < g_entities.length(); i++) {
-        preview_entity@ ent = g_entities[i];
+    // Snapshot under the shared lock: the tick thread may replace the array
+    // while the render thread walks it.
+    g_entities_mx.lock_shared();
+    array<preview_entity@> snap = g_entities;
+    g_entities_mx.unlock_shared();
+
+    for (uint i = 0; i < snap.length(); i++) {
+        preview_entity@ ent = snap[i];
         if (ent is null || !ent.m_alive) continue;
 
         // Project the entity to a screen bounding box (user code — replace

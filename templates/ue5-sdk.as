@@ -98,11 +98,15 @@ void do_update() {
     uint64 world      = process::read_uint64(gworld_ptr);
     if (world == 0) return;
 
-    // Camera
+    // Camera — every link is checked so a null pointer is never dereferenced
     uint64 gi      = process::read_uint64(world + OFF_GAMEINSTANCE);
+    if (gi == 0) return;
     uint64 lp_data = process::read_uint64(gi + OFF_LOCALPLAYERS_DATA);
+    if (lp_data == 0) return;
     uint64 local_p = process::read_uint64(lp_data);
+    if (local_p == 0) return;
     uint64 pc      = process::read_uint64(local_p + OFF_PC);
+    if (pc == 0) return;
     uint64 cam     = process::read_uint64(pc + OFF_CAMMANAGER);
     if (cam == 0) return;
 
@@ -189,10 +193,14 @@ void draw_loop() {
 
         // W2S — unreal::w2s writes the screen position and returns false when
         // the point is off-screen or behind the camera
-        vec2 head_scr;
-        if (!unreal::w2s(e.pos + vec3(0, 0, 90), view, head_scr)) continue;
         vec2 feet_scr;
         if (!unreal::w2s(e.pos, view, feet_scr)) continue;
+
+        vec2 head_scr;
+        bool head_ok = unreal::w2s(e.pos.add(vec3(0, 0, 90)), view, head_scr);
+        // Head not on screen: the body is occluded/out of view — fall back to
+        // the feet so only the distance label is drawn, in the dim colour.
+        if (!head_ok) head_scr = feet_scr;
 
         float h = feet_scr.y - head_scr.y;
         if (h < 0.0f) h = -h;
@@ -200,8 +208,8 @@ void draw_loop() {
         float cx = feet_scr.x;
         float cy = head_scr.y;
 
-        color col = (e.team != local_team) ? ui::get(g_col_occluded)
-                                           : ui::get(g_col_visible);
+        color col = head_ok ? ui::get(g_col_visible)
+                            : ui::get(g_col_occluded);
 
         // Cornered box
         if (ui::get(g_show_boxes)) {

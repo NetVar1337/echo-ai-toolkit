@@ -297,7 +297,7 @@ export const register: Register = (on) => {
           gamehacking: {
             command: 'node',
             args: [`${GH_DIR}/dist/index.js`],
-            description: 'mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 16 MCP tools',
+            description: 'mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools',
           },
           rea: {
             command: 'npx',
@@ -319,8 +319,8 @@ export const register: Register = (on) => {
     await $.store.set('echo:setup-done', true);
 
     const manual = [
-      '`/plugin install ponytail --marketplace DietrichGebert/ponytail` — lazy-senior-dev mode',
-      '`/skills install multica-ai/andrej-karpathy-skills` — coding discipline skills',
+      '`/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` — lazy-senior-dev mode',
+      '`/plugin marketplace add multica-ai/andrej-karpathy-skills` then `/plugin install andrej-karpathy-skills@karpathy-skills` — coding discipline skills',
       'IDA Pro MCP — requires IDA 9.4+ with idalib: `uvx ida-mcp`',
       'radare2 MCP — `r2pm -Uci r2mcp`',
     ];

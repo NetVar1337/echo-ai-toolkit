@@ -9,7 +9,7 @@ How to chain echo-esp, echo-aimbot, echo-radar, echo-config, echo-memory, and ec
 
 ## The three-layer model
 
-```
+```text
 Layer 1: Memory Reader (tick thread, 64–128 tps)
   → reads process memory, builds structured data
 
@@ -27,7 +27,7 @@ Layer 3: Renderer + Config (render thread + startup)
 ```angelscript
 mutex@ g_snap_lock = create_mutex();
 
-struct EntityData {
+class EntityData {
     vec3  world_pos, head_pos;
     float sx_head, sy_head, sx_feet, sy_feet;
     int   hp, team;
@@ -37,11 +37,11 @@ struct EntityData {
     uint64 addr;
 }
 
-array<EntityData> g_entities;   // published by the reader, consumed by everyone else
+array<EntityData@> g_entities;   // published by the reader, consumed by everyone else
 
 // Writer (memory reader tick thread):
 void tick_memory() {
-    array<EntityData> frame;
+    array<EntityData@> frame;
     // ... populate from process::read_* calls ...
 
     g_snap_lock.lock();
@@ -50,9 +50,9 @@ void tick_memory() {
 }
 
 // Reader (any other thread): copy under the lock, then use the copy freely
-array<EntityData> read_entities() {
+array<EntityData@> read_entities() {
     g_snap_lock.lock_shared();
-    array<EntityData> snap = g_entities;
+    array<EntityData@> snap = g_entities;
     g_snap_lock.unlock_shared();
     return snap;
 }
@@ -69,7 +69,7 @@ vec3     g_local_pos;
 
 // Memory reader (64 tps)
 void tick_read() {
-    array<EntityData> frame;
+    array<EntityData@> frame;
     // populate using echo-esp entity list patterns
     g_snap_lock.lock();
     g_entities = frame;
@@ -81,16 +81,17 @@ void tick_aim() {
     if (!ui::get(g_aim_on)) return;
     if (!input::key_active(0x02)) return;          // VK_RBUTTON held
 
-    array<EntityData> ents = read_entities();
+    array<EntityData@> ents = read_entities();
     // select target, then move the mouse with input::mouse_move(x, y) — echo-aimbot patterns
 }
 
 // Render: ESP + Radar (every frame)
 void draw() {
-    array<EntityData> ents = read_entities();
+    array<EntityData@> ents = read_entities();
 
     for (uint i = 0; i < ents.length(); i++) {
-        if (!ents[i].alive) continue;
+        EntityData@ e = ents[i];
+        if (e is null || !e.alive) continue;
 
         // ESP: cornered box, health bar, label
         //   render::draw_box(x, y, w, h, r, g, b, a, box_style::CORNERED, 0.15f)
@@ -152,17 +153,18 @@ element handles, then register the save-on-change callback (see the startup sequ
 for the full `main()`):
 
 ```angelscript
+// Auto-save on change via a UI callback (checkbox_callback takes a bool)
+void on_aim_persisted(bool val) {
+    g_cfg.set("aim.on", val);
+    save_config();
+}
+
 // inside main(), after build_menu()
 load_config();
 if (g_cfg.has("aim.fov")) {
     ui::set(g_aim_fov, int(g_cfg.get_float("aim.fov")));
 }
-
-// Auto-save on change via a UI callback (checkbox_callback takes a bool)
-ui::add_checkbox("Aimbot (persisted)", false, function(bool val) {
-    g_cfg.set("aim.on", val);
-    save_config();
-});
+ui::add_checkbox("Aimbot (persisted)", false, @on_aim_persisted);
 ```
 
 ## Loot layer (echo-loot)
@@ -170,22 +172,23 @@ ui::add_checkbox("Aimbot (persisted)", false, function(bool val) {
 Run at a lower rate — items don't move. Keep a separate snapshot.
 
 ```angelscript
-create_thread(8, @tick_loot);   // 8 tps is enough for loot
-
 mutex@ g_loot_lock = create_mutex();
-array<LootEntry> g_loot;
+array<LootEntry@> g_loot;
 
 void tick_loot() {
-    array<LootEntry> items;
+    array<LootEntry@> items;
     // echo-loot scan patterns
     g_loot_lock.lock();
     g_loot = items;
     g_loot_lock.unlock();
 }
 
-void draw() {
+// The loot panel gets its own render callback — registering a second
+// on_render(@draw) would not add a second panel, and two functions named
+// draw() in one script is a redeclaration error.
+void draw_loot() {
     g_loot_lock.lock_shared();
-    array<LootEntry> lsnap = g_loot;
+    array<LootEntry@> lsnap = g_loot;
     g_loot_lock.unlock_shared();
 
     for (uint i = 0; i < lsnap.length(); i++) {
@@ -201,16 +204,32 @@ void draw() {
 | Memory reader | 64 tps | Entity positions, health, bones |
 | Aimbot | 128 tps | High-frequency mouse output |
 | Loot scanner | 8–16 tps | Items don't move fast |
-| Signature scanner | `create_thread(0, @cb)` | One-shot at attach |
+| Signature scanner | synchronous in `main()` | One-shot at attach, before any reader thread starts |
 | Render hook | every frame | `on_render(@draw)` — never read memory here |
 
 ## Startup sequence
 
 ```angelscript
+uint64 g_entity_list = 0;
+
+// echo-memory: scan synchronously, so the reader thread never starts on a
+// half-initialised address
+void scan_sigs() {
+    uint64 base = process::get_module_base("game.exe");
+    if (base == 0) return;
+    g_entity_list = process::find_signature(base, "48 8B 0D ? ? ? ?");
+}
+
 bool main() {
     ui::config_path("my_script");            // echo-config: own config dir + config tab
     build_menu();                            // echo-dev UI patterns
     load_config();                           // echo-config
+
+    // apply the persisted values back onto the element handles
+    if (g_cfg.has("aim.fov")) {
+        ui::set(g_aim_fov, int(g_cfg.get_float("aim.fov")));
+    }
+    ui::add_checkbox("Aimbot (persisted)", false, @on_aim_persisted);
 
     attach_data ad = process::attach("game.exe");
     if (ad.pid == 0) {
@@ -218,11 +237,17 @@ bool main() {
         return false;
     }
 
-    create_thread(0,   @scan_sigs);          // echo-memory: one-shot sig scan
+    scan_sigs();                            // echo-memory: one-shot sig scan, done inline
+    if (g_entity_list == 0) {
+        alert::show_tag("Signature scan failed", "error");
+        return false;
+    }
+
     create_thread(64,  @tick_read);          // echo-esp: entity reads
     create_thread(128, @tick_aim);           // echo-aimbot
     create_thread(8,   @tick_loot);          // echo-loot
     on_render(@draw);                        // echo-esp + echo-radar
+    on_render(@draw_loot);                   // echo-loot panel
     return true;
 }
 
@@ -242,4 +267,8 @@ void on_unload() {
 | One giant `EntityData` for both players and loot | Mismatched schemas | Separate structs per data shape |
 | Aimbot at 8 tps because "scan uses that" | Sluggish, target overshoots | Aimbot gets its own 128 tps thread |
 | Reading memory without attaching | Reads return default values silently | Attach in `main()` and check `ad.pid` |
-| Using `ui::get`/`ui::set` from a tick thread | UI state is owned by the render thread | Read UI values at the start of the tick, store in a local |
+| Creating UI elements from a tick thread | Elements must be created once, in order | Build the menu in `main()`, then only read handles with `ui::get` in the tick |
+
+Echo-specific caveat: reading a UI value with `ui::get` from a tick thread is fine — the
+aimbot tick above does exactly that. What you must not do is *create* elements (`ui::add_*`)
+outside `main()`, or write `ui::set` on a handle the render thread is drawing at the same time.

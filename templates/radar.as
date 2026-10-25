@@ -97,7 +97,7 @@ uint64 get_entity(int idx) {
 // Rotation uses math::forward_vector()/math::right_vector() for the local yaw
 // instead of raw trigonometry.
 void world_to_radar(float dx, float dz, float yaw_deg, float range,
-                    float& px, float& py, bool& on_edge) {
+                    float &out px, float &out py, bool &out on_edge) {
     vec2 angles = vec2(0.0f, -yaw_deg);
     vec3 fwd = math::forward_vector(angles);
     vec3 right = math::right_vector(angles);

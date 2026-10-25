@@ -13,13 +13,18 @@ const uint32 OFFSET_HEALTH_MAX     = 0x5C;   // HealthComponent.maximum
 const uint32 OFFSET_NAME_PTR       = 0x60;   // Il2CppObject.name (pointer to string)
 const uint32 IL2CPP_STRING_CHARS   = 0x14;   // Il2CppString.chars offset
 
+const string GAME_EXE = "Game.exe";   // ← change me to your game's executable
+
 uint64 g_camera_obj = 0;
 uint64 g_obj_manager = 0;
+uint64 g_last_scan = 0;
 
 bool main() {
-    attach_data ad = process::attach("GameAssembly.dll");
+    // process::attach() takes a PROCESS name — GameAssembly.dll is a module
+    // inside that process and is resolved with get_module_base() below.
+    attach_data ad = process::attach(GAME_EXE);
     if (ad.pid == 0) {
-        alert::show("GameAssembly.dll not found");
+        alert::show(GAME_EXE + " not found");
         return false;
     }
 
@@ -67,8 +72,10 @@ matrix4x4 read_matrix16(uint64 addr) {
 
 void tick() {
     // Refresh the object manager occasionally — the pointer can be rebuilt
-    // by the game at any time
-    if (g_obj_manager != 0) return;
+    // by the game at any time, so re-resolve it every few seconds.
+    uint64 now = util::tickcount();
+    if (g_obj_manager != 0 && now - g_last_scan < 5000) return;
+    g_last_scan = now;
 
     uint64 il2cpp_base = process::get_module_base("GameAssembly.dll");
     if (il2cpp_base == 0) return;

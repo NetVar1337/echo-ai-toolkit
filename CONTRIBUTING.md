@@ -9,7 +9,7 @@ process::read_uint64(addr)
 process::find_signature(base, "48 8B 0D ? ? ? ?")
 render::draw_box(x, y, w, h, 255, 0, 0, 255, box_style::FILLED, 0.0f)
 ui::add_checkbox("Enable", false)
-source2::w2s(world_pos, view_matrix, out screen_pos)
+source2::w2s(world_pos, view_matrix, screen)   // bool; screen is a vec2 out-param
 ```
 
 `reference/api.md` is the complete reference; `reference/_API_CONTRACT.md` maps the old

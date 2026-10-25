@@ -125,14 +125,12 @@ console::log("entity_system sig: " + util::to_hex(addr));   // must be non-zero
 
 ## Live offset sources
 
-Check these before doing your own RE — community usually publishes within hours of a patch:
+Check these before doing your own RE — community-run sources, no fixed update cadence:
 
 | Game | Source |
 |------|--------|
-| CS2 | https://github.com/a2x/cs2-offsets |
-| CS2 | https://github.com/frk21/CS2-Offset-Dumper |
-| Valorant | https://github.com/sVathis/Valorant-Offset-Dumper |
-| Apex | https://github.com/dword64/Apex-Legends-SDK-2021 |
+| CS2 | https://github.com/a2x/cs2-dumper |
+| Apex | https://github.com/dword64/Apex-Legends-SDK-Remaster |
 
 Load from JSON at runtime instead of hardcoding volatile pointers:
 

@@ -94,6 +94,22 @@ jobs:
           done
           exit $fail
 
+  angelscript:
+    name: AngelScript compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the AngelScript checker
+        run: ./scripts/angelscript/build.sh
+
+      - name: Compile every template and check the doc code blocks
+        run: |
+          python3 scripts/check_angelscript.py \
+            --root . \
+            --checker "$PWD/scripts/angelscript/check" \
+            --workdir "$RUNNER_TEMP"
+
   plugin:
     name: Plugin validation
     runs-on: ubuntu-latest
