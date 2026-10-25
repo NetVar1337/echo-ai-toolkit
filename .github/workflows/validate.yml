@@ -53,7 +53,7 @@ jobs:
                   l = line.strip()
                   if not l or l.startswith('//'):
                       continue
-                  if re.search(r'\b[a-z_]+::[a-z_0-9]+\s*\(', l):
+                  if re.search(r'\b[a-z][a-z0-9_]*::[a-z][a-z0-9_]*\s*\(', l):
                       out.append(l.rstrip(';').strip())
           seen, res = set(), []
           for s in out:

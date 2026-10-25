@@ -179,12 +179,15 @@ def check_real_api(files: list[Path], root: Path, api_index: Path | None) -> lis
         #   bool value = ui::get(checkbox)
         # Match on the call token anywhere in the line so overloads and
         # assignment-prefixed forms are both captured.
-        for m in re.finditer(r"\b([a-z_]+::[a-z_0-9]+)\s*\(", line):
+        for m in re.finditer(r"\b([a-z][a-z0-9_]*::[a-z][a-z0-9_]*)\s*\(", line):
             known.add(m.group(1))
     if not known:
         return []
 
     namespaces = {ns for ns, _ in (k.split("::", 1) for k in known)}
+    # Third-party drop-in namespaces are not part of the Echo API and are
+    # documented as external (see skills/echo-ecosystem).
+    external = {"esp_layout"}
     call_re = re.compile(r"\b([a-z][a-z0-9_]*)::([a-z][a-z0-9_]*)\s*\(")
 
     violations = []
@@ -202,7 +205,7 @@ def check_real_api(files: list[Path], root: Path, api_index: Path | None) -> lis
                 continue
             scan = strip_inline_code(line)
             for ns, fn in call_re.findall(scan):
-                if ns not in namespaces:
+                if ns not in namespaces or ns in external:
                     continue  # not an Echo namespace — ignore
                 if f"{ns}::{fn}" not in known:
                     violations.append((r, n, f"{ns}::{fn}()", stripped[:120]))
