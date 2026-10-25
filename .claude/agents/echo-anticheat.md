@@ -186,6 +186,65 @@ read_subagent("ac-driver-analyzer")
 
 ---
 
+## Behavioral detection (the layer Echo cannot hide from)
+
+Kernel handle scanning catches process-level access. Behavioral analysis catches *how the player acts* — this operates server-side or inside the game's own telemetry and is completely independent.
+
+| Behavioral signal | What it detects | Echo exposure |
+|---|---|---|
+| Mouse movement entropy | Perfect straight-line or quantized paths | **High** — `mouse.move` with no jitter produces non-human paths |
+| Aim snap events | Sudden large angle changes followed by lock | **High** — `smooth=1` or loose `clamp_angles` snaps visibly |
+| Shot timing regularity | Autofire at exactly 1 shot/tick period | **High** — burst randomization required |
+| Hit rate vs FOV | 95%+ headshot rate within 15° FOV | Medium — may trigger server-side anomaly detection |
+| RCS input correlation | Mouse movement that exactly mirrors recoil pattern | **High** — unnoised RCS is statistically obvious |
+
+**Mitigations:**
+
+```angelscript
+// 1. Per-move jitter
+mouse.move(int(mx + random.float(-0.4f, 0.4f)), int(my + random.float(-0.3f, 0.3f)));
+
+// 2. FOV ≤ 10° for legit; never use rage-FOV on VAC/EAC titles
+
+// 3. Smooth ≥ 4 — prevents snap events in the movement log
+
+// 4. Autofire skip rate (~20%) breaks the periodic firing signature
+void autofire_tick(float fov) {
+    if (fov > 0.6f || random.int(0, 4) == 0) return;
+    mouse.key_tap(0x01);
+}
+
+// 5. RCS noise — don't perfectly cancel recoil
+float rcs_noise = random.float(0.85f, 1.05f); // ±15%
+mouse.move(int(-(dy / sens) * rcs_noise + 0.5f),
+           int(-(dp / sens) * rcs_noise + 0.5f));
+```
+
+## HWID fingerprinting
+
+Hardware bans persist across Windows reinstalls:
+
+| AC | HWID sources used |
+|---|---|
+| Vanguard | CPU serial, GPU UUID, disk serial, NIC MAC, TPM |
+| EAC | Disk serial, NIC MAC, CPU features |
+| BattlEye | Disk serial, NIC MAC, Windows product ID |
+| VAC | Relatively weak; primarily IP + account |
+
+Echo does not trigger HWID bans directly (it doesn't write kernel state). But a ban issued for any other reason will affect the whole machine. Spoofing HWID requires a kernel driver — outside Echo's user-mode scope.
+
+## Detection timeline per AC
+
+| AC | Ban type | Typical delay |
+|---|---|---|
+| VAC | Wave ban (delayed) | Days to weeks — evidence accumulates first |
+| EAC | Real-time + wave | Hours for kernel violations; days for behavioral |
+| BattlEye | Real-time + dynamic | Minutes for kernel; days for behavioral |
+| Vanguard | Near-real-time | Minutes to hours (server confirmation) |
+| FACEIT | Manual review queue | 1–7 days (human reviewers) |
+
+Wave bans are deliberate: the AC accumulates evidence before acting to avoid revealing what triggered detection.
+
 ## Research bibliography
 
 | AC | Key resources |

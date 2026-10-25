@@ -13,6 +13,10 @@ Scripts and templates for the Echo Universal API (AngelScript, Discord overlay, 
 | `echo-anticheat` | AC awareness — detection surface, safe coding patterns, risk matrix |
 | `echo-sdk` | Dumper-7 SDK: UE4/5 entity traversal, FTransform, FName, Valorant GObjects decrypt |
 | `echo-reverse` | RE pipeline: static analysis → Echo runtime; Zydis xref, Unicorn OLLVM, REA, reverse-skill |
+| `echo-config` | Config persistence, HTTP, fs, ws, json, hash_map/hash_set — data layer for any Echo script |
+| `echo-radar` | 2D radar/minimap overlay — world→radar transform, rotating panel, entity dots, edge indicators |
+| `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking, loot panels |
+| `echo-scripts` | Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
 
 Invoke: `Agent: echo-esp — write a CS2 bone ESP with mutex-safe entity buffer`
 

@@ -11,7 +11,6 @@ You write complete aimbot code using Echo's mouse API, math helpers, and process
 
 ```angelscript
 // Convert world position to view angles (pitch, yaw)
-// local_pos, target_pos = vec3; view returned as pitch/yaw in degrees
 void calc_angle(vec3@ local, vec3@ target, float& pitch, float& yaw) {
     float dx = target.x - local.x;
     float dy = target.y - local.y;
@@ -35,6 +34,31 @@ void angle_delta(float cur_pitch, float cur_yaw,
     dp = norm_angle(tgt_pitch - cur_pitch);
     dy = norm_angle(tgt_yaw   - cur_yaw);
 }
+```
+
+## Built-in math helpers
+
+Prefer these over manual implementations — they handle edge cases and coordinate conventions.
+
+```angelscript
+// Normalize angle to [-180, 180] — replaces manual norm_angle()
+float a = math.normalize_angle(raw_angle);
+
+// Shortest signed delta between two angles — replaces norm_angle(target - current)
+float dp = math.angle_diff(cur_pitch, tgt_pitch);
+float dy = math.angle_diff(cur_yaw,   tgt_yaw);
+
+// Clamp pitch and yaw deltas to max degrees per tick (modifies in place)
+math.clamp_angles(dp, dy, 8.0f);
+
+// Smooth toward target — exponential, frame-independent (modifies cur_* in place)
+math.smooth_angles(cur_pitch, cur_yaw, tgt_pitch, tgt_yaw, 0.15f);
+// rate: 0 = no movement, 1 = instant snap
+
+// Unreal Engine — FRotator coordinate system (pitch inverted vs. standard math)
+float ue_pitch, ue_yaw;
+math.unreal_calculate_angle(local_pos, target_pos, ue_pitch, ue_yaw);
+math.unreal_smooth_rotation(cur_pitch, cur_yaw, ue_pitch, ue_yaw, 0.12f);
 ```
 
 ## Mouse delta conversion
@@ -71,8 +95,6 @@ float fov_to_target(float view_pitch, float view_yaw,
 ## Target selection
 
 ```angelscript
-// Finds entity with smallest FOV to crosshair within fov_limit
-// Returns entity index, -1 if none
 int select_target(process@ proc, uint64 entity_list, int local_team,
                   vec3@ local_pos, float view_pitch, float view_yaw,
                   float fov_limit, float max_dist) {
@@ -107,7 +129,6 @@ int select_target(process@ proc, uint64 entity_list, int local_team,
 ```angelscript
 // head=9, neck=8, chest=7
 int aim_bone(int mode) {
-    // mode: 0=head, 1=neck, 2=chest
     int bones[] = {9, 8, 7};
     return bones[mode];
 }
@@ -138,8 +159,6 @@ float bezier_lerp(float t, float p0, float p1, float p2) {
 ## Velocity prediction
 
 ```angelscript
-// predicted_pos = bone_pos + velocity * travel_time
-// travel_time = distance / bullet_speed
 vec3@ predict_pos(vec3@ bone, vec3@ velocity, float dist, float bullet_speed) {
     float travel = dist / bullet_speed;
     vec3@ pred = vec3(bone.x + velocity.x * travel,
@@ -148,8 +167,6 @@ vec3@ predict_pos(vec3@ bone, vec3@ velocity, float dist, float bullet_speed) {
     return pred;
 }
 
-// Read entity velocity (offset varies per game)
-// CS2: m_vecVelocity near 0x1294; typically vec3 at entity + 0x1254
 vec3@ read_velocity(process@ proc, uint64 entity) {
     vec3@ v = vec3();
     v.read(proc, entity + 0x1254); // verify offset
@@ -161,7 +178,6 @@ vec3@ read_velocity(process@ proc, uint64 entity) {
 
 ```angelscript
 // Read m_aimPunchAngle from local player, scale by 2 (CS2 server-side factor)
-// and subtract from angle delta before applying move
 void apply_recoil(process@ proc, uint64 local_player, float& dp, float& dy) {
     float punch_pitch = proc.read<float>(local_player + 0x1450); // verify
     float punch_yaw   = proc.read<float>(local_player + 0x1454);
@@ -174,9 +190,8 @@ void apply_recoil(process@ proc, uint64 local_player, float& dp, float& dy) {
 
 ```angelscript
 // Fire when crosshair is within tiny FOV of target bone
-// Uses mouse.key_tap to simulate a click
 void triggerbot_tick(float fov_to_best_target) {
-    float trigger_fov = 0.5f; // very tight
+    float trigger_fov = 0.5f;
     if (fov_to_best_target < trigger_fov) {
         mouse.key_tap(0x01); // VK_LBUTTON
     }
@@ -193,15 +208,13 @@ struct BoneFrame {
     uint64 timestamp;
 }
 
-BoneFrame bt_buffer[][BT_FRAMES]; // [entity][frame]
-int       bt_head[];              // ring buffer head per entity
+BoneFrame bt_buffer[][BT_FRAMES];
+int       bt_head[];
 
-// Push frame in tick:
 void bt_push(int ent_idx, BoneFrame@ frame) {
     bt_head[ent_idx] = (bt_head[ent_idx] + 1) % BT_FRAMES;
     bt_buffer[ent_idx][bt_head[ent_idx]] = frame;
 }
-
 // Select frame: pick oldest within server tick lag window
 // Aim at bt_buffer[ent_idx][(bt_head[ent_idx] + 1) % BT_FRAMES].pos[bone]
 ```
@@ -212,24 +225,30 @@ void bt_push(int ent_idx, BoneFrame@ frame) {
 // Add small random jitter to mouse delta
 float jitter() { return random.float(-0.3f, 0.3f); }
 
-// Vary tick rate slightly
-// create_thread(128 + random.int(-3, 3), @aim_tick);
-
 // Cap max mouse move per tick to avoid snap detection
 float mx_capped = clamp(mx, -20.0f, 20.0f);
+
+// Seed randomizer at startup for reproducible jitter patterns per session
+util.seed_random(uint(time.now() & 0xFFFF));
 ```
 
 ## Key bind pattern
 
 ```angelscript
-// Toggle mode: key press flips state
+// Hold mode — active while key is physically held (most common for aimbot)
+bool aim_active = input.key_active(0x02); // RMB
+
+// Toggle mode — press once to flip state; Echo stores toggle state internally
+bool aim_active = input.key_toggled(0x02); // RMB
+// key_active(vk)  → true only while key is physically down
+// key_toggled(vk) → alternates true/false on each key press; no per-script state needed
+
+// Manual toggle (legacy fallback when input.* is unavailable):
 bool aim_active = false;
 bool last_key   = false;
-
 void check_keybind(int vk) {
     bool cur = keyboard.get_key_state(vk) != 0;
-    if (cur && !last_key) aim_active = !aim_active; // toggle on press
-    // For hold mode: aim_active = keyboard.get_key_state(vk) != 0;
+    if (cur && !last_key) aim_active = !aim_active;
     last_key = cur;
 }
 ```
@@ -238,7 +257,7 @@ void check_keybind(int vk) {
 
 ```angelscript
 process@   proc;
-uint64     entity_list_addr = 0;
+uint64     entity_list_addr  = 0;
 uint64     local_player_addr = 0;
 
 tab@        t;
@@ -259,7 +278,7 @@ bool main() {
     triggerbot_on = cat.add_checkbox("Triggerbot", false, "aim.trigger");
 
     proc = process.attach("cs2.exe");
-    if (proc is null) { alert("Attach failed"); return false; }
+    if (proc is null) { alert.show("Attach failed"); return false; }
 
     create_thread(0,   @on_attach);
     create_thread(128, @aim_tick);
@@ -267,17 +286,15 @@ bool main() {
 }
 
 void on_attach() {
-    entity_list_addr = /* pattern scan and resolve */0;
-    local_player_addr = /* local player pattern */0;
-    alert("Aimbot attached");
+    entity_list_addr  = /* pattern scan and resolve */ 0;
+    local_player_addr = /* local player pattern */ 0;
+    alert.show("Aimbot attached");
 }
 
 void aim_tick() {
     if (!aim_on.get()) return;
-    check_keybind(0x02); // RMB hold — swap for toggle via aim_active flag
-    if (!aim_active) return;
+    if (!input.key_active(0x02)) return; // RMB hold
 
-    // Read view angles
     float view_pitch = proc.read<float>(local_player_addr + 0x1658); // verify
     float view_yaw   = proc.read<float>(local_player_addr + 0x165C);
 
@@ -285,36 +302,32 @@ void aim_tick() {
     local_origin.read(proc, local_player_addr + 0x1294);
 
     int local_team = proc.read<int>(local_player_addr + 0x3CB);
-    float fov_limit = aim_fov.get();
 
     int best = select_target(proc, entity_list_addr, local_team,
                              local_origin, view_pitch, view_yaw,
-                             fov_limit, 500.0f);
+                             aim_fov.get(), 500.0f);
     if (best < 0) return;
 
-    uint64 ent = get_entity(proc, entity_list_addr, best);
-    int bone_mode = aim_bone_sel.get();
-    int bone_idx  = aim_bone(bone_mode);
+    uint64 ent      = get_entity(proc, entity_list_addr, best);
+    int    bone_idx = aim_bone(aim_bone_sel.get());
 
-    BonePos bp = read_bone_cs2(proc, ent, bone_idx);
-    vec3@ bone_pos = vec3(bp.x, bp.y, bp.z);
+    BonePos bp       = read_bone_cs2(proc, ent, bone_idx);
+    vec3@   bone_pos = vec3(bp.x, bp.y, bp.z);
 
-    // Velocity prediction
-    vec3@ vel   = read_velocity(proc, ent);
-    float dist  = entity_dist(local_origin, bone_pos);
-    vec3@ pred  = predict_pos(bone_pos, vel, dist, 1500.0f); // 1500 u/s approx
+    vec3@ vel  = read_velocity(proc, ent);
+    float dist = entity_dist(local_origin, bone_pos);
+    vec3@ pred = predict_pos(bone_pos, vel, dist, 1500.0f);
 
     float tgt_pitch, tgt_yaw;
     calc_angle(local_origin, pred, tgt_pitch, tgt_yaw);
 
-    float dp, dy;
-    angle_delta(view_pitch, view_yaw, tgt_pitch, tgt_yaw, dp, dy);
+    float dp = math.angle_diff(view_pitch, tgt_pitch);
+    float dy = math.angle_diff(view_yaw,   tgt_yaw);
     apply_recoil(proc, local_player_addr, dp, dy);
+    math.clamp_angles(dp, dy, 15.0f);
 
     float mx, my;
-    float factor = aim_smooth.get();
-    smooth_linear(dp, dy, factor, mx, my);
-
+    smooth_linear(dp, dy, aim_smooth.get(), mx, my);
     mx += jitter(); my += jitter();
     mouse.move(int(mx + 0.5f), int(my + 0.5f));
 
@@ -327,11 +340,112 @@ void aim_tick() {
 void on_unload() { proc = null; }
 ```
 
+## Recoil Control System (RCS standalone)
+
+RCS compensates for weapon spray by reading `m_aimPunchAngle` and counteracting it with mouse movement — independent of the aimbot lock.
+
+```angelscript
+// Read current punch angles each tick
+float g_last_punch_pitch = 0.0f;
+float g_last_punch_yaw   = 0.0f;
+
+void rcs_tick(process@ proc, uint64 local_player) {
+    float punch_pitch = proc.read<float>(local_player + 0x1450) * 2.0f; // CS2 ×2 factor
+    float punch_yaw   = proc.read<float>(local_player + 0x1454) * 2.0f;
+
+    // Delta from last tick — compensate only the *change*, not the whole angle
+    float dp = punch_pitch - g_last_punch_pitch;
+    float dy = punch_yaw   - g_last_punch_yaw;
+    g_last_punch_pitch = punch_pitch;
+    g_last_punch_yaw   = punch_yaw;
+
+    if (abs(dp) < 0.01f && abs(dy) < 0.01f) return; // no new recoil
+
+    float sens = 1.0f * 0.022f;
+    float mx   = -(dy / sens);
+    float my   = -(dp / sens);
+    // Clamp: never compensate more than a plausible human correction
+    mouse.move(int(clamp(mx, -25.0f, 25.0f)), int(clamp(my, -25.0f, 25.0f)));
+}
+```
+
+## Rage vs legit mode
+
+```angelscript
+combobox@ aim_mode; // "Legit", "Rage"
+
+bool is_rage_mode() { return aim_mode.get() == 1; }
+
+// Legit: small FOV, heavy smooth, only hold key
+// Rage: wide FOV, snap, any key or always-on
+void aim_tick() {
+    float fov_limit = is_rage_mode() ? 180.0f : aim_fov.get();
+    float smooth    = is_rage_mode() ? 1.0f   : aim_smooth.get();
+    bool  key_held  = is_rage_mode() ? true   : input.key_active(0x02);
+    if (!key_held) return;
+
+    // ...select target, calc angle delta dp, dy...
+
+    math.clamp_angles(dp, dy, is_rage_mode() ? 45.0f : 10.0f);
+
+    float mx = (dy / smooth) / (1.0f * 0.022f);
+    float my = (dp / smooth) / (1.0f * 0.022f);
+    if (!is_rage_mode()) { mx += jitter(); my += jitter(); }
+    mouse.move(int(mx + 0.5f), int(my + 0.5f));
+}
+```
+
+## Autofire with burst timing
+
+Autofire holds LMB while on target. Burst mode fires N rounds, then pauses to reset spray.
+
+```angelscript
+const int   BURST_SIZE   = 3;   // rounds per burst
+const float BURST_GAP_MS = 200.0f; // pause between bursts (ms)
+
+int   g_burst_count = 0;
+uint64 g_burst_last  = 0;
+
+void autofire_tick(float fov_to_best) {
+    bool on_target = fov_to_best < 0.6f;
+
+    if (!on_target) {
+        g_burst_count = 0; // reset burst on lost target
+        return;
+    }
+
+    uint64 now = time.now();
+
+    // Burst mode: fire BURST_SIZE shots, then pause
+    if (g_burst_count >= BURST_SIZE) {
+        if (float(now - g_burst_last) < BURST_GAP_MS) return;
+        g_burst_count = 0;
+    }
+
+    mouse.key_down(0x01);  // hold LMB
+    // Release on next tick to simulate single press:
+    create_thread(0, @function() {
+        time.sleep(10);
+        mouse.key_up(0x01);
+    });
+
+    g_burst_count++;
+    g_burst_last = now;
+}
+
+// Continuous mode (no burst limit):
+void autofire_continuous(float fov_to_best) {
+    if (fov_to_best < 0.5f) mouse.key_tap(0x01);
+}
+```
+
 ## Dev tips
 
 - 128 tps gives ~8ms per tick; aimbot needs high rate for responsiveness.
 - Always read view angles fresh each tick — stale angles cause snapping.
 - `smooth_linear` with factor ~5–8 feels natural; tweak per sensitivity.
 - For DPI-agnostic mouse delta: compute the exact angle delta and divide by `(sens * yaw_factor)` rather than using pixel heuristics.
+- For UE games use `math.unreal_calculate_angle` + `math.unreal_smooth_rotation` — they handle FRotator's inverted pitch convention correctly; `calc_angle` gives wrong results on UE targets.
+- Prefer `input.key_active(vk)` for hold-mode and `input.key_toggled(vk)` for toggle-mode; both avoid the manual last-key state machine.
 - mcp-gamehacking `get_agent_briefing("cheat-developer")` has detailed aimbot architecture notes.
 - Combine with echo-esp agent for shared entity data via a shared mutex-protected array.

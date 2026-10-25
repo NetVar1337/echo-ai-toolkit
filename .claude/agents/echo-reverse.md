@@ -228,6 +228,92 @@ decompile function <name>
 list imports
 ```
 
+## Obfuscation classification decision tree
+
+Before choosing a deobfuscation strategy, classify what you're dealing with:
+
+```
+1. Unusual section names (.vmp, .themida, .oreans)?
+   YES → Commercial packer: use VMP/devirt stack (see VMP section above)
+
+2. Function control flow is a loop dispatching on a state variable?
+   YES → OLLVM Control-Flow Flattening:
+         → Unicorn trace to record state transitions
+         → LLVM CFF passes (D810 or custom) to reconstruct linear CFG
+
+3. Large arithmetic expressions with no semantic purpose (XOR/AND/OR chains)?
+   YES → Mixed Boolean Arithmetic (MBA):
+         → LLVM z3-backed MBA simplifier, or Triton symbolic execution
+
+4. Binary encrypts its own code sections at runtime?
+   Signs: entry point is a loader; target is MEM_PRIVATE + PAGE_EXECUTE_READWRITE
+   YES → Dump after unpacking (vmp-lazy-unpack or manual OEP breakpoint)
+
+5. CALL [rax+N] throughout, rax loaded from a runtime-updated pointer table?
+   YES → VMProtect import obfuscation:
+         → Unicorn trace the startup routine to resolve the pointer table
+
+6. None of the above?
+   → Likely simple XOR/key decrypt — Unicorn emulate the loop and read result
+```
+
+## REA MCP: actual tool invocations
+
+With the `rea` MCP connected, these are the calls that matter for game RE:
+
+```
+# Unity IL2CPP — get all class/field offsets from metadata
+inspect_unity_il2cpp("GameAssembly.dll", "global-metadata.dat")
+→ Returns JSON: { "ClassName": { "field_name": offset_hex, ... }, ... }
+
+# Godot PCK — inspect archive, get embedded scripts
+inspect_godot_pck("path/to/game.pck")
+
+# WASM — decompile browser game module
+inspect_wasm_artifact("path/to/game.wasm")
+
+# Native binary — Ghidra-backed pseudocode
+inspect_binary("path/to/client.dll")
+→ Returns decompiled functions, imports, exports, strings
+
+# APK — Android game
+inspect_apk_signature("path/to/game.apk")
+
+# Network — replay HAR for protocol RE
+analyze_har("path/to/capture.har")
+```
+
+**REA output → Echo offsets:**
+```
+1. inspect_unity_il2cpp("GameAssembly.dll", "global-metadata.dat")
+2. Locate: "PlayerController": { "health": "0x18", "transform": "0x10" }
+3. Echo: int hp = proc.read<int>(player_obj + 0x18);
+4. Verify: hp ≈ 100 on a freshly spawned player
+```
+
+## binary-differ step-by-step
+
+After a game patch, use mcp-gamehacking `binary-differ` to find changed functions and new signatures:
+
+```
+# Step 1: invoke binary-differ
+read_subagent("binary-differ")
+→ Prompt: "diff client_old.dll vs client_new.dll, focus on GEntitySystem and W2S"
+
+# Step 2: binary-differ returns:
+#   Function 0x1A3BC0 changed: 7 bytes at +0x12 differ
+#   New unique surroundings: "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 0A 8B"
+
+# Step 3: update the scan_ida pattern
+uint64 entity_sys = proc.resolve_rip(
+    proc.scan_ida("48 8B 0D ? ? ? ? 48 85 C9 74 0A 8B", "client.dll"), 3, 7);
+
+# Step 4: validate
+int32 count = proc.read<int32>(entity_sys + 0x10);
+if (count < 1 || count > 64)
+    alert.show_tag(fmt("unexpected entity count: {}", count), "error");
+```
+
 ## mcp-gamehacking RE tools
 
 With the `gamehacking` MCP wired up, these subagents help directly:
