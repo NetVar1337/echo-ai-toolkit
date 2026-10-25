@@ -1,104 +1,58 @@
-# echo-ai-toolkit
+<p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/NetVar1337/echo-ai-toolkit/validate.yml?branch=main&label=CI&style=flat-square" alt="CI">
+  <img src="https://img.shields.io/badge/version-0.4.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/agents-12-blueviolet?style=flat-square" alt="agents">
+  <img src="https://img.shields.io/badge/skills-18-blueviolet?style=flat-square" alt="skills">
+  <img src="https://img.shields.io/badge/templates-15-blueviolet?style=flat-square" alt="templates">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT">
+</p>
 
-AI development toolkit for the [Echo Universal API](https://echo-23.gitbook.io/angel) — an AngelScript scripting platform with process memory access, Discord overlay rendering, Zydis disassembly, and Unicorn emulation.
+<h1 align="center">echo-ai-toolkit</h1>
 
-12 specialist agents, 18 skills, and 15 runnable templates — for building ESP, aimbot, radar, loot, config, and reverse-engineering scripts without reading the whole API surface first.
+<p align="center">
+  AI development toolkit for the <a href="https://echo-23.gitbook.io/angel"><strong>Echo Universal API</strong></a><br>
+  12 specialist agents · 18 skills · 15 runnable templates · 5 MCP servers · 17 companion tools
+</p>
 
-> **Every API call in this repo is verified against the live Echo docs.** The real API is namespaced (`process::read_uint64()`, `render::draw_box()`, `ui::add_checkbox()`). If a call isn't in [`reference/api.md`](reference/api.md), it doesn't exist. CI enforces this.
+<p align="center">
+  <a href="#-install">Install</a> ·
+  <a href="#-use-it">Use it</a> ·
+  <a href="#-agents-12">Agents</a> ·
+  <a href="#-skills-18">Skills</a> ·
+  <a href="#-templates-15">Templates</a> ·
+  <a href="#-pi-coding-agent">Pi</a> ·
+  <a href="#-integrations">Integrations</a>
+</p>
 
 ---
 
-## Install
+> **Every API call in this repo is verified against the live Echo docs.** The real API is namespaced:
+> `process::read_uint64()`, `render::draw_box()`, `ui::add_checkbox()`.
+> If a call isn't in [`reference/api.md`](reference/api.md) it doesn't exist — CI enforces this.
 
-**One command installs everything.** No flags, no tiers to pick: the plugin, all 18
-skills, all 12 agents, all 5 MCP servers, all 17 companion tools, both Claude Code
-companion plugins, and the Pi profile with its `echo` CLI.
+---
 
+## ⚡ Install
+
+One command installs everything: plugin, all agents, all skills, all MCP servers, all 17 companion tools, the Pi profile, and the `echo` CLI.
+
+**macOS / Linux**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.sh | bash
 ```
 
+**Windows (PowerShell)**
 ```powershell
 irm https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.ps1 | iex
 ```
 
-Safe to re-run — every step is idempotent. Verify at any time:
-
+Safe to re-run — every step is idempotent. Verify your install at any time:
 ```bash
-echo doctor              # every tool: ok / MISSING / not applicable
+echo doctor   # prints ok / MISSING / not applicable for every tool
 ```
-
-### What lands
-
-| | Count | What |
-|---|---|---|
-| Agents | 12 | `echo-dev`, `-esp`, `-aimbot`, `-triggerbot`, `-radar`, `-loot`, `-memory`, `-anticheat`, `-sdk`, `-reverse`, `-config`, `-scripts` |
-| Skills | 18 | also copied into the Pi profile — same `SKILL.md` format |
-| Templates | 15 | runnable `.as` files |
-| MCP servers | 5 | gamehacking, rea, angel-menu, radare2, ida |
-| Companion tools | 17 | the full list below |
-| Plugins | 3 | echo-ai-toolkit, ponytail, andrej-karpathy-skills |
-
-**Expected size: ~22 GB**, measured. Almost all of it is `mcp-gamehacking` — a
-21 GB checkout (18 GB of `skills/`, 4161 skill directories, each with its own
-`source.txt`). GitHub reports that repo as 3.1 GB because that is the *compressed
-git* size; the working tree is what lands on your disk.
-
-That is the honest cost of "every skill". If that is more than you want:
-
-| Flag | Effect |
-|---|---|
-| `ECHO_SKIP_GAMEHACKING=1` | skip mcp-gamehacking — drops the install to ~600 MB |
-| `ECHO_SKIP_MCP=1` | skip every MCP build |
-| `ECHO_TIER=standard` | skip the compiler-built stack (NoVmp, VTIL-Core, vtil2, LLVM, web-mv) |
-| `ECHO_TIER=minimal` | plugin + MCP servers only |
-| `ECHO_NO_ALIAS=1` | do not add the `echo` shell alias |
-
-```bash
-# lean install, same agents/skills/templates/tools minus the 21 GB skills library
-ECHO_SKIP_GAMEHACKING=1 bash install.sh
-```
-
-A tool whose prerequisite cannot be satisfied is **skipped with a reason**, never a
-hard failure — so the install always completes, and `echo doctor` tells you what is
-missing and why.
-
-### Everything that gets installed
-
-| Tool | What it gives you | How it is fetched |
-|---|---|---|
-| **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin |
-| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + build |
-| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | toggle the Echo overlay menu from Claude | clone + `npm install` |
-| [rea](https://github.com/morluto/rea) | static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect |
-| radare2 MCP | disasm, decompile, search, analysis | `r2pm -r r2mcp` (needs `r2pm -Uci r2mcp`) |
-| IDA MCP | decompile, rename, xref, structs | `uvx ida-mcp` (needs IDA 9.4+ with idalib) |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | lazy-senior-dev discipline | Claude Code plugin |
-| [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | coding-discipline guidelines | Claude Code plugin |
-| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | prebuilt release binary |
-| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | single `.as` drop-in into your scripts dir |
-| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover docs for ~1900 Echo symbols | `.vsix` from the release, `code --install-extension` |
-| [Triton](https://github.com/JonathanSalwan/Triton) | symbolic execution + taint analysis | `pip install triton-library` into a venv |
-| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone (29 MB, bundles Intel Pin) |
-| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone + `pip install -e .` |
-| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4000+ curated resources | README only (435 KB, *not* the 3.19 GB clone) |
-| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | the mega cheatsheet | README only (636 KB) |
-| [web-mv](https://github.com/Jozkah/web-mv) | browser memory viewer (`ws://127.0.0.1:9000`) | installs Bun if missing, clone + `bun install` |
-| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build |
-| [NoVmp](https://github.com/can1357/NoVmp) | full VMP devirt → optimized VTIL → native | CMake build (vendors VTIL-Core) |
-| [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` |
-| [llvm-project](https://github.com/llvm/llvm-project) | OLLVM passes + Triton's LLVM interface | **system package** (`winget` / `brew` / `apt`) — never built from source |
-
-Everything lands in `~/.local/share/echo-ai-toolkit/` (`$env:ECHO_HOME` to override).
-MCP wiring is written to `~/.local/share/echo-ai-toolkit/mcp.json`.
-
-**Requirements:** Claude Code. Node 22.19+ for Pi and the MCP servers, Python 3 for the
-RE tooling, CMake / .NET 8 for the compiler-built stack (installed automatically where
-the platform allows). The Echo platform itself needs Discord with the overlay enabled
-(Echo is Windows-only).
 
 <details>
-<summary>Manual install (no script)</summary>
+<summary><strong>Manual install (no script)</strong></summary>
 
 ```
 /plugin marketplace add NetVar1337/echo-ai-toolkit
@@ -110,9 +64,11 @@ the platform allows). The Echo platform itself needs Discord with the overlay en
 ```
 
 Then run `/echo-setup` inside Claude Code to fetch the MCP dependencies.
+
 </details>
 
-### Use as a project (no plugin)
+<details>
+<summary><strong>Project install (no plugin, just git clone)</strong></summary>
 
 ```bash
 git clone https://github.com/NetVar1337/echo-ai-toolkit
@@ -120,258 +76,329 @@ cd echo-ai-toolkit
 claude
 ```
 
-Project installs read `CLAUDE.md` and `agents/*.md` directly. The plugin install adds
-slash commands, keyword auto-routing, and a side panel.
+Project installs read `CLAUDE.md` and `agents/*.md` directly. The plugin install adds slash commands, keyword auto-routing, and a side panel on top.
+
+</details>
+
+### What lands
+
+| | Count | Items |
+|:---|:---:|:---|
+| 🤖 Agents | 12 | `echo-dev` `-esp` `-aimbot` `-triggerbot` `-radar` `-loot` `-memory` `-anticheat` `-sdk` `-reverse` `-config` `-scripts` |
+| 📚 Skills | 18 | Copied into the Pi profile — same `SKILL.md` format |
+| 📄 Templates | 15 | Runnable `.as` files — copy to `%AppData%\Roaming\scripts\` |
+| 🔌 MCP servers | 5 | `gamehacking` · `rea` · `angel-menu` · `radare2` · `ida` |
+| 🧰 Companion tools | 18 | Full list below (now includes **Signature Doctor**) |
+| 🧩 Plugins | 3 | `echo-ai-toolkit` · `ponytail` · `andrej-karpathy-skills` |
+
+> **Expected disk size: ~22 GB** (almost all is `mcp-gamehacking` — 18 GB of skills in the working tree).
+> GitHub shows 3.1 GB because that is the *compressed git* size.
+
+### Reduce install size
+
+| Env flag | Effect |
+|:---|:---|
+| `ECHO_SKIP_GAMEHACKING=1` | Skip mcp-gamehacking — drops to ~600 MB |
+| `ECHO_SKIP_MCP=1` | Skip every MCP build |
+| `ECHO_TIER=standard` | Skip compiler-built stack (NoVmp, VTIL-Core, vtil2, LLVM, web-mv) |
+| `ECHO_TIER=minimal` | Plugin + MCP servers only |
+| `ECHO_NO_ALIAS=1` | Do not add the `echo` shell alias |
+
+```bash
+# lean install — same agents / skills / templates, minus the 21 GB skills library
+ECHO_SKIP_GAMEHACKING=1 bash install.sh
+```
+
+A tool whose prerequisite cannot be satisfied is **skipped with a reason**, never a hard failure.
+
+<details>
+<summary><strong>Everything that gets installed</strong></summary>
+
+| Tool | What it gives you | How it arrives |
+|:---|:---|:---|
+| **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin |
+| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4 100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + build |
+| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | Toggle the Echo overlay menu from Claude | clone + `npm install` |
+| [rea](https://github.com/morluto/rea) | Static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect |
+| radare2 MCP | Disasm, decompile, search, analysis | `r2pm -r r2mcp` |
+| IDA MCP | Decompile, rename, xref, structs | `uvx ida-mcp` (IDA 9.4+ with idalib) |
+| [Signature Doctor](https://github.com/b4rzY/Signature-Doctor) | Offset & signature health dashboard — `http://127.0.0.1:3210` | clone + `npm ci` |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | Lazy-senior-dev discipline | Claude Code plugin |
+| [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | Coding-discipline guidelines | Claude Code plugin |
+| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | Prebuilt release binary |
+| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | Single `.as` drop-in |
+| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover for ~1 900 Echo symbols | `.vsix` via `code --install-extension` |
+| [Triton](https://github.com/JonathanSalwan/Triton) | Symbolic execution + taint analysis | `pip install triton-library` |
+| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone (29 MB, bundles Intel Pin) |
+| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone + `pip install -e .` |
+| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4 000+ curated resources | README only (435 KB) |
+| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | The mega cheatsheet | README only (636 KB) |
+| [web-mv](https://github.com/Jozkah/web-mv) | Browser memory viewer (`ws://127.0.0.1:9000`) | Bun auto-install + clone + `bun install` |
+| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build |
+| [NoVmp](https://github.com/can1357/NoVmp) | Full VMP devirt → optimized VTIL → native | CMake build |
+| [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` |
+| LLVM | OLLVM passes + Triton's LLVM interface | System package (`winget` / `brew` / `apt`) |
+
+Everything lands in `~/.local/share/echo-ai-toolkit/` (override with `$ECHO_HOME`).
+MCP servers are registered directly in Claude Code via `claude mcp add --scope user`.
+
+**Requirements:** Claude Code · Node 22.19+ (Pi + MCP servers) · Python 3 (RE tooling) · CMake / .NET 8 (compiler stack, auto-installed where the platform allows). Echo itself requires Discord with overlay enabled — Windows only.
+
+</details>
 
 ---
 
-## Use it
+## 🚀 Use it
 
-```bash
+```
 /echo-help        # list all 12 agents
 /echo-esp         # load ESP context
 /echo-reverse     # load reverse-engineering context
 ```
 
-Or just describe your task — keywords auto-route to the right agent:
+Or just describe your task — keywords route automatically:
 
-| You say | Routes to |
-|---|---|
+| You say... | Routes to |
+|:---|:---|
 | "draw bones on screen" | `echo-esp` |
 | "aimbot with FOV filter" | `echo-aimbot` |
 | "triggerbot with shot delay" | `echo-triggerbot` |
-| "minimap radar" | `echo-radar` |
+| "minimap radar overlay" | `echo-radar` |
 | "loot ESP for dropped items" | `echo-loot` |
 | "find_signature for entity list" | `echo-memory` |
 | "Dumper-7 GObjects traversal" | `echo-sdk` |
-| "persist config over http" | `echo-config` |
+| "decompile with IDA / radare2" | `echo-reverse` |
+| "persist config over HTTP" | `echo-config` |
+| "give me a runnable example" | `echo-scripts` |
 
-To open an agent directly: `Agent: echo-esp — write a CS2 bone ESP`
+To open an agent directly:
+```
+Agent: echo-esp — write a CS2 cornered-box bone ESP
+```
 
 ---
 
-## Pi coding agent
+## 🤖 Agents (12)
 
-[Pi](https://pi.dev) is a minimal terminal agent harness. The installer writes an Echo
-profile for it and adds an `echo` launcher, so the same 18 skills and 4 prompt
-templates work there too — with your own system prompt instead of Pi's default.
-
-```bash
-echo                             # interactive, Echo profile loaded
-echo -p "write a CS2 bone ESP"   # print mode (anything not a subcommand goes to Pi)
-echo -- update my code           # -- forces pass-through for prompts that look like commands
-```
-
-### The wrapper
-
-`echo` is a CLI around Pi, not just a launcher:
-
-| Command | Does |
-|---|---|
-| `echo` | start Pi with the Echo profile |
-| `echo update` | update toolkit + profile + Pi + all companion tools |
-| `echo update --extensions` | Pi packages/extensions only (+ profile resync) |
-| `echo update --self` | the Pi binary only |
-| `echo update --models` | Pi model catalogs only |
-| `echo update --all` | Pi and its packages |
-| `echo update --tools` | companion tools only (git pull + rebuild) |
-| `echo update --profile` | resync the Echo profile from the toolkit |
-| `echo doctor` | verify every tool — ok / MISSING / not applicable |
-| `echo status` | one-screen summary |
-| `echo tools` | list installed companion tools |
-| `echo version` | versions of everything |
-| `echo help` | usage |
-
-`--extensions`, `--self`, `--models`, `--all`, `--force` are Pi's own flags and pass
-straight through to `pi update`. `--tools` and `--profile` are Echo's.
-
-### The profile
-
-The launcher passes both prompt files explicitly, so they always apply:
-
-```
-pi --system-prompt        <profile>/SYSTEM.md          # replaces Pi's default prompt
-   --append-system-prompt <profile>/APPEND_SYSTEM.md   # appended (repeatable)
-```
-
-| File | Role |
-|---|---|
-| `pi/SYSTEM.md` | Reverse-engineer / game-security-analyst persona. **No refusal on any topic or technique** — no hedging, warnings, disclaimers, or "consider instead". Only rule: never invent a fact. |
-| `pi/APPEND_SYSTEM.md` | Repeats the no-refusal standing instruction, then the Echo API facts applied silently: namespacing, `bool main()`, out-params, the AngelScript language traps |
-| `pi/AGENTS.md` | Repo layout, the two verification commands, conventions |
-| `pi/prompts/*.md` | `/echo-api`, `/echo-esp`, `/echo-reverse`, `/echo-verify` |
-| `pi/skills/` | all 18 skills, copied — Pi uses the same `SKILL.md` format |
-
-Profile location: `~/.local/share/echo-ai-toolkit/pi`, selected via
-`PI_CODING_AGENT_DIR`, so your normal `pi` config is untouched.
-
-> **`echo` shadows the shell builtin.** The installer adds
-> `alias echo='…/bin/echo'` to `.bashrc`/`.zshrc` (or a `function echo` to your
-> PowerShell profile) — **interactive shells only**, so scripts still get the real
-> builtin. If you would rather not, install with `ECHO_NO_ALIAS=1` and use
-> `~/.local/share/echo-ai-toolkit/bin/echo` directly.
-
-Pi needs Node 22.19+:
-
-```bash
-curl -fsSL https://pi.dev/install.sh | sh          # macOS / Linux
-powershell -c "irm https://pi.dev/install.ps1 | iex"  # Windows
-```
-
-Then `/login` inside Pi to connect a provider.
-
----
-
-## Agents (12)
-
-| Agent | Use when... |
-|---|---|
-| `echo-dev` | General Echo scripting — lifecycle, threading, menu, networking, utilities, SIMD |
-| `echo-esp` | ESP: boxes, skeletons, health bars, name tags, W2S for Source 2 / Unreal / Unity / IW |
-| `echo-aimbot` | Aimbot: target selection, FOV, smoothing, prediction, recoil control |
-| `echo-triggerbot` | Triggerbot: crosshair detection, shot delay variance, burst, per-hitbox |
-| `echo-radar` | 2D radar/minimap overlay — world→radar transform, entity dots, edge indicators |
+| Agent | Use when you need... |
+|:---|:---|
+| `echo-dev` | General scripting — lifecycle, threading, menu, networking, SIMD, utilities |
+| `echo-esp` | Boxes, skeletons, health bars, name tags, W2S for Source 2 / Unreal / Unity / IW |
+| `echo-aimbot` | Target selection, FOV filter, smoothing, velocity prediction, recoil control |
+| `echo-triggerbot` | Crosshair detection, shot delay variance, burst control, per-hitbox targeting |
+| `echo-radar` | 2D radar/minimap — world→radar transform, entity dots, edge indicators |
 | `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking |
-| `echo-memory` | RE work: pointer chains, struct recovery, pattern scanning, Unicorn, Zydis xrefs |
-| `echo-anticheat` | Detection awareness — what integrity systems check, and safe coding patterns |
-| `echo-sdk` | Dumper-7 SDK, Source 2 schema extraction, Unity IL2CPP, cached bone reads |
-| `echo-reverse` | RE pipeline: obfuscation classification, REA MCP, binary differ, VMP devirt |
+| `echo-memory` | Pointer chains, struct recovery, IDA pattern scan, Unicorn emulation, Zydis xref |
+| `echo-anticheat` | What integrity systems check and safe coding patterns around them |
+| `echo-sdk` | Dumper-7 SDK, Source 2 schema, Unity IL2CPP, cached bone reads, FName / VGK |
+| `echo-reverse` | Obfuscation classification, REA MCP, binary diff, OLLVM lift, VMP devirt |
 | `echo-config` | Config persistence, HTTP, filesystem, WebSocket, JSON, hash_map / hash_set |
-| `echo-scripts` | Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
+| `echo-scripts` | Complete runnable scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
 
 ---
 
-## Skills (18)
+## 📚 Skills (18)
 
-Reference documents loaded on demand by the agents.
+Reference documents loaded on demand. Also copied into the Pi profile.
 
 | Skill | Contents |
-|---|---|
-| `angelscript-patterns` | Mutex entity buffer, thread-safe tick/render, safe deref chain, rate limiter, W2S null check |
-| `angelscript-types` | AngelScript type system: `@` handles, `array<T>`, `cast<T>`, closures, no-exceptions, common LLM mistakes |
+|:---|:---|
+| `angelscript-patterns` | Mutex entity buffer, thread-safe tick/render, safe deref chain, W2S null check |
+| `angelscript-types` | `@` handles, `array<T>`, `cast<T>`, closures, no-exceptions, common LLM mistakes |
 | `echo-anti-patterns` | Wrong code → correct code, side by side |
 | `echo-workflow` | Multi-agent orchestration: shared_snapshot hub, thread rate table, startup sequence |
-| `echo-ecosystem` | External tooling: web-mv, angel-menu-mcp, echo-esp-preview, as_bundler, SuperGhidra, NoVmp, Triton |
-| `anti-cheat-systems` | What VAC / EAC / BattlEye / Vanguard / Ricochet check, at a high level |
+| `echo-ecosystem` | External tooling: web-mv, angel-menu-mcp, esp-preview, as_bundler, SuperGhidra, NoVmp |
+| `anti-cheat-systems` | What VAC / EAC / BattlEye / Vanguard / Ricochet check at a high level |
 | `game-hacking-techniques` | Memory access models, hook types, entity list patterns, ESP/aimbot math |
-| `game-engine-resources` | Source 2, Unreal, Unity, IW engine internals — structs, offsets, W2S math, bone formats |
+| `game-engine-resources` | Source 2, Unreal, Unity, IW engine internals — structs, offsets, W2S, bone formats |
 | `gamehacking-cheatsheet` | Topic → Echo API map + mcp-gamehacking query per technique |
 | `awesome-game-security` | Per-category resource map from [gmh5225/awesome-game-security](https://github.com/gmh5225/awesome-game-security) |
-| `dumper7-sdk` | Dumper-7 SDK structure, GObjects traversal, FName resolution, VGK decrypt, offset update workflow |
+| `dumper7-sdk` | GObjects traversal, FName resolution, VGK decrypt, offset update workflow |
 | `omath-math` | W2S per engine, projectile prediction, rotation helpers |
 | `reverse-workflow` | Static → runtime RE pipeline; tool decision tree, sig generation, Unicorn OLLVM trace |
 | `reverse-engineering-tools` | Debuggers, disassemblers, Frida, Cheat Engine plugins, dumpers, pattern tools |
-| `devirt-workflow` | 6-step VMProtect devirt: vmp-lazy-unpack OEP, Triton semantics, NoVmp VTIL, LLVM passes |
+| `devirt-workflow` | 6-step VMP devirt: vmp-lazy-unpack OEP → Triton → NoVmp VTIL → LLVM passes |
 | `offset-update-workflow` | Post-patch offset recovery: binary diff, function reacquisition, pattern update |
 | `karpathy-coding` | Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution |
 | `ponytail` | Lazy senior dev philosophy: minimum code rules, shortcut comment convention |
 
 ---
 
-## Templates (15)
+## 📄 Templates (15)
 
-Copy any `.as` file into `%AppData%\Roaming\scripts\` and reopen the in-game menu. No compile step.
+Copy any `.as` file into `%AppData%\Roaming\scripts\` and reopen the in-game menu. No compile step needed.
 
-| Template | What it demonstrates |
-|---|---|
+| Template | Demonstrates |
+|:---|:---|
 | `basic.as` | Minimal `main()` + `on_unload()` |
 | `render.as` | ESP box + `on_render` hook |
 | `menu.as` | All menu element types with config persistence |
-| `memory.as` | Process attach + IDA pattern scan + RIP-relative resolve + tick loop |
+| `memory.as` | Process attach, IDA pattern scan, RIP-relative resolve, tick loop |
 | `esp-bones.as` | Full CS2 ESP: cornered boxes, skeleton, health bar, distance labels |
 | `aimbot.as` | Full CS2 aimbot: target selection, smoothing, prediction, recoil, triggerbot |
 | `misc.as` | Bunny hop, flash reduction, radar, spectator list |
-| `ue5-sdk.as` | UE5 ESP from Dumper-7 SDK offsets: GWorld traversal, FTransform, cornered box, health bar |
+| `ue5-sdk.as` | UE5 ESP from Dumper-7 offsets: GWorld traversal, FTransform, cornered box |
 | `unity-il2cpp.as` | Unity IL2CPP ESP: camera matrix, entity list walk, health bar |
 | `valorant.as` | Valorant ESP: VGK-aware external, GObjects decrypt, UE4 TUObjectArray |
 | `fortnite.as` | Fortnite ESP: GWorld traversal, 12-bone skeleton, HP + shield bars |
-| `radar.as` | 2D circular radar panel — entity dots, edge indicators, rotating/north-up mode |
+| `radar.as` | 2D circular radar panel — entity dots, edge indicators, rotating/north-up |
 | `loot.as` | CS2 dropped-weapon ESP — item tiers, distance-gated labels, sorted loot panel |
 | `esp-preview.as` | `esp_layout` namespace drop-in preview helper |
 | `web-mv.as` | web-mv HTTP memory viewer endpoint |
 
-> Game-specific offsets and patterns in these templates are **illustrative placeholders**. Verify
-> them per patch and per game version — see `skills/offset-update-workflow`.
+> ⚠️ Game-specific offsets and patterns are **illustrative placeholders**. Verify per patch and per game version — see `skills/offset-update-workflow`.
 
 ---
 
-## Reference
+## 🖥 Pi coding agent
 
-| Doc | Contents |
-|---|---|
-| [`reference/api.md`](reference/api.md) | Complete API reference — all 22 function namespaces, every signature, return semantics, caveats |
-| [`llms.txt`](llms.txt) | Single-file context bundle for GPT-4o, Gemini, and local models — paste as context |
-| [`prompts/system-prompt.md`](prompts/system-prompt.md) | Portable system prompt for non-Claude clients |
-| [`reference/offsets.md`](reference/offsets.md) | Offset/pattern reference (placeholders — verify per patch) |
-
----
-
-## Integrations
-
-### mcp-gamehacking
-
-4100+ skills, 75 specialist agents, 19+ MCP tools.
+[Pi](https://pi.dev) is a minimal terminal agent harness. The installer writes an Echo profile and adds an `echo` launcher — the same 18 skills and 4 prompt templates work there with your own system prompt.
 
 ```bash
-git clone https://github.com/1llu50ry/mcp-gamehacking
-cd mcp-gamehacking && npm install && npm run build
+echo                             # interactive — Echo profile loaded
+echo -p "write a CS2 bone ESP"   # print mode
+echo -- update my code           # -- forces pass-through for prompts that look like commands
 ```
 
-The installer (or `/echo-setup`) does this for you into `~/.local/share/echo-ai-toolkit/`.
+### Commands
 
-### REA (Reverse Engineer Anything)
+| Command | Does |
+|:---|:---|
+| `echo` | Start Pi with the Echo profile |
+| `echo update` | Update toolkit + profile + Pi + all companion tools |
+| `echo update --extensions` | Pi packages/extensions only |
+| `echo update --self` | Pi binary only |
+| `echo update --models` | Pi model catalogs only |
+| `echo update --all` | Pi and all its packages |
+| `echo update --tools` | Companion tools only (git pull + rebuild) |
+| `echo update --profile` | Resync the Echo profile from the toolkit |
+| `echo doctor` | Verify every tool — ok / MISSING / not applicable |
+| `echo status` | One-screen summary |
+| `echo tools` | List installed companion tools |
+| `echo version` | Versions of everything |
+| `echo help` | Usage |
 
-Static binary analysis: Unity IL2CPP, Godot, APK, WASM, pcap, firmware. Installed via `npx` on
-first MCP connect — no manual step.
+### Profile files
 
-### Dumper-7 / Dumper-7-VGK
+| File | Role |
+|:---|:---|
+| `pi/SYSTEM.md` | Reverse-engineer / game-security-analyst persona. No hedging, no disclaimers. |
+| `pi/APPEND_SYSTEM.md` | Echo API facts applied silently: namespacing, `bool main()`, out-params, AS traps |
+| `pi/AGENTS.md` | Repo layout, verification commands, conventions |
+| `pi/prompts/*.md` | `/echo-api`, `/echo-esp`, `/echo-reverse`, `/echo-verify` |
+| `pi/skills/` | All 18 skills — same `SKILL.md` format |
 
-UE4/UE5 SDK generator. Inject into the running game to get a CppSDK with all offsets.
+Profile location: `~/.local/share/echo-ai-toolkit/pi`, selected via `PI_CODING_AGENT_DIR`.
 
-- [Encryqed/Dumper-7](https://github.com/Encryqed/Dumper-7) (UE4/UE5)
-- [sinistercodes/Dumper-7-VGK](https://github.com/sinistercodes/Dumper-7-VGK) (adds Valorant)
+> **`echo` shadows the shell builtin** in interactive sessions only — scripts still get the real builtin.
+> Install with `ECHO_NO_ALIAS=1` to skip the alias entirely.
 
-### Development tools
+<details>
+<summary><strong>Install Pi</strong></summary>
+
+```bash
+# macOS / Linux
+curl -fsSL https://pi.dev/install.sh | sh
+
+# Windows
+powershell -c "irm https://pi.dev/install.ps1 | iex"
+```
+
+Requires Node 22.19+. Then run `/login` inside Pi to connect a provider.
+
+</details>
+
+---
+
+## 📐 Signature Doctor
+
+[Signature Doctor](https://github.com/b4rzY/Signature-Doctor) is a local offset and signature health dashboard — run it to check whether your sigs still resolve after a patch.
+
+```bash
+# after install, launch with:
+node ~/.local/share/echo-ai-toolkit/signature-doctor/server/index.mjs
+# → http://127.0.0.1:3210
+```
+
+It speaks the same WebSocket bridge protocol as `web-mv`. Pass `WEB_MV_URL=http://127.0.0.1:<port>/rpc` if you prefer to route through an existing relay.
+
+---
+
+## 🔗 Integrations
+
+### MCP servers (auto-registered)
+
+The installer runs `claude mcp add --scope user` for each server — no manual wiring needed.
+
+| MCP | What it provides | Status |
+|:---|:---|:---|
+| `gamehacking` | 4 100+ skills, 75 agents, 19+ tools | clone + build |
+| `rea` | Static binary analysis: IL2CPP, APK, WASM, firmware | `npx` on first connect |
+| `angel-menu` | Toggle the Echo overlay menu from Claude | clone + build |
+| `radare2` | Disasm, decompile, search, analysis | needs `r2pm -Uci r2mcp` |
+| `ida` | Decompile, rename, xref, structs | needs IDA 9.4+ with idalib |
+
+### Development tooling
 
 | Tool | Purpose |
-|---|---|
-| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code LSP: ~1900 Echo symbols, autocompletion, hover docs |
-| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `esp_layout` namespace — drop-in ESP layout helper |
+|:---|:---|
+| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code LSP: ~1 900 Echo symbols, autocompletion, hover docs |
+| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `esp_layout` drop-in ESP layout helper |
 | [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler, validator, obfuscator, string scrambler |
-| [web-mv](https://github.com/cy-gnus/web-mv) | Browser-based memory viewer via Echo agent API |
-| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | MCP server — toggle the overlay menu from Claude |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | Lazy senior dev mode plugin |
-| [andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | Coding-discipline skill set |
+| [web-mv](https://github.com/Jozkah/web-mv) | Browser-based memory viewer via Echo agent API |
+| [Signature Doctor](https://github.com/b4rzY/Signature-Doctor) | Offset / signature health dashboard at `http://127.0.0.1:3210` |
+| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | MCP — toggle the overlay menu from Claude |
+
+### SDK generation
+
+| Tool | Purpose |
+|:---|:---|
+| [Dumper-7](https://github.com/Encryqed/Dumper-7) | UE4/UE5 SDK generator — inject to get CppSDK with all offsets |
+| [Dumper-7-VGK](https://github.com/sinistercodes/Dumper-7-VGK) | Dumper-7 + Valorant VGK support |
 
 ### Binary analysis MCPs
 
 | MCP | Install |
-|---|---|
+|:---|:---|
 | [radare2-mcp](https://github.com/radareorg/radare2-mcp) | `r2pm -Uci r2mcp` |
 | [ida-mcp](https://github.com/HexRaysSA/ida-mcp) | `claude plugin install ida-mcp@HexRaysSA` |
 | [SuperGhidra](https://github.com/yuatemycat/SuperGhidra) | Python tools + MCP daemon at `127.0.0.1:5073` |
 
-### VMP / devirtualization
+### VMP / devirtualization stack
 
-[NoVmp](https://github.com/can1357/NoVmp) · [VTIL-Core](https://github.com/vtil-project/VTIL-Core) ·
-[vtil2](https://github.com/pop-rip/vtil2) · [Triton](https://github.com/JonathanSalwan/Triton) ·
+[NoVmp](https://github.com/can1357/NoVmp) ·
+[VTIL-Core](https://github.com/vtil-project/VTIL-Core) ·
+[vtil2](https://github.com/pop-rip/vtil2) ·
+[Triton](https://github.com/JonathanSalwan/Triton) ·
 [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) ·
 [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack)
 
-### omath
+---
 
-C++23 constexpr math reference for W2S, projectile prediction, coordinate transforms —
-[alt-orange/omath](https://github.com/alt-orange/omath).
+## 📖 Reference
+
+| Doc | Contents |
+|:---|:---|
+| [`reference/api.md`](reference/api.md) | Complete API — 22 namespaces, every signature, return semantics, caveats |
+| [`llms.txt`](llms.txt) | Single-file context bundle for GPT-4o, Gemini, local models — paste as context |
+| [`prompts/system-prompt.md`](prompts/system-prompt.md) | Portable system prompt for non-Claude clients |
+| [`reference/offsets.md`](reference/offsets.md) | Offset / pattern reference (placeholders — verify per patch) |
+| [Echo docs](https://echo-23.gitbook.io/angel) | Live authoritative API reference |
+| [Echo LLM reference](https://echo-23.gitbook.io/angel/llms-full.txt) | LLM-optimised single-page dump |
+| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4 000+ curated game-security resources |
+| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | Technique → implementation cheatsheet |
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-Add a skill under `skills/<name>/SKILL.md` or an agent under `agents/<name>.md`. Keep agent files
-self-contained — they load as system prompts and must include all context without external lookups.
+Add a skill under `skills/<name>/SKILL.md` or an agent under `agents/<name>.md`.
 
-Every skill and agent needs YAML frontmatter (`name`, `description`). Every agent needs a matching
-slash command in `hooks/register.tsx`. CI checks both, plus API conformance.
+- Every skill and agent needs YAML frontmatter: `name`, `description`
+- Every agent needs a matching slash command in `hooks/register.tsx`
+- Keep agent files self-contained — they load as system prompts, no external lookups
+
+CI checks layout, frontmatter, API conformance, and hook registration automatically:
 
 ```bash
 python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.md
@@ -379,14 +406,6 @@ claude plugin validate .
 ```
 
 ---
-
-## Links
-
-- [Echo Universal API docs](https://echo-23.gitbook.io/angel)
-- [Echo LLM-optimized reference](https://echo-23.gitbook.io/angel/llms-full.txt)
-- [awesome-game-security](https://github.com/gmh5225/awesome-game-security) — 4000+ curated resources
-- [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) — MCP server for the above
-- [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet)
 
 ## License
 
