@@ -11,12 +11,13 @@ External tools that complement Echo API development: menu control, ESP layout pr
 
 ## UI / Menu
 
-### web-mv (cy-gnus/web-mv)
-Browser-based memory viewer for the Echo agent API. Reads live game state via Echo's HTTP agent lane.
+### web-mv (Jozkah/web-mv)
+Browser-based memory viewer that talks to the Echo agent runtime over a WebSocket relay.
 
-- Default lane: `/agent-ui` → `ws://127.0.0.1:9010/agent-ui`
-- Install: `npm install` (TypeScript/HTML/CSS)
-- Branch `feat/menu-control-lane` (Jozkah/web-mv): adds **Menu Control** tab using `/agent-ext` lane with `ui_list`, `ui_get`, `ui_set` RPC verbs; supports `HOST=0.0.0.0` for phone/LAN access
+- Release bundle: run `run.bat` — it starts `bun-server.exe` and opens `http://127.0.0.1:9000/` (localhost only)
+- From source: `cd relay && bun install && bun run start` (the relay is **Bun**, the UI is **SolidJS**)
+- Bind a target process: `process::open_socket("ws://localhost:9000/agent")`
+- No GitHub releases are published — the installer clones the source
 
 ### angel-menu-mcp (Jozkah/angel-menu-mcp)
 MCP server that lets Claude enumerate and toggle an Angel overlay's in-game menu over WebSocket.
@@ -38,19 +39,27 @@ Tools: `list_features`, `get_feature`, `set_feature`, `connection_status`
 VS Code extension for AngelScript targeting the Echo API. ~1900 bundled symbols.
 
 - Features: syntax + semantic highlighting, autocompletion, hover docs, go-to-definition, find refs, real-time errors, cross-file analysis, bundler
-- Install: `code --install-extension echo-angelscript-lsp-0.0.1.vsix`
+- Install: download the release zip, then
+  `code --install-extension echo-angelscript-lsp-<version>.vsix --force`
+  (the zip contains a single `.vsix`; latest is `0.0.10`)
 
 ### as_bundler (sinistercodes/as_bundler)
-AngelScript bundler, validator, and minifier. Build: CMake + C++ compiler.
+AngelScript bundler, validator, and minifier.
+
+**Prebuilt binaries** ship on the releases page (`as_bundler` for Linux, `as_bundler.exe` for
+Windows) — no toolchain needed. Building from source needs CMake + a C++ compiler.
 
 ```bash
 as_bundler [OPTIONS] <dir|file.as>
   -o file            output path
   --strip / -s       remove comment-only lines
+  --no-preprocess/-n skip the preprocessor
+  --prepend/-p file  prepend a file
+  --header/-H file   prepend a header
   --obfuscate / -O   rename identifiers
-  --remove-newlines  minify
-  --scramble-strings XOR-encrypt string literals as hash-map lookups
-  -D MACRO           define preprocessor macro
+  --remove-newlines/-R  minify
+  --scramble-strings/-S XOR-encrypt string literals as hash-map lookups
+  -D<NAME>[=VALUE]   define a preprocessor macro (no space after -D)
 ```
 
 Built-in macros: `__BUILD_TIMESTAMP_STR__`, `__BUILD_UNIX_TS__`, `STRHASH("text")`, `STRHASH64("text")`

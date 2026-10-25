@@ -10,7 +10,9 @@ AI development toolkit for the [Echo Universal API](https://echo-23.gitbook.io/a
 
 ## Install
 
-### Claude Code plugin (recommended)
+**One command installs everything.** The plugin, both MCP servers, the Echo tooling,
+the Python reverse-engineering stack, and offline copies of the two big knowledge bases.
+Anything whose prerequisite is missing is skipped with a reason, never a failure.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.sh | bash
@@ -20,8 +22,53 @@ curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/ins
 irm https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.ps1 | iex
 ```
 
-One command. Installs the plugin, vendors the optional MCP dependencies, and adds the
-`ponytail` companion plugin. Safe to re-run — every step is idempotent.
+Safe to re-run — every step is idempotent. Verify at any time:
+
+```bash
+./scripts/echo-doctor.sh        # or .\scripts\echo-doctor.ps1 on Windows
+```
+
+### Tiers
+
+| Tier | Installs | Needs |
+|---|---|---|
+| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ |
+| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python |
+| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun |
+
+```bash
+ECHO_TIER=full bash install.sh
+```
+
+<details>
+<summary>What gets installed, and how each one is fetched</summary>
+
+| Tool | What it gives you | How it is installed | Tier |
+|---|---|---|---|
+| **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin | minimal |
+| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + `npm run build` | minimal |
+| [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | toggle the Echo overlay menu from Claude | clone + `npm install` | minimal |
+| [rea](https://github.com/morluto/rea) | static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect | minimal |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | lazy-senior-dev discipline | Claude Code plugin | standard |
+| [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | coding-discipline guidelines | Claude Code plugin | standard |
+| [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | prebuilt release binary | standard |
+| [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | single `.as` drop-in, copied to your scripts dir | standard |
+| [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover docs for ~1900 Echo symbols | `.vsix` from the release, `code --install-extension` | standard |
+| [Triton](https://github.com/JonathanSalwan/Triton) | symbolic execution + taint analysis | `pip install triton-library` | standard |
+| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone | standard |
+| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone + `pip install -e .` | standard |
+| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | offline copy of the mega cheatsheet | shallow clone | standard |
+| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | offline copy of 4000+ curated resources | shallow clone | standard |
+| [web-mv](https://github.com/Jozkah/web-mv) | browser memory viewer (`ws://127.0.0.1:9000`) | clone + `bun install` | full |
+| [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build | full |
+| [NoVmp](https://github.com/can1357/NoVmp) | full VMP devirt → optimized VTIL → native | CMake build (vendors VTIL-Core) | full |
+| [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` | full |
+| [llvm-project](https://github.com/llvm/llvm-project) | OLLVM passes + Triton's LLVM interface | **system package** (`winget` / `brew` / `apt`) — never built from source | full |
+
+Everything lands in `~/.local/share/echo-ai-toolkit/` (`$env:ECHO_HOME` to override).
+MCP wiring is written to `~/.local/share/echo-ai-toolkit/mcp.json`.
+
+</details>
 
 <details>
 <summary>Manual install (no script)</summary>
@@ -29,13 +76,19 @@ One command. Installs the plugin, vendors the optional MCP dependencies, and add
 ```
 /plugin marketplace add NetVar1337/echo-ai-toolkit
 /plugin install echo-ai-toolkit@echo-ai-toolkit
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
+/plugin marketplace add forrestchang/andrej-karpathy-skills
+/plugin install andrej-karpathy-skills@karpathy-skills
 ```
 
-Then run `/echo-setup` inside Claude Code to fetch the optional MCP dependencies.
+Then run `/echo-setup` inside Claude Code to fetch the MCP dependencies. `/echo-tier`
+shows or changes the install tier.
 </details>
 
-**Requirements:** Claude Code, Node.js 18+, git. The Echo platform itself requires
-Discord with the overlay enabled (Echo is Windows-only).
+**Requirements:** Claude Code. Node 18+ for the MCP servers, Python 3 for the RE
+tooling, and CMake / .NET 8 / Bun only if you want the `full` tier. The Echo platform
+itself needs Discord with the overlay enabled (Echo is Windows-only).
 
 ### Use as a project (no plugin)
 
@@ -170,7 +223,7 @@ git clone https://github.com/1llu50ry/mcp-gamehacking
 cd mcp-gamehacking && npm install && npm run build
 ```
 
-`/echo-setup` (or the installer) does this for you into `~/.local/share/echo-ai-toolkit/`.
+The installer (or `/echo-setup`) does this for you into `~/.local/share/echo-ai-toolkit/`.
 
 ### REA (Reverse Engineer Anything)
 

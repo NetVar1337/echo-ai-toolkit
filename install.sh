@@ -3,92 +3,302 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.sh | bash
 #
-# Installs the plugin into Claude Code and vendors its optional MCP dependencies.
-# Safe to re-run: every step is idempotent.
-set -euo pipefail
+# Installs the Claude Code plugin plus every companion tool, skipping anything
+# whose prerequisite is missing on this machine. Safe to re-run: every step is
+# idempotent.
+#
+# Tiers (ECHO_TIER, default "standard"):
+#   minimal   plugin + MCP servers                      (Node only)
+#   standard  + Echo tooling, Python tooling, docs      (Node + Python)
+#   full      + compiler-built tools, LLVM, web-mv      (Node + Python + compilers)
+set -uo pipefail
 
 REPO="NetVar1337/echo-ai-toolkit"
-MARKETPLACE="echo-ai-toolkit"
 PLUGIN="echo-ai-toolkit"
-DEPS="${HOME}/.local/share/echo-ai-toolkit"
+TIER="${ECHO_TIER:-standard}"
+ECHO_HOME="${ECHO_HOME:-$HOME/.local/share/echo-ai-toolkit}"
+BIN_DIR="$ECHO_HOME/bin"
+REF_DIR="$ECHO_HOME/reference"
 
-say()  { printf '\033[1;33m==>\033[0m %s\n' "$*"; }
-ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;35m  !\033[0m %s\n' "$*"; }
-die()  { printf '\033[1;31m  ✗\033[0m %s\n' "$*" >&2; exit 1; }
+# ── reporting ────────────────────────────────────────────────────────────────
+OK=(); SKIPPED=(); FAILED=()
+say()  { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
+sub()  { printf '    %s\n' "$*"; }
+ok()   { OK+=("$1");      printf '    \033[1;32mok\033[0m    %s\n' "$1"; }
+skip() { SKIPPED+=("$1: $2"); printf '    \033[1;35mskip\033[0m  %s — %s\n' "$1" "$2"; }
+fail() { FAILED+=("$1: $2");  printf '    \033[1;31mFAIL\033[0m  %s — %s\n' "$1" "$2"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+# Wrap anything that can block on a remote process or a stalled connection.
+to() { local secs="$1"; shift; timeout "$secs" "$@" 2>/dev/null; }
+CURL="curl -fsSL --connect-timeout 10 --max-time 120"
 
-command -v claude >/dev/null 2>&1 || die "claude CLI not found. Install Claude Code first: https://claude.com/claude-code"
-command -v node    >/dev/null 2>&1 || die "node not found. Install Node.js 18+ first."
-command -v git    >/dev/null 2>&1 || die "git not found."
+tier_at_least() {
+  case "$TIER" in
+    minimal)  [ "$1" = "minimal" ] ;;
+    standard) [ "$1" = "minimal" ] || [ "$1" = "standard" ] ;;
+    full)     : ;;
+    *)        : ;;
+  esac
+}
 
-say "Installing $PLUGIN plugin from marketplace $REPO"
+# ── 0. prerequisites ─────────────────────────────────────────────────────────
+say "Checking prerequisites"
+have claude || { printf '\n\033[1;31mclaude CLI not found.\033[0m Install Claude Code first: https://claude.com/claude-code\n' >&2; exit 1; }
+ok "claude CLI"
+have node && ok "node $(node -v 2>/dev/null)" || skip "node" "not found — MCP servers need Node 18+"
+have git  && ok "git"                          || skip "git"  "not found — tool clones need git"
+have python3 && ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)" || skip "python3" "not found — Python tooling skipped"
+have npm  && ok "npm"                          || skip "npm"  "not found"
 
-# ── 1. marketplace ───────────────────────────────────────────────────────────
-if claude plugin marketplace list 2>/dev/null | grep -q "$MARKETPLACE"; then
-  ok "marketplace '$MARKETPLACE' already registered"
+mkdir -p "$ECHO_HOME" "$BIN_DIR" "$REF_DIR"
+
+# ── 1. the plugin ────────────────────────────────────────────────────────────
+say "Installing the $PLUGIN plugin"
+if to 60 claude plugin marketplace list | grep -q "$PLUGIN"; then
+  ok "marketplace already registered"
 else
-  claude plugin marketplace add "$REPO" || die "failed to add marketplace"
-  ok "marketplace registered"
+  to 120 claude plugin marketplace add "$REPO" >/dev/null \
+    && ok "marketplace registered" || fail "marketplace" "could not add $REPO"
+fi
+if to 60 claude plugin list | grep -q "$PLUGIN"; then
+  ok "plugin already installed"
+else
+  to 180 claude plugin install "$PLUGIN@$PLUGIN" >/dev/null \
+    && ok "plugin installed" || fail "plugin" "install failed"
 fi
 
-# ── 2. plugin ───────────────────────────────────────────────────────────────
-if claude plugin list 2>/dev/null | grep -q "$PLUGIN"; then
-  ok "plugin '$PLUGIN' already installed"
-else
-  claude plugin install "$PLUGIN@$MARKETPLACE" || die "failed to install plugin"
-  ok "plugin installed"
-fi
-
-# ── 3. optional MCP dependencies ────────────────────────────────────────────
-# These are optional. The plugin works without them; they add extra search/analysis tools.
-if [ "${SKIP_MCP:-0}" = "1" ]; then
-  warn "SKIP_MCP=1 — skipping optional MCP dependencies"
-else
-  mkdir -p "$DEPS"
-
-  if [ -f "$DEPS/mcp-gamehacking/dist/index.js" ]; then
-    ok "mcp-gamehacking already built"
-  else
-    say "Vendoring mcp-gamehacking (this takes a minute)"
-    if [ ! -d "$DEPS/mcp-gamehacking/.git" ]; then
-      git clone --depth 1 https://github.com/1llu50ry/mcp-gamehacking "$DEPS/mcp-gamehacking" \
-        || warn "clone failed — skipping mcp-gamehacking"
-    fi
-    if [ -d "$DEPS/mcp-gamehacking" ]; then
-      (cd "$DEPS/mcp-gamehacking" && npm install --silent && npm run build --silent) \
-        && ok "mcp-gamehacking built" || warn "build failed — skipping mcp-gamehacking"
-    fi
+# ── 2. Claude Code companion plugins ─────────────────────────────────────────
+say "Claude Code companion plugins"
+add_plugin() { # name marketplace
+  if to 60 claude plugin list | grep -q "^  .* $1@"; then
+    ok "$1 already installed"; return
   fi
-
-  if [ -d "$DEPS/angel-menu-mcp/node_modules" ]; then
-    ok "angel-menu-mcp already installed"
+  if to 120 claude plugin marketplace add "$2" >/dev/null; then
+    if to 180 claude plugin install "$1@$3" >/dev/null; then ok "$1"; else skip "$1" "install failed"; fi
   else
-    say "Vendoring angel-menu-mcp"
-    if [ ! -d "$DEPS/angel-menu-mcp/.git" ]; then
-      git clone --depth 1 https://github.com/Jozkah/angel-menu-mcp "$DEPS/angel-menu-mcp" \
-        || warn "clone failed — skipping angel-menu-mcp"
-    fi
-    if [ -d "$DEPS/angel-menu-mcp" ]; then
-      (cd "$DEPS/angel-menu-mcp" && npm install --silent) \
-        && ok "angel-menu-mcp installed" || warn "install failed — skipping angel-menu-mcp"
-    fi
+    skip "$1" "marketplace $2 unreachable"
+  fi
+}
+add_plugin ponytail  "DietrichGebert/ponytail"                  ponytail
+add_plugin andrej-karpathy-skills "forrestchang/andrej-karpathy-skills" karpathy-skills
+
+# ── 3. MCP servers ───────────────────────────────────────────────────────────
+say "MCP servers"
+have node && have npm || skip "MCP servers" "Node 18+ required"
+
+clone_build_node() { # name repo entry
+  local name="$1" repo="$2" entry="$3" dir="$ECHO_HOME/$1"
+  if [ -f "$dir/$entry" ]; then ok "$name already built"; return; fi
+  if [ ! -d "$dir/.git" ]; then
+    sub "cloning $name…"
+    git clone --depth 1 "https://github.com/$repo" "$dir" >/dev/null 2>&1 \
+      || { fail "$name" "clone failed"; return; }
+  fi
+  sub "building $name (npm install + build — this is the slow step, a few minutes)…"
+  ( cd "$dir" && npm install --silent >/dev/null 2>&1 && npm run build --silent >/dev/null 2>&1 ) \
+    || { fail "$name" "npm build failed"; return; }
+  [ -f "$dir/$entry" ] && ok "$name" || fail "$name" "expected $entry after build"
+}
+
+if have node && have npm && [ "${ECHO_SKIP_MCP:-0}" != "1" ]; then
+  clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
+  clone_build_node angel-menu-mcp  Jozkah/angel-menu-mcp   index.js
+elif [ "${ECHO_SKIP_MCP:-0}" = "1" ]; then
+  skip "MCP servers" "ECHO_SKIP_MCP=1"
+fi
+
+# ── 4. Echo-side tooling ─────────────────────────────────────────────────────
+if tier_at_least standard; then
+say "Echo tooling"
+
+# as_bundler — prebuilt release binaries, no toolchain needed.
+AS_BUNDLER_VER="v1.5.0"
+install_as_bundler() {
+  case "$(uname -s)" in
+    Linux)   asset="as_bundler";     out="$BIN_DIR/as_bundler" ;;
+    MINGW*|MSYS*|CYGWIN*) asset="as_bundler.exe"; out="$BIN_DIR/as_bundler.exe" ;;
+    *)       skip "as_bundler" "no prebuilt binary for $(uname -s)"; return ;;
+  esac
+  [ -x "$out" ] && { ok "as_bundler already installed"; return; }
+  $CURL "https://github.com/sinistercodes/as_bundler/releases/download/$AS_BUNDLER_VER/$asset" -o "$out" \
+    && chmod +x "$out" && ok "as_bundler $AS_BUNDLER_VER" || fail "as_bundler" "download failed"
+}
+install_as_bundler
+
+# echo-esp-preview — a single AngelScript drop-in file.
+install_esp_preview() {
+  local target
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) target="${APPDATA:-$HOME/AppData/Roaming}/scripts/esp_preview.as" ;;
+    *)                    target="$REF_DIR/esp_preview.as" ;;
+  esac
+  mkdir -p "$(dirname "$target")"
+  $CURL "https://raw.githubusercontent.com/speedsunderscore/echo-esp-preview/HEAD/esp_preview.as" -o "$target" \
+    && ok "esp_preview.as -> $target" || fail "esp_preview" "download failed"
+}
+install_esp_preview
+
+# echo-angelscript-lsp — VS Code extension (.vsix inside a release zip).
+install_lsp() {
+  local ver="0.0.10" tmp
+  have code || { skip "echo-angelscript-lsp" "VS Code 'code' CLI not on PATH"; return; }
+  if to 20 code --list-extensions | grep -qi 'echo-angelscript-lsp'; then
+    ok "echo-angelscript-lsp already installed"; return
+  fi
+  tmp="$(mktemp -d)"
+  $CURL "https://github.com/speedsunderscore/echo-angelscript-lsp/releases/download/$ver/echo-angelscript-lsp-$ver.zip" -o "$tmp/lsp.zip" \
+    || { fail "echo-angelscript-lsp" "download failed"; rm -rf "$tmp"; return; }
+  unzip -qo "$tmp/lsp.zip" -d "$tmp" 2>/dev/null || { fail "echo-angelscript-lsp" "unzip failed"; rm -rf "$tmp"; return; }
+  local vsix; vsix="$(find "$tmp" -name '*.vsix' | head -1)"
+  [ -n "$vsix" ] || { fail "echo-angelscript-lsp" "no .vsix in archive"; rm -rf "$tmp"; return; }
+  to 120 code --install-extension "$vsix" --force \
+    && ok "echo-angelscript-lsp $ver" \
+    || skip "echo-angelscript-lsp" "code --install-extension failed — if 'code' is not VS Code (e.g. code-oss), install the .vsix manually: $vsix"
+  rm -rf "$tmp"
+}
+install_lsp
+
+# web-mv — Bun relay + SolidJS UI (source only; no releases published).
+install_web_mv() {
+  local dir="$ECHO_HOME/web-mv"
+  if ! have bun; then
+    skip "web-mv" "Bun not installed (https://bun.sh)"; return
+  fi
+  if [ ! -d "$dir/.git" ]; then
+    git clone --depth 1 https://github.com/Jozkah/web-mv "$dir" >/dev/null 2>&1 \
+      || { fail "web-mv" "clone failed"; return; }
+  fi
+  ( cd "$dir/relay" && bun install >/dev/null 2>&1 ) \
+    && ok "web-mv (run: cd $dir/relay && bun run start)" || fail "web-mv" "bun install failed"
+}
+install_web_mv
+
+# Reference repos — offline copies of the two big knowledge bases.
+clone_docs() { # name repo
+  local dir="$REF_DIR/$1"
+  if [ -d "$dir/.git" ]; then ok "$1 already cloned"; return; fi
+  git clone --depth 1 "https://github.com/$2" "$dir" >/dev/null 2>&1 \
+    && ok "$1" || fail "$1" "clone failed"
+}
+clone_docs gamehacking-cheatsheet ridpath/gamehacking-cheatsheet
+clone_docs awesome-game-security  gmh5225/awesome-game-security
+fi
+
+# ── 5. Python reverse-engineering tooling ────────────────────────────────────
+if tier_at_least standard; then
+say "Python reverse-engineering tooling"
+have python3 || skip "Python tooling" "python3 not found"
+
+pip_install() { # label package
+  python3 -m pip install --quiet --disable-pip-version-check "$2" >/dev/null 2>&1 \
+    && ok "$1" || skip "$1" "pip install $2 failed"
+}
+if have python3; then
+  # Triton — symbolic execution. The PyPI package is "triton-library" (NOT "triton",
+  # which is OpenAI's GPU compiler).
+  python3 -c 'import triton' 2>/dev/null && ok "triton already installed" \
+    || pip_install "triton (symbolic execution)" triton-library
+
+  clone_py() { # name repo
+    local dir="$ECHO_HOME/$1"
+    if [ -d "$dir/.git" ]; then ok "$1 already cloned"; return; fi
+    git clone --depth 1 "https://github.com/$2" "$dir" >/dev/null 2>&1 \
+      && ok "$1" || fail "$1" "clone failed"
+  }
+  clone_py VMProtect-devirtualization JonathanSalwan/VMProtect-devirtualization
+  clone_py vmp-lazy-unpack             x86rc/vmp-lazy-unpack
+
+  # vmp-lazy-unpack is a Python package: install it editable so `py -m unpack` works.
+  if [ -d "$ECHO_HOME/vmp-lazy-unpack" ]; then
+    ( cd "$ECHO_HOME/vmp-lazy-unpack" && python3 -m pip install --quiet -e . >/dev/null 2>&1 ) \
+      && ok "vmp-lazy-unpack (pip -e)" || skip "vmp-lazy-unpack" "pip -e failed (Windows-only tool)"
   fi
 fi
-
-# ── 4. optional companions ───────────────────────────────────────────────────
-if claude plugin marketplace list 2>/dev/null | grep -q '^ponytail'; then
-  ok "ponytail already registered"
-else
-  claude plugin marketplace add DietrichGebert/ponytail >/dev/null 2>&1 \
-    && claude plugin install ponytail@ponytail >/dev/null 2>&1 \
-    && ok "ponytail installed (lazy-senior-dev mode)" \
-    || warn "ponytail not installed — optional"
 fi
 
-cat <<'EOF'
+# ── 6. Compiler-built devirtualization stack ─────────────────────────────────
+if tier_at_least full; then
+say "Compiler-built tooling (tier: full)"
 
-────────────────────────────────────────────────────────────
-  Echo AI Toolkit is ready.
+# VTIL-Core / NoVmp — C++ via CMake. NoVmp vendors VTIL-Core as a submodule.
+build_cmake() { # name repo submodules
+  local name="$1" repo="$2" subs="${3:-}" dir="$ECHO_HOME/$1"
+  have cmake || { skip "$name" "cmake not found"; return; }
+  if [ ! -d "$dir/.git" ]; then
+    git clone --depth 1 $subs "https://github.com/$repo" "$dir" >/dev/null 2>&1 \
+      || { fail "$name" "clone failed"; return; }
+  fi
+  ( cd "$dir" && cmake -B build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 \
+      && cmake --build build --config Release -j >/dev/null 2>&1 ) \
+    && ok "$name" || skip "$name" "cmake build failed (needs a C++ toolchain)"
+}
+build_cmake VTIL-Core vtil-project/VTIL-Core
+build_cmake NoVmp     can1357/NoVmp        "--recurse-submodules --shallow-submodules"
+
+# vtil2 — .NET 8.
+if have dotnet; then
+  if [ ! -d "$ECHO_HOME/vtil2/.git" ]; then
+    git clone --depth 1 https://github.com/pop-rip/vtil2 "$ECHO_HOME/vtil2" >/dev/null 2>&1
+  fi
+  if [ -d "$ECHO_HOME/vtil2" ]; then
+    ( cd "$ECHO_HOME/vtil2" && dotnet build -c Release >/dev/null 2>&1 ) \
+      && ok "vtil2" || skip "vtil2" "dotnet build failed"
+  fi
+else
+  skip "vtil2" "dotnet (.NET 8 SDK) not found"
+fi
+
+# LLVM — only for Triton's LLVM interface and OLLVM passes. Never build from source:
+# use the platform package.
+if have llvm-config || have opt; then
+  ok "LLVM already present"
+else
+  case "$(uname -s)" in
+    Darwin) have brew && { brew install llvm >/dev/null 2>&1 && ok "LLVM (brew)" || skip "LLVM" "brew install failed"; } || skip "LLVM" "brew not found" ;;
+    Linux)  if have apt-get; then
+              sudo apt-get install -y llvm >/dev/null 2>&1 && ok "LLVM (apt)" || skip "LLVM" "apt install failed (try: sudo apt install llvm)"
+            else skip "LLVM" "no apt-get — install LLVM manually"; fi ;;
+    *)      skip "LLVM" "install LLVM manually (winget install LLVM.LLVM)" ;;
+  esac
+fi
+fi
+
+# ── 7. write .mcp.json ───────────────────────────────────────────────────────
+say "Writing .mcp.json"
+GH_ENTRY="$ECHO_HOME/mcp-gamehacking/dist/index.js"
+AM_ENTRY="$ECHO_HOME/angel-menu-mcp/index.js"
+{
+  printf '{\n  "mcpServers": {\n'
+  first=1
+  add_server() { # name command args-json description
+    [ $first -eq 1 ] || printf ',\n'
+    first=0
+    printf '    "%s": {\n      "command": "%s",\n      "args": %s,\n      "description": "%s"\n    }' \
+      "$1" "$2" "$3" "$4"
+  }
+  add_server gamehacking node "[\"$GH_ENTRY\"]" "mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools"
+  add_server rea npx '["-y","rea-agents"]' "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, firmware"
+  add_server angel-menu node "[\"$AM_ENTRY\"]" "Echo overlay menu control: list_features, get_feature, set_feature, connection_status"
+  printf '\n  }\n}\n'
+} > "$ECHO_HOME/mcp.json"
+ok ".mcp.json -> $ECHO_HOME/mcp.json"
+
+# ── summary ──────────────────────────────────────────────────────────────────
+printf '\n\033[1m────────────────────────────────────────────────────────────\033[0m\n'
+printf '  \033[1;32m%d installed\033[0m' "${#OK[@]}"
+[ ${#SKIPPED[@]} -gt 0 ] && printf '   \033[1;35m%d skipped\033[0m' "${#SKIPPED[@]}"
+[ ${#FAILED[@]}  -gt 0 ] && printf '   \033[1;31m%d failed\033[0m'  "${#FAILED[@]}"
+printf '\n'
+if [ ${#SKIPPED[@]} -gt 0 ]; then
+  printf '\n  Skipped:\n'
+  for s in "${SKIPPED[@]}"; do printf '    · %s\n' "$s"; done
+fi
+if [ ${#FAILED[@]} -gt 0 ]; then
+  printf '\n  Failed:\n'
+  for s in "${FAILED[@]}"; do printf '    · %s\n' "$s"; done
+fi
+
+cat <<EOF
 
   Next:
     1. Restart Claude Code (or run /reload-plugins)
@@ -96,7 +306,11 @@ cat <<'EOF'
     3. Type  /echo-esp         to load ESP context
        ...or just describe your task — keywords auto-route.
 
-  Templates:  templates/*.as  → copy into %AppData%\Roaming\scripts\
-  Full API:   reference/api.md
-────────────────────────────────────────────────────────────
+  Tools are in $ECHO_HOME
+  Verify at any time:  ./scripts/echo-doctor.sh
+  Templates: templates/*.as  →  %AppData%\\Roaming\\scripts\\
+  Full API:  reference/api.md
 EOF
+printf '  \033[1m────────────────────────────────────────────────────────────\033[0m\n\n'
+
+[ ${#FAILED[@]} -eq 0 ] || exit 1

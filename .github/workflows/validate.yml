@@ -131,12 +131,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: install.sh parses
-        run: bash -n install.sh
+      - name: Every shell script parses
+        run: |
+          fail=0
+          for f in install.sh scripts/*.sh scripts/angelscript/*.sh; do
+            [ -f "$f" ] || continue
+            if bash -n "$f"; then echo "OK   $f"; else echo "FAIL $f"; fail=1; fi
+          done
+          exit $fail
 
-      - name: install.ps1 parses
+      - name: Every PowerShell script parses
         shell: pwsh
         run: |
-          $null = [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path install.ps1), [ref]$null, [ref]$null)
-          Write-Host "install.ps1 syntax OK"
+          $fail = 0
+          $files = @('install.ps1') + (Get-ChildItem scripts -Filter *.ps1 -Recurse | ForEach-Object { $_.FullName })
+          foreach ($f in $files) {
+            if (-not (Test-Path $f)) { continue }
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errors)
+            if ($errors) {
+              Write-Host "FAIL $f"
+              $errors | ForEach-Object { Write-Host "  $($_.Message) at line $($_.Extent.StartLineNumber)" }
+              $fail = 1
+            } else { Write-Host "OK   $f" }
+          }
+          exit $fail
+
+      - name: Every tool referenced by the installer is reachable
+        run: |
+          fail=0
+          # Every github.com/<owner>/<repo> the installer clones must exist.
+          # Repos arrive two ways: a full URL, or an `owner/repo` argument to one of
+          # the installer's helper functions. Catch both.
+          {
+            grep -hoE 'github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' install.sh install.ps1 \
+              | sed 's|.*github\.com/||' | sed 's/\.git$//'
+            grep -hoE '(add_plugin|clone_build_node|clone_docs|clone_py|build_cmake) +[A-Za-z0-9_.-]+ +"?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' install.sh install.ps1 \
+              | awk '{print $3}' | tr -d '"'
+          } | sort -u > /tmp/repos.txt
+          for r in $(cat /tmp/repos.txt); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "https://github.com/$r")
+            if [ "$code" = "200" ]; then echo "OK   $r"; else echo "FAIL $r ($code)"; fail=1; fi
+          done
+          exit $fail"

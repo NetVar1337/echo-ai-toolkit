@@ -84,8 +84,9 @@ test('session.start registers every agent as a slash command', async ($, on) => 
   expect(rec.commands).toContain('echo-help');
   expect(rec.commands).toContain('echo-reset');
   expect(rec.commands).toContain('echo-setup');
-  // 12 agents + 3 utilities
-  expect(rec.commands.length).toBe(AGENT_NAMES.length + 3);
+  expect(rec.commands).toContain('echo-tier');
+  // 12 agents + 4 utilities (help, reset, setup, tier)
+  expect(rec.commands.length).toBe(AGENT_NAMES.length + 4);
 });
 
 test('/echo-help lists every agent', async ($, on) => {

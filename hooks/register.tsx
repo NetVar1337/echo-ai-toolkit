@@ -170,9 +170,6 @@ const rawHome = (typeof process !== 'undefined')
   ? (process.env?.HOME ?? process.env?.USERPROFILE ?? '')
   : '';
 const HOME: string = rawHome.startsWith('/') ? rawHome : '';
-const ECHO_DEPS = `${HOME}/.local/share/echo-ai-toolkit`;
-const GH_DIR    = `${ECHO_DEPS}/mcp-gamehacking`;
-const ANGEL_DIR = `${ECHO_DEPS}/angel-menu-mcp`;
 
 export const register: Register = (on) => {
   // ── session start ──────────────────────────────────────────────────────────
@@ -182,7 +179,8 @@ export const register: Register = (on) => {
     }
     await $.command.register({ name: 'echo-help',  description: 'List all Echo AI Toolkit agents' });
     await $.command.register({ name: 'echo-reset', description: 'Clear active Echo agent context' });
-    await $.command.register({ name: 'echo-setup', description: 'Auto-install mcp-gamehacking, angel-menu-mcp, write .mcp.json' });
+    await $.command.register({ name: 'echo-setup', description: 'Install the plugin and every companion tool (runs install.sh / install.ps1)' });
+    await $.command.register({ name: 'echo-tier',  description: 'Show or set the install tier: minimal | standard | full' });
     // The side panel is a nicety: a failure to open it must never break the session.
     await $.ui.open({ id: 'echo-ai-toolkit-panel', title: 'Echo' }).catch(() => {});
 
@@ -191,7 +189,7 @@ export const register: Register = (on) => {
       const notified = await $.store.get('echo:setup-notified');
       if (!notified) {
         await $.store.set('echo:setup-notified', true);
-        $.ui.notice('Echo AI Toolkit: run /echo-setup to auto-install mcp-gamehacking, REA, and angel-menu-mcp.');
+        $.ui.notice('Echo AI Toolkit: run /echo-setup to install the MCP servers and all 17 companion tools.');
       }
     }
 
@@ -216,127 +214,87 @@ export const register: Register = (on) => {
   });
 
   // ── /echo-setup ────────────────────────────────────────────────────────────
+  // The installer script is the single source of truth for what gets installed
+  // (plugin + 17 companion tools, tiered). This command just runs it.
   on('command.run', { command: 'echo-setup' }, async ($) => {
-    const log: string[] = [];
-    const ok   = (msg: string) => { log.push(`✓ ${msg}`); };
-    const err  = (msg: string, detail?: string) => {
-      log.push(`✗ ${msg}${detail ? `: ${detail.slice(0, 100)}` : ''}`);
-    };
-    const skip = (msg: string) => { log.push(`↩ ${msg}`); };
-
     if (!HOME) {
       return { text: '## Echo Setup\n\n✗ $HOME is not set — cannot determine install directory.' };
     }
 
-    // 1. Create deps dir
-    await $.process.run(['mkdir', '-p', ECHO_DEPS]);
-
-    // 2. Clone + build mcp-gamehacking
-    {
-      const built = await $.process.run(['test', '-f', `${GH_DIR}/dist/index.js`]);
-      if (built.exitCode === 0) {
-        skip('mcp-gamehacking already built');
-      } else {
-        let canBuild = true;
-        const exists = await $.process.run(['test', '-d', GH_DIR]);
-        if (exists.exitCode !== 0) {
-          const clone = await $.process.run(
-            ['git', 'clone', '--depth', '1', 'https://github.com/1llu50ry/mcp-gamehacking', GH_DIR],
-            { timeoutMs: 180_000 }
-          );
-          if (clone.exitCode !== 0) {
-            err('mcp-gamehacking clone', clone.stderr.trim());
-            canBuild = false;
-          }
-        }
-        if (canBuild) {
-          // guard against dir existing but being empty/partial (no package.json)
-          const hasPkg = await $.process.run(['test', '-f', `${GH_DIR}/package.json`]);
-          if (hasPkg.exitCode === 0) {
-            const i = await $.process.run(['npm', 'install'], { cwd: GH_DIR, timeoutMs: 240_000 });
-            const b = await $.process.run(['npm', 'run', 'build'], { cwd: GH_DIR, timeoutMs: 60_000 });
-            (i.exitCode === 0 && b.exitCode === 0)
-              ? ok('mcp-gamehacking built')
-              : err('mcp-gamehacking build', b.stderr.trim());
-          } else {
-            err('mcp-gamehacking incomplete — delete the directory and run /echo-setup again');
-          }
-        }
-      }
-    }
-
-    // 3. Clone + install angel-menu-mcp
-    {
-      const ready = await $.process.run(['test', '-d', `${ANGEL_DIR}/node_modules`]);
-      if (ready.exitCode === 0) {
-        skip('angel-menu-mcp already installed');
-      } else {
-        let canInstall = true;
-        const hasClone = await $.process.run(['test', '-f', `${ANGEL_DIR}/package.json`]);
-        if (hasClone.exitCode !== 0) {
-          const clone = await $.process.run(
-            ['git', 'clone', '--depth', '1', 'https://github.com/Jozkah/angel-menu-mcp', ANG_DIR],
-            { timeoutMs: 60_000 }
-          );
-          if (clone.exitCode !== 0) {
-            err('angel-menu-mcp clone', clone.stderr.trim());
-            canInstall = false;
-          }
-        }
-        if (canInstall) {
-          const i = await $.process.run(['npm', 'install'], { cwd: ANGEL_DIR, timeoutMs: 60_000 });
-          i.exitCode === 0 ? ok('angel-menu-mcp installed') : err('angel-menu-mcp npm', i.stderr.trim());
-        }
-      }
-    }
-
-    // 4. Write .mcp.json with real paths
-    {
-      const config = {
-        mcpServers: {
-          gamehacking: {
-            command: 'node',
-            args: [`${GH_DIR}/dist/index.js`],
-            description: 'mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools',
-          },
-          rea: {
-            command: 'npx',
-            args: ['-y', 'rea-agents'],
-            description: 'REA: static binary analysis — Unity IL2CPP, Godot, APK, WASM',
-          },
-          'angel-menu': {
-            command: 'node',
-            args: [`${ANGEL_DIR}/index.js`],
-            description: 'Echo overlay menu control',
-          },
-        },
+    const pluginRoot = (process.env?.CLAUDE_PLUGIN_ROOT ?? '').trim();
+    if (!pluginRoot) {
+      return {
+        text: [
+          '## Echo Setup',
+          '',
+          '✗ `CLAUDE_PLUGIN_ROOT` is not set, so the bundled installer cannot be located.',
+          '',
+          'Run it directly instead:',
+          '```',
+          'curl -fsSL https://raw.githubusercontent.com/NetVar1337/echo-ai-toolkit/main/install.sh | bash',
+          '```',
+        ].join('\n'),
       };
-      const json = JSON.stringify(config, null, 2);
-      const w = await $.process.run(['tee', '.mcp.json'], { stdin: json });
-      w.exitCode === 0 ? ok('.mcp.json written with real paths') : err('.mcp.json write', w.stderr.trim());
     }
 
-    await $.store.set('echo:setup-done', true);
+    const isWindows = process.platform === 'win32';
+    const script = `${pluginRoot}/${isWindows ? 'install.ps1' : 'install.sh'}`;
+    const tier = (await $.store.get('echo:tier')) ?? 'standard';
+    const cmd = isWindows
+      ? ['pwsh', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script]
+      : ['bash', script];
 
-    const manual = [
-      '`/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail` — lazy-senior-dev mode',
-      '`/plugin marketplace add multica-ai/andrej-karpathy-skills` then `/plugin install andrej-karpathy-skills@karpathy-skills` — coding discipline skills',
-      'IDA Pro MCP — requires IDA 9.4+ with idalib: `uvx ida-mcp`',
-      'radare2 MCP — `r2pm -Uci r2mcp`',
-    ];
+    const r = await $.process.run(cmd, {
+      env: { ECHO_TIER: String(tier) },
+      timeoutMs: 900_000,
+    });
+
+    const out = [r.stdout.trim(), r.stderr.trim()].filter(Boolean).join('\n');
+    if (r.exitCode === 0) await $.store.set('echo:setup-done', true);
 
     return {
       text: [
         '## Echo Setup',
         '',
-        log.join('\n'),
+        `Ran \`${isWindows ? 'install.ps1' : 'install.sh'}\` (tier: **${tier}**).`,
         '',
-        '**Still needs manual install:**',
-        manual.map(s => `- ${s}`).join('\n'),
+        '```',
+        out.slice(-4000) || '(no output)',
+        '```',
         '',
-        'Run `/reload-plugins` to activate new MCP servers.',
+        r.exitCode === 0
+          ? 'Run `/reload-plugins` to activate the MCP servers.'
+          : 'Some tools failed — see the summary above, or run `./scripts/echo-doctor.sh` for detail.',
+        '',
+        'Tier is `echo:tier` in the plugin store. Set it with `/echo-tier full|standard|minimal`.',
       ].join('\n'),
     };
+  });
+
+  // ── /echo-tier ─────────────────────────────────────────────────────────────
+  on('command.run', { command: 'echo-tier' }, async ($, e) => {
+    const want = String((e as { args?: string })?.args ?? '').trim();
+    const valid = ['minimal', 'standard', 'full'];
+    if (!valid.includes(want)) {
+      const cur = (await $.store.get('echo:tier')) ?? 'standard';
+      return {
+        text: [
+          `## Echo install tier`,
+          '',
+          `Current: **${cur}**`,
+          '',
+          '| Tier | Installs | Needs |',
+          '|---|---|---|',
+          '| `minimal` | plugin + MCP servers | Node 18+ |',
+          '| `standard` | + Echo tooling, Python tooling, docs | Node + Python |',
+          '| `full` | + CMake/.NET devirt stack, LLVM, web-mv | + compilers |',
+          '',
+          'Set with `/echo-tier minimal|standard|full`, then run `/echo-setup`.',
+        ].join('\n'),
+      };
+    }
+    await $.store.set('echo:tier', want);
+    return { text: `Tier set to **${want}**. Run \`/echo-setup\` to apply it.` };
   });
 
   // ── agent context slash commands ───────────────────────────────────────────

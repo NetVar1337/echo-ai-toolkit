@@ -62,7 +62,8 @@ Apply to all Echo scripts — see `skills/karpathy-coding/SKILL.md`:
 
 ## MCP integrations
 
-Wired by `/echo-setup` (or the installer) into `~/.local/share/echo-ai-toolkit/`:
+Wired by the installer (`install.sh` / `install.ps1`, or `/echo-setup` inside Claude Code)
+into `~/.local/share/echo-ai-toolkit/`:
 
 **gamehacking** — 4100+ skills, 75 agents, 19+ tools:
 ```
