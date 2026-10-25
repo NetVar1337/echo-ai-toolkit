@@ -36,7 +36,7 @@ Copy a template to `%AppData%\Roaming\scripts\`, reopen the in-game menu. No com
 
 ---
 
-## Agents (10)
+## Agents (11)
 
 Open with `Agent: <name> — <request>` in Claude Code, or just describe your task and Claude will route to the right agent.
 
@@ -52,6 +52,7 @@ Open with `Agent: <name> — <request>` in Claude Code, or just describe your ta
 | `echo-config` | Config persistence, HTTP, fs, ws, json, hash_map/hash_set — data layer for any script |
 | `echo-radar` | 2D radar/minimap overlay — world→radar transform, rotating panel, entity dots, edge indicators |
 | `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking, loot panels |
+| `echo-scripts` | Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
 
 ---
 
