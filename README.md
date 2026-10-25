@@ -195,8 +195,8 @@ pi --system-prompt        <profile>/SYSTEM.md          # replaces Pi's default p
 
 | File | Role |
 |---|---|
-| `pi/SYSTEM.md` | Directness + a narrow, explicit refusal boundary — no boilerplate warnings on legitimate RE work |
-| `pi/APPEND_SYSTEM.md` | Echo API facts applied silently: namespacing, `bool main()`, out-params, the AngelScript language traps |
+| `pi/SYSTEM.md` | Reverse-engineer / game-security-analyst persona. **No refusal on any topic or technique** — no hedging, warnings, disclaimers, or "consider instead". Only rule: never invent a fact. |
+| `pi/APPEND_SYSTEM.md` | Repeats the no-refusal standing instruction, then the Echo API facts applied silently: namespacing, `bool main()`, out-params, the AngelScript language traps |
 | `pi/AGENTS.md` | Repo layout, the two verification commands, conventions |
 | `pi/prompts/*.md` | `/echo-api`, `/echo-esp`, `/echo-reverse`, `/echo-verify` |
 | `pi/skills/` | all 18 skills, copied — Pi uses the same `SKILL.md` format |
