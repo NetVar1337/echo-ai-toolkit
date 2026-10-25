@@ -28,6 +28,7 @@ if ($Tier -notin @('minimal','standard','full')) {
 $script:OK = @(); $script:Skipped = @(); $script:Failed = @()
 
 function Say  { Write-Host "`n==> $args" -ForegroundColor Yellow }
+function Sub  { param($m) Write-Host "    . $m" -ForegroundColor Cyan }
 function Ok   { param($m) $script:OK += $m;      Write-Host "    OK     $m" -ForegroundColor Green }
 function Skip { param($m,$r) $script:Skipped += "${m}: $r"; Write-Host "    skip   $m - $r" -ForegroundColor Magenta }
 function Fail { param($m,$r) $script:Failed += "${m}: $r";  Write-Host "    FAIL   $m - $r" -ForegroundColor Red }
@@ -78,11 +79,11 @@ function AddPlugin($name, $marketplace, $pluginId) {
     if ($list -match [regex]::Escape("$name@")) { Ok "$name already installed"; return }
     $null = claude plugin marketplace add $marketplace 2>&1
     if ($LASTEXITCODE -ne 0) { Skip $name "marketplace $marketplace unreachable"; return }
-    $null = claude plugin install "$pluginId@$pluginId" 2>&1
+    $null = claude plugin install "$name@$pluginId" 2>&1
     if ($LASTEXITCODE -eq 0) { Ok $name } else { Skip $name 'install failed' }
 }
 AddPlugin 'ponytail' 'DietrichGebert/ponytail' 'ponytail'
-AddPlugin 'andrej-karpathy-skills' 'forrestchang/andrej-karpathy-skills' 'andrej-karpathy-skills'
+AddPlugin 'andrej-karpathy-skills' 'forrestchang/andrej-karpathy-skills' 'karpathy-skills'
 
 # ── 3. MCP servers ───────────────────────────────────────────────────────────
 Say 'MCP servers'
@@ -168,6 +169,26 @@ if (TierAtLeast 'standard') {
             } else { Fail 'echo-angelscript-lsp' 'no .vsix in archive' }
         } catch { Fail 'echo-angelscript-lsp' 'download failed' }
         Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+    }
+
+    # Signature-Doctor — offset & signature health dashboard (http://127.0.0.1:3210).
+    $sdDir = Join-Path $EchoHome 'signature-doctor'
+    if (Test-Path (Join-Path $sdDir 'node_modules\ws\package.json')) {
+        Ok 'signature-doctor already installed'
+    } elseif (-not (Have node)) {
+        Skip 'signature-doctor' 'Node 22+ required'
+    } else {
+        if (-not (Test-Path (Join-Path $sdDir '.git'))) {
+            git clone --depth 1 https://github.com/b4rzY/Signature-Doctor $sdDir 2>&1 | Out-Null
+        }
+        if (Test-Path $sdDir) {
+            Push-Location $sdDir
+            npm ci --no-audit --no-fund --silent 2>&1 | Out-Null
+            $rc = $LASTEXITCODE
+            Pop-Location
+            if ($rc -eq 0) { Ok "signature-doctor  →  node `"$sdDir\server\index.mjs`"  (http://127.0.0.1:3210)" }
+            else { Fail 'signature-doctor' 'npm ci failed' }
+        } else { Fail 'signature-doctor' 'clone failed' }
     }
 
     # web-mv — Bun relay + SolidJS UI (source only; no releases published).
@@ -327,12 +348,12 @@ if (TierAtLeast 'standard') {
         $vl = Join-Path $EchoHome 'vmp-lazy-unpack'
         if (Test-Path $vl) {
             Push-Location $vl; & $venvPy -m pip install --quiet -e . 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
-            if ($rc -eq 0) { Ok 'vmp-lazy-unpack (pip -e)' } else { Skip 'vmp-lazy-unpack' 'pip -e failed' }
+            if ($rc -eq 0) { Ok 'vmp-lazy-unpack (pip -e)' } else { Skip 'vmp-lazy-unpack' 'pip -e failed (Windows-only tool)' }
         }
     }
 }
 
-# ── 6. Compiler-built devirtualization stack ─────────────────────────────────
+# ── 7. Compiler-built devirtualization stack ──────────────────────────────────
 if (TierAtLeast 'full') {
     Say 'Compiler-built tooling (tier: full)'
 
@@ -388,7 +409,7 @@ if (TierAtLeast 'full') {
     # LLVM is handled by Install-Pkg above (system package, never a source build).
 }
 
-# ── 7. write mcp.json ────────────────────────────────────────────────────────
+# ── 8. write mcp.json ────────────────────────────────────────────────────────
 Say 'Writing mcp.json'
 $ghEntry = (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js') -replace '\\','/'
 $amEntry = (Join-Path $EchoHome 'angel-menu-mcp\index.js') -replace '\\','/'
@@ -405,6 +426,25 @@ $mcpPath = Join-Path $EchoHome 'mcp.json'
 $mcp | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $mcpPath
 Ok "mcp.json -> $mcpPath"
 
+# ── 9. register MCP servers with Claude Code ─────────────────────────────────
+Say 'Registering MCP servers with Claude Code'
+function Register-Mcp {
+    param([string]$mcpName, [string[]]$cmdArgs)
+    $list = (claude mcp list 2>&1 | Out-String)
+    if ($list -match "(?m)^\s*$([regex]::Escape($mcpName))\b") { Ok "MCP $mcpName already registered"; return }
+    $null = claude mcp add --scope user $mcpName @cmdArgs 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok "MCP $mcpName registered" } else { Skip "MCP $mcpName" 'registration failed — add manually from mcp.json' }
+}
+if (Test-Path (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js')) {
+    Register-Mcp 'gamehacking' @('node', ($ghEntry -replace '/','\\'))
+}
+Register-Mcp 'rea' @('npx', '-y', 'rea-agents')
+if (Test-Path (Join-Path $EchoHome 'angel-menu-mcp\index.js')) {
+    Register-Mcp 'angel-menu' @('node', ($amEntry -replace '/','\\'))
+}
+if (Have r2pm) { Register-Mcp 'radare2' @('r2pm', '-r', 'r2mcp') }
+Register-Mcp 'ida' @('uvx', 'ida-mcp', 'stdio', '--agent=echo')
+
 # ── summary ──────────────────────────────────────────────────────────────────
 Write-Host "`n------------------------------------------------------------"
 Write-Host ("  {0} installed" -f $script:OK.Count) -ForegroundColor Green -NoNewline
@@ -420,6 +460,7 @@ if ($script:Failed.Count) {
     $script:Failed | ForEach-Object { Write-Host "    . $_" }
 }
 
+$sdDir2 = Join-Path $EchoHome 'signature-doctor'
 Write-Host @"
 
   Next:
@@ -427,6 +468,9 @@ Write-Host @"
     2. Type  /echo-help        to list the 12 agents
     3. Type  /echo-esp         to load ESP context
        ...or just describe your task - keywords auto-route.
+
+  Signature Doctor (offset/sig health dashboard):
+    node "$sdDir2\server\index.mjs"  -->  http://127.0.0.1:3210
 
   Tools are in $EchoHome
   Verify at any time:  .\scripts\echo-doctor.ps1
