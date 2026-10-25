@@ -36,19 +36,22 @@ Copy a template to `%AppData%\Roaming\scripts\`, reopen the in-game menu. No com
 
 ---
 
-## Agents (7)
+## Agents (10)
 
 Open with `Agent: <name> — <request>` in Claude Code, or just describe your task and Claude will route to the right agent.
 
 | Agent | Use when... |
 |-------|-------------|
-| `echo-dev` | General Echo scripting — API reference, threading, menu, networking, utilities |
-| `echo-esp` | Building ESP: boxes, skeletons, health bars, name tags, W2S for Source 2 / Unreal / Unity |
-| `echo-aimbot` | Aimbot: target selection, FOV, smoothing, prediction, recoil, triggerbot |
+| `echo-dev` | General Echo scripting — API reference, threading, menu, networking, utilities, SIMD, clip_paths |
+| `echo-esp` | Building ESP: boxes, skeletons, health bars, name tags, W2S for Source 2 / Unreal / Unity / IW |
+| `echo-aimbot` | Aimbot: target selection, FOV, smoothing, prediction, recoil, RCS, rage/legit modes, autofire |
 | `echo-memory` | RE work: pointer chains, struct recovery, pattern scanning, Unicorn emulation, Zydis xrefs |
-| `echo-anticheat` | Detection risk assessment: AC internals, Echo's exposure surface, safe coding patterns |
-| `echo-sdk` | Dumper-7 SDK integration: UE4/5 entity traversal, FTransform/FName, Valorant GObjects decrypt |
-| `echo-reverse` | RE pipeline: static analysis → Echo runtime; Zydis xref, Unicorn emulation, REA, reverse-skill |
+| `echo-anticheat` | Detection risk: AC internals, behavioral detection, HWID fingerprinting, safe coding patterns |
+| `echo-sdk` | Dumper-7 SDK, Source 2 schema extraction, Unity IL2CPP via REA, cached bone reads |
+| `echo-reverse` | RE pipeline: obfuscation classification, REA MCP, binary-differ, Unicorn, VMP devirt |
+| `echo-config` | Config persistence, HTTP, fs, ws, json, hash_map/hash_set — data layer for any script |
+| `echo-radar` | 2D radar/minimap overlay — world→radar transform, rotating panel, entity dots, edge indicators |
+| `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking, loot panels |
 
 ---
 
@@ -74,6 +77,7 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `skills/offset-update-workflow.md` | Post-patch offset recovery: binary diff, function reacquisition, IDA pattern update, live offset sources |
 | `skills/ponytail.md` | Lazy senior dev philosophy: minimum code rules, shortcut comment convention, what to cut vs. never cut |
 | `skills/angelscript-types.md` | AngelScript 2.x type system: `@` handles, `array<T>` semantics, closures, casting, no-exceptions — common LLM type mistakes |
+| `skills/echo-workflow.md` | Multi-agent orchestration: three-layer model, shared_snapshot hub, thread rate table, startup sequence, anti-patterns |
 
 ---
 

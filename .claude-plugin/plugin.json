@@ -1,7 +1,7 @@
 {
   "name": "echo-ai-toolkit",
-  "version": "0.1.0",
-  "description": "Slash commands and context injection for Echo Universal API (AngelScript) development",
+  "version": "0.2.0",
+  "description": "10 specialist agents and 17 skills for Echo Universal API (AngelScript) development — ESP, aimbot, radar, loot, config, memory/RE, SDK gen, anti-cheat awareness, and multi-agent orchestration",
   "author": { "name": "NetVar1337" },
   "license": "MIT",
   "types": "./types/index.d.ts"
