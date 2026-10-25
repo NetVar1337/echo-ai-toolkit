@@ -99,6 +99,7 @@ else
   row miss "pi profile" "run install.sh"
 fi
 [ -x "$ECHO_HOME/bin/echo" ] && row ok "echo launcher" "$ECHO_HOME/bin/echo" || row miss "echo launcher" "not installed"
+[ -x "$ECHO_HOME/bin/echo-update.sh" ] && row ok "echo update" "installed" || row miss "echo update" "not installed"
 if have pi; then
   row ok "pi binary" "$(pi --version 2>/dev/null | head -1)"
 else

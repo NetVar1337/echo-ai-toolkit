@@ -247,6 +247,12 @@ if (TierAtLeast 'standard') {
     if ($echoSrc -and (Test-Path $echoSrc)) { Copy-Item $echoSrc $launcher -Force }
     if (Test-Path $launcher) { Ok "launcher -> $launcher" }
 
+    # The launcher dispatches to these, so they must sit next to it.
+    foreach ($s in 'echo-update.ps1','echo-doctor.ps1') {
+        $srcS = if ($repoSrc) { Join-Path (Split-Path $repoSrc -Parent) "scripts\$s" } else { $null }
+        if ($srcS -and (Test-Path $srcS)) { Copy-Item $srcS (Join-Path $BinDir $s) -Force }
+    }
+
     # `echo` alias as a PowerShell function in the user profile.
     if ($env:ECHO_NO_ALIAS -ne '1') {
         $prof = $PROFILE.CurrentUserAllHosts

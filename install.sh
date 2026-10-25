@@ -259,6 +259,13 @@ install_pi() {
   fi
   chmod +x "$BIN_DIR/echo" 2>/dev/null
 
+  # The launcher dispatches to these, so they must sit next to it.
+  for s in echo-update.sh echo-doctor.sh; do
+    if [ -f "$REPO_SRC/scripts/$s" ]; then
+      cp -f "$REPO_SRC/scripts/$s" "$BIN_DIR/$s" && chmod +x "$BIN_DIR/$s"
+    fi
+  done
+
   # MCP: reuse the same server set the toolkit writes.
   [ -f "$ECHO_HOME/mcp.json" ] && cp -f "$ECHO_HOME/mcp.json" "$profile/mcp.json"
 

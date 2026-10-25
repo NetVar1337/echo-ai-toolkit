@@ -1,44 +1,139 @@
 #!/usr/bin/env bash
-# echo — launch Pi with the Echo profile.
+# echo — the Echo toolkit CLI.
 #
-#   echo                     interactive session
-#   echo -p "query"          print mode
-#   echo --help              pass anything straight through to pi
+#   echo                     start Pi with the Echo profile
+#   echo <pi args…>          pass everything through to Pi
+#   echo -- <pi args…>       force pass-through (for prompts that look like commands)
 #
-# Both prompt files are passed explicitly with Pi's own flags, so they apply even
-# if file discovery changes:
-#   --system-prompt         replaces Pi's default prompt
-#   --append-system-prompt  appended to it (repeatable)
+#   echo update [flags]      update toolkit, profile, Pi, and tools
+#   echo doctor              verify what is installed
+#   echo status              one-screen summary
+#   echo tools               list installed companion tools
+#   echo version             versions of everything
+#   echo help                this message
 #
-# The profile lives in $ECHO_HOME/pi and is selected with PI_CODING_AGENT_DIR, so
-# your normal `pi` configuration is left untouched.
-set -euo pipefail
+# `echo update` flags: --extensions --self --models --all --force (Pi's own)
+#                      --tools --profile (Echo's)
+#
+# The Pi profile lives in $ECHO_HOME/pi and is selected with PI_CODING_AGENT_DIR,
+# so your normal `pi` configuration is left untouched.
+set -uo pipefail
 
 ECHO_HOME="${ECHO_HOME:-$HOME/.local/share/echo-ai-toolkit}"
 PROFILE="$ECHO_HOME/pi"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! command -v pi >/dev/null 2>&1; then
+have() { command -v "$1" >/dev/null 2>&1; }
+dim()  { printf '\033[1;35m%s\033[0m' "$1"; }
+bold() { printf '\033[1m%s\033[0m' "$1"; }
+
+usage() {
+  awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
+}
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+need_profile() {
+  if [ ! -f "$PROFILE/SYSTEM.md" ]; then
+    printf '\033[1;31mecho:\033[0m Echo profile missing at %s\n' "$PROFILE" >&2
+    printf 'Re-run the toolkit installer, or:  echo update --profile\n' >&2
+    exit 1
+  fi
+}
+
+run_script() { # name — a sibling script, or one copied into $ECHO_HOME/bin
+  local name="$1"; shift
+  for cand in "$SELF_DIR/$name" "$ECHO_HOME/bin/$name"; do
+    [ -x "$cand" ] && { exec "$cand" "$@"; }
+  done
+  printf '\033[1;31mecho:\033[0m %s not found next to this launcher\n' "$name" >&2
+  exit 1
+}
+
+cmd_status() {
+  printf '\n%s  %s\n\n' "$(bold 'Echo toolkit')" "$ECHO_HOME"
+  printf '  %-22s %s\n' 'profile' "$([ -f "$PROFILE/SYSTEM.md" ] && echo "$(dim ok)" || echo "missing")"
+  printf '  %-22s %s\n' 'skills'  "$(ls -d "$PROFILE"/skills/*/ 2>/dev/null | wc -l)"
+  printf '  %-22s %s\n' 'prompt templates' "$(ls "$PROFILE"/prompts/*.md 2>/dev/null | wc -l)"
+  printf '  %-22s %s\n' 'launcher' "$SELF_DIR/$(basename "$0")"
+  printf '  %-22s %s\n' 'pi' "$(have pi && (pi --version 2>/dev/null | head -1) || echo 'not installed')"
+  if have claude; then
+    local p
+    p=$(claude plugin list 2>/dev/null | grep -oE 'echo-ai-toolkit@[a-z-]+' | head -1)
+    printf '  %-22s %s\n' 'claude plugin' "${p:-not installed}"
+  fi
+  printf '\n  Run %s for the full picture.\n\n' "$(bold 'echo doctor')"
+}
+
+cmd_tools() {
+  printf '\n%s\n\n' "$(bold 'Companion tools')"
+  printf '  %-30s %-10s %s\n' TOOL STATUS DETAIL
+  printf '  %-30s %-10s %s\n' '----' '------' '------'
+  row() { # name path [detail-cmd]
+    if [ -e "$2" ]; then
+      printf '  %-30s %-10s %s\n' "$1" "$(dim ok)" "${3:-}"
+    else
+      printf '  %-30s %-10s %s\n' "$1" 'missing' ''
+    fi
+  }
+  row mcp-gamehacking        "$ECHO_HOME/mcp-gamehacking/dist/index.js" 'built'
+  row angel-menu-mcp         "$ECHO_HOME/angel-menu-mcp/index.js"
+  row as_bundler             "$ECHO_HOME/bin/as_bundler"
+  row esp_preview.as         "$ECHO_HOME/reference/esp_preview.as"
+  row web-mv                 "$ECHO_HOME/web-mv/relay/node_modules"
+  row VMProtect-devirtualization "$ECHO_HOME/VMProtect-devirtualization"
+  row vmp-lazy-unpack        "$ECHO_HOME/vmp-lazy-unpack"
+  row VTIL-Core              "$ECHO_HOME/VTIL-Core"
+  row NoVmp                  "$ECHO_HOME/NoVmp"
+  row vtil2                  "$ECHO_HOME/vtil2"
+  row awesome-game-security  "$ECHO_HOME/reference/awesome-game-security.md"
+  row gamehacking-cheatsheet "$ECHO_HOME/reference/gamehacking-cheatsheet.md"
+  printf '\n  Update with %s\n\n' "$(bold 'echo update --tools')"
+}
+
+cmd_version() {
+  printf '\n'
+  printf '  %-22s %s\n' 'echo' '1.0.0'
+  printf '  %-22s %s\n' 'toolkit' "$(git -C "$PROFILE" rev-parse --short HEAD 2>/dev/null || echo "$(ls -d "$HOME"/.claude/plugins/marketplaces/echo-ai-toolkit 2>/dev/null >/dev/null && git -C "$HOME/.claude/plugins/marketplaces/echo-ai-toolkit" rev-parse --short HEAD 2>/dev/null || echo unknown)")"
+  printf '  %-22s %s\n' 'pi' "$(have pi && (pi --version 2>/dev/null | head -1) || echo 'not installed')"
+  printf '  %-22s %s\n' 'node' "$(have node && node -v || echo 'not installed')"
+  printf '  %-22s %s\n' 'python' "$(have python3 && python3 -V 2>&1 | cut -d' ' -f2 || echo 'not installed')"
+  printf '\n'
+}
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
+# `echo -- …` forces pass-through, for a prompt that starts with a command name.
+if [ "${1:-}" = "--" ]; then
+  shift
+else
+  HANDLED=1
+  case "${1:-}" in
+    update)   shift; run_script echo-update.sh "$@" ;;
+    doctor)   shift; run_script echo-doctor.sh "$@" ;;
+    status)   shift; cmd_status ;;
+    tools)    shift; cmd_tools ;;
+    version|--version|-V) shift; cmd_version ;;
+    help|--help|-h)       usage; exit 0 ;;
+    *)        HANDLED=0 ;;
+  esac
+  [ "$HANDLED" -eq 1 ] && exit 0
+fi
+
+# ── default: launch Pi ───────────────────────────────────────────────────────
+if ! have pi; then
   cat >&2 <<'EOF'
 echo: `pi` is not installed.
 
   curl -fsSL https://pi.dev/install.sh | sh
   # or: npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
-Pi needs Node.js 22.19 or newer.
+Pi needs Node.js 22.19 or newer. Everything else still works:
+  echo doctor    verify the toolkit
+  echo update    update everything
 EOF
   exit 127
 fi
 
-if [ ! -f "$PROFILE/SYSTEM.md" ]; then
-  cat >&2 <<EOF
-echo: Echo profile missing at $PROFILE
-
-Re-run the toolkit installer, or:
-  ECHO_HOME=$ECHO_HOME ./install.sh
-EOF
-  exit 1
-fi
-
+need_profile
 export PI_CODING_AGENT_DIR="$PROFILE"
 
 args=(--system-prompt "$PROFILE/SYSTEM.md")

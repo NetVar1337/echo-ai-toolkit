@@ -156,6 +156,41 @@ jobs:
           echo "$out"
           echo "$out" | grep -q 'pi.*is not installed' || { echo "FAIL: no install hint"; exit 1; }
 
+      - name: Wrapper subcommands dispatch
+        run: |
+          chmod +x pi/bin/echo
+          fail=0
+          for cmd in help version status tools; do
+            if ECHO_HOME=/tmp/nonexistent pi/bin/echo "$cmd" >/dev/null 2>&1; then
+              echo "OK   echo $cmd"
+            else
+              echo "FAIL echo $cmd"; fail=1
+            fi
+          done
+          if bash scripts/echo-update.sh --nonsense >/dev/null 2>&1; then
+            echo "FAIL echo update --nonsense should exit non-zero"; fail=1
+          else
+            echo "OK   echo update rejects unknown flags"
+          fi
+          exit $fail
+
+      - name: Update flag routing
+        run: |
+          stub=$(mktemp -d)
+          printf '#!/bin/sh\necho "PI: $*"\n' > "$stub/pi"
+          printf '#!/bin/sh\necho "CLAUDE: $*"\n' > "$stub/claude"
+          chmod +x "$stub/pi" "$stub/claude"
+          for f in --extensions --self --models --all; do
+            out=$(PATH="$stub:$PATH" ECHO_HOME=/tmp/nonexistent bash scripts/echo-update.sh "$f" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+            echo "$out" | grep -q "PI: update $f" || { echo "FAIL: $f not forwarded to pi"; exit 1; }
+            echo "OK   $f -> pi update $f"
+          done
+          out=$(PATH="$stub:$PATH" ECHO_HOME=/tmp/nonexistent bash scripts/echo-update.sh --self 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+          if echo "$out" | grep -q 'Toolkit plugin'; then
+            echo "FAIL: --self should not touch the toolkit"; exit 1
+          fi
+          echo "OK   --self leaves the toolkit alone"
+
   plugin:
     name: Plugin validation
     runs-on: ubuntu-latest

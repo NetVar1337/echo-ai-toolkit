@@ -156,9 +156,35 @@ profile for it and adds an `echo` launcher, so the same 18 skills and 4 prompt
 templates work there too — with your own system prompt instead of Pi's default.
 
 ```bash
-echo                      # interactive, Echo profile loaded
-echo -p "write a CS2 bone ESP"   # print mode
+echo                             # interactive, Echo profile loaded
+echo -p "write a CS2 bone ESP"   # print mode (anything not a subcommand goes to Pi)
+echo -- update my code           # -- forces pass-through for prompts that look like commands
 ```
+
+### The wrapper
+
+`echo` is a CLI around Pi, not just a launcher:
+
+| Command | Does |
+|---|---|
+| `echo` | start Pi with the Echo profile |
+| `echo update` | update toolkit + profile + Pi + all companion tools |
+| `echo update --extensions` | Pi packages/extensions only (+ profile resync) |
+| `echo update --self` | the Pi binary only |
+| `echo update --models` | Pi model catalogs only |
+| `echo update --all` | Pi and its packages |
+| `echo update --tools` | companion tools only (git pull + rebuild) |
+| `echo update --profile` | resync the Echo profile from the toolkit |
+| `echo doctor` | verify every tool — ok / MISSING / not applicable |
+| `echo status` | one-screen summary |
+| `echo tools` | list installed companion tools |
+| `echo version` | versions of everything |
+| `echo help` | usage |
+
+`--extensions`, `--self`, `--models`, `--all`, `--force` are Pi's own flags and pass
+straight through to `pi update`. `--tools` and `--profile` are Echo's.
+
+### The profile
 
 The launcher passes both prompt files explicitly, so they always apply:
 
