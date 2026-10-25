@@ -538,6 +538,211 @@ function@ inc = [count]() { count++; };   // captures by value at definition tim
 ## Alert / debug output
 
 ```angelscript
-alert(string msg)              // shows overlay popup
-print(string msg)              // writes to Echo console/log
+alert(string msg)                        // shows overlay popup (dismiss on click)
+print(string msg)                        // writes to Echo console/log
+
+// Extended alert API
+alert.show(string msg)                   // same as alert()
+alert.show_tag(string msg, string tag)   // show with category tag (e.g. "error", "info")
+alert.dismiss()                          // dismiss current popup programmatically
+```
+
+---
+
+## shared_snapshot\<T\> — inter-thread typed data hub
+
+One thread publishes; another reads — no mutex needed.
+
+```angelscript
+shared_snapshot<array<EntityData@>>@ snap = shared_snapshot<array<EntityData@>>();
+snap.publish(local_buf);                  // producer (e.g. memory tick at 64 tps)
+array<EntityData@>@ data = snap.read();  // consumer (e.g. render callback) — may be null
+```
+
+Type parameter must be a handle type (`@`).
+
+---
+
+## Typed hash sets
+
+```angelscript
+hash_set_uint64@ s = hash_set_uint64();
+s.insert(uint64 key); s.contains(uint64 key); s.remove(uint64 key); uint64 s.size();
+
+hash_set_int32@ s = hash_set_int32();   // same API, int32 keys
+hash_set_float@ s = hash_set_float();   // float keys (exact bit-equality)
+```
+
+Use `hash_set_uint64` for entity address dedup.
+
+---
+
+## proc — extended APIs
+
+### virtual_query
+
+```angelscript
+array<region_info@>@ proc.virtual_query()           // all regions
+region_info@         proc.virtual_query(uint64 addr) // region containing addr
+```
+
+### memory_buffer — bulk struct reads
+
+```angelscript
+memory_buffer@ buf = proc.read_buffer(uint64 addr, uint64 size)
+float  buf.read_float(uint64 offset)
+uint32 buf.read_uint32(uint64 offset)
+uint64 buf.read_uint64(uint64 offset)
+vec2   buf.read_vec2_float(uint64 offset)   // reads 2 floats
+vec3   buf.read_vec3_float(uint64 offset)   // reads 3 floats
+vec4   buf.read_vec4_float(uint64 offset)   // reads 4 floats
+```
+
+One `read_buffer` then multiple field reads — avoids many small `proc.read<T>` calls for structs.
+
+### Module list
+
+```angelscript
+array<module_info@>@ proc.get_modules()
+```
+
+### WebSocket server (IPC)
+
+```angelscript
+ws_server@ srv = process.open_socket(uint16 port)   // server mode; ws.connect() is client mode
+srv.on_connect(function@(ws_client@ c) { })
+srv.on_message(function@(ws_client@ c, string msg) { c.send("ack"); })
+srv.on_disconnect(function@(ws_client@ c) { })
+```
+
+---
+
+## Source 2 helpers
+
+```angelscript
+uint64 source2.get_controller(process@ p, uint64 entity)   // → player info pointer
+int    source2.get_bone_by_name(process@ p, uint64 entity, string name)  // → index (-1 if not found); cache result
+
+// Schema reflection (CS2/Source 2)
+uint32                    schema.get_offset(process@ p, string class_name, string field_name)
+array<schema_field@>@     schema.get_fields(process@ p, string class_name)
+// schema_field@ fields: .name (string), .offset (uint32), .type_name (string)
+```
+
+---
+
+## Unreal Engine helpers
+
+```angelscript
+uint64 unreal.build_view_cache(process@ p, uint64 camera_manager_addr)   // call once per tick
+bool   unreal.read_bones(process@ p, uint64 mesh_addr, uint64 view_cache, array<vec3>@ out_bones)
+vec3   unreal.read_bone(process@ p, uint64 bone_array_addr, int bone_idx) // non-cached single bone
+
+// Math helpers for Unreal angles
+vec2  math.unreal_calculate_angle(vec3 src, vec3 dst)       // → (pitch, yaw)
+vec2  math.unreal_smooth_rotation(vec2 cur, vec2 tgt, float smooth)
+```
+
+---
+
+## Unity helpers
+
+```angelscript
+uint32 unity.rust_prefab_id(process@ p, uint64 entity_addr)           // unique per entity class
+vec3   unity.rust_transform_position(process@ p, uint64 entity_addr)  // world position via Transform
+```
+
+---
+
+## IW Engine (CoD) helpers
+
+```angelscript
+bool iw_engine.w2s(process@ p, uint64 view_matrix_addr, vec3 world, float& sx, float& sy)
+```
+
+---
+
+## clip_paths — polygon boolean ops
+
+```angelscript
+clip_paths@ cp = clip_paths();
+cp.add_path(array<vec2>@ points)
+cp.inflate(float delta)                   // expand (+) or shrink (-)
+cp.simplify(float tolerance)              // Douglas-Peucker
+cp.boolean_op(clip_paths@ clip, int op)  // CLIP_INTERSECT, CLIP_UNION, CLIP_DIFFERENCE, CLIP_XOR
+cp.union_self()                           // merge self-intersecting paths
+array<array<vec2@>@>@ cp.points()        // result polygon list
+```
+
+---
+
+## Renderer — polygons and hue bars
+
+```angelscript
+renderer.draw_convex_poly(array<vec2>@ pts, color_t fill)
+renderer.draw_concave_poly(array<vec2>@ pts, color_t fill)
+renderer.draw_polyline(array<vec2>@ pts, color_t col, float thick, bool closed)
+
+renderer.draw_hue_bar(float x, float y, float w, float h,
+                      float value, float min_val, float max_val)
+renderer.draw_hue_bar_static(float x, float y, float w, float h)
+
+bool render.calculate_2d_bbox_unity(process@ p, uint64 entity_addr,
+                                    float& x, float& y, float& w, float& h)
+```
+
+---
+
+## Filesystem — ZIP support
+
+```angelscript
+zip_archive@ z = fs.zip_parse(string path)
+array<string>@ fs.zip_entries(zip_archive@ z)
+string        z.read_entry(string name)
+array<uint8>@ z.read_entry_bytes(string name)
+```
+
+---
+
+## SIMD and bit utilities
+
+```angelscript
+xmm_t mm_set_epi32(int32 d, int32 c, int32 b, int32 a)
+xmm_t mm_xor_si128(xmm_t a, xmm_t b)
+xmm_t mm_shuffle_epi8(xmm_t a, xmm_t mask)
+xmm_t mm_add_epi32(xmm_t a, xmm_t b)
+
+uint32 rol32(uint32 v, int n)
+uint64 ror64(uint64 v, int n)
+uint32 bswap32(uint32 v)
+uint64 bswap64(uint64 v)
+int    popcnt(uint64 v)
+int    lzcnt(uint64 v)
+int    tzcnt(uint64 v)
+```
+
+---
+
+## util — format and encode aliases
+
+```angelscript
+util.seed_random(uint32 seed)
+string        util.base64_encode(array<uint8>@ data)
+array<uint8>@ util.base64_decode(string b64)
+string        util.hex_encode(array<uint8>@ data)
+string        util.format_string(string fmt, ...)   // alias for fmt()
+```
+
+---
+
+## Menu element callbacks
+
+```angelscript
+funcdef void checkbox_callback(bool value);
+funcdef void combobox_callback(int index);
+funcdef void button_callback();
+
+checkbox@ cb = cat.add_checkbox("Enable", true, "esp.on");
+cb.set_callback(@on_toggle);
+void on_toggle(bool v) { /* fires on change */ }
 ```

@@ -81,7 +81,7 @@ Loaded automatically when relevant agents need them. Also readable directly.
 
 ---
 
-## Templates (13)
+## Templates (15)
 
 | Template | What it demonstrates |
 |----------|---------------------|
@@ -96,6 +96,8 @@ Loaded automatically when relevant agents need them. Also readable directly.
 | `unity-il2cpp.as` | Unity IL2CPP ESP: REA-discovered offsets, camera matrix, entity list walk, health bar |
 | `valorant.as` | Valorant ESP: VGK-aware external, Dumper-7-VGK GObjects decrypt, UE4 TUObjectArray, 66ms tick |
 | `fortnite.as` | Fortnite ESP: UE5/EAC, GWorld traversal, 12-bone skeleton, HP+shield bars |
+| `radar.as` | 2D circular radar panel — entity dots, edge-indicator arrows, rotating/north-up mode |
+| `loot.as` | CS2 dropped-weapon ESP — item tiers, distance-gated labels, sorted loot panel |
 | `esp-preview.as` | `esp_layout` namespace drop-in preview helper |
 | `web-mv.as` | web-mv HTTP memory viewer endpoint (`/regions`, `/read` at port 9000) |
 
