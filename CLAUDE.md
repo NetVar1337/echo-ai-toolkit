@@ -16,6 +16,7 @@ Scripts and templates for the Echo Universal API (AngelScript, Discord overlay, 
 | `echo-config` | Config persistence, HTTP, fs, ws, json, hash_map/hash_set — data layer for any Echo script |
 | `echo-radar` | 2D radar/minimap overlay — world→radar transform, rotating panel, entity dots, edge indicators |
 | `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking, loot panels |
+| `echo-triggerbot` | Triggerbot — crosshair detection, shot delay, burst, per-hitbox, AC-safe timing |
 | `echo-scripts` | Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
 
 Invoke: `Agent: echo-esp — write a CS2 bone ESP with mutex-safe entity buffer`

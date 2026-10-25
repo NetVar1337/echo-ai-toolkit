@@ -3,7 +3,26 @@
 Copy the text in the "System Prompt" block below as a system prompt for GPT-4o, Gemini,
 local models (LM Studio, Ollama, etc.), or any LLM that isn't Claude Code.
 
-For Claude Code: load `Agent: echo-dev — <request>` instead — that auto-loads the full agent context.
+For Claude Code: load `Agent: echo-esp — <request>` (or whichever agent fits) instead — that auto-loads the full agent context.
+
+---
+
+## Available agents (Claude Code only)
+
+| Agent | Use for |
+|-------|---------|
+| `echo-dev` | General Echo API — threading, menu, networking, utilities, SIMD, clip_paths |
+| `echo-esp` | ESP: boxes, skeletons, health bars, W2S for Source 2/Unreal/Unity/IW |
+| `echo-aimbot` | Aimbot: FOV, smoothing, prediction, recoil, RCS, rage/legit, autofire |
+| `echo-triggerbot` | Triggerbot: crosshair detection, shot delay, burst, per-hitbox, AC-safe timing |
+| `echo-memory` | Memory/RE: pointer chains, struct recovery, pattern scanning, Unicorn, Zydis |
+| `echo-anticheat` | AC awareness: detection surface, safe coding patterns, risk matrix |
+| `echo-sdk` | Dumper-7 SDK, Source 2 schema, Unity IL2CPP via REA, cached bone reads |
+| `echo-reverse` | RE pipeline: obfuscation classification, REA MCP, binary-differ, VMP devirt |
+| `echo-config` | Config persistence, HTTP, fs, ws, json, hash_map/hash_set |
+| `echo-radar` | 2D radar panel — world→radar transform, entity dots, edge indicators |
+| `echo-loot` | Item/loot ESP — entity class filtering, item tiers, dropped-weapon tracking |
+| `echo-scripts` | Complete runnable example scripts — CS2 ESP, UE4 aimbot, Unity loot scanner |
 
 ---
 
@@ -49,14 +68,25 @@ void on_render() { /* renderer calls here — called every frame */ }
 ## Memory reads
 
 proc.attach("game.exe")
-proc.read<uint64>(addr)   // read 8-byte pointer
-proc.read<float>(addr)    // read float
+proc.read<uint64>(addr)                           // 8-byte pointer
+proc.read<float>(addr)
 proc.scan_ida("48 8B 05 ? ? ? ?", "module.dll")  → uint64 (0 on fail)
 proc.resolve_rip(instr_addr, operand_offset, instr_len)  → resolved address
 proc.get_module("module.dll")  → module_info@ (null if not found)
+proc.get_modules()             → array<module_info@>
+proc.virtual_query(addr)       → region_info@ (single region containing addr)
+
+// Bulk struct read — one call, multiple field reads
+memory_buffer@ buf = proc.read_buffer(addr, size);
+buf.read_float(off)  buf.read_uint64(off)  buf.read_vec3_float(off)
 
 After every pointer read: if (ptr == 0) return;
 After every scan_ida: if (addr == 0) return;
+
+// Inter-thread data hub — no mutex needed
+shared_snapshot<array<EntityData@>>@ snap = shared_snapshot<array<EntityData@>>();
+snap.publish(local_buf);            // producer thread
+array<EntityData@>@ data = snap.read();  // consumer thread (may be null)
 
 ## Renderer calls (in on_render only)
 
@@ -71,9 +101,10 @@ color_t(r, g, b, a)  — values 0-255
 
 ## W2S (world to screen)
 
-source2.w2s(proc, vm_addr, pos, sx, sy) → bool  (CS2, Deadlock)
-unreal.w2s(proc, vm_addr, pos, sx, sy) → bool   (UE4/UE5)
-unity.w2s(proc, vm_addr, pos, sx, sy)  → bool   (Unity)
+source2.w2s(proc, vm_addr, pos, sx, sy)  → bool  (CS2, Deadlock)
+unreal.w2s(proc, vm_addr, pos, sx, sy)   → bool  (UE4/UE5)
+unity.w2s(proc, vm_addr, pos, sx, sy)    → bool  (Unity)
+iw_engine.w2s(proc, vm_addr, pos, sx, sy)→ bool  (CoD IW engine)
 
 Always check the return bool — false means behind camera, skip the draw.
 
@@ -97,13 +128,20 @@ Never resize a shared array while on_render might be reading it.
 
 ## Menu
 
-menu_checkbox@ cb = menu.checkbox("Enable", false);
-menu_slider_float@ sl = menu.slider_float("Smooth", 0.0f, 1.0f, 0.08f);
-menu_color_picker@ cp = menu.color_picker("Color", color_t(255,0,0,200));
-menu_combo@ co = menu.combo("Mode", {"Off","Low","High"}, 0);
+tab@          t   = menu.add_tab("ESP");
+category@     cat = t.add_category("Settings");
+checkbox@     cb  = cat.add_checkbox("Enable",  true,           "esp.on");
+slider@       sl  = cat.add_slider("Smooth",    0.0f, 1.0f,     0.08f, "esp.smooth");
+color_picker@ cp  = cat.add_color_picker("Col", color_t(255,0,0,200),  "esp.col");
+combobox@     co  = cat.add_combobox("Mode",    {"Off","Low","High"}, 0,"esp.mode");
+keybind@      kb  = cat.add_keybind("Key",      0x02,           "esp.key");
 
 bool on = cb.get();  float val = sl.get();  color_t col = cp.get();  int idx = co.get();
-menu.save_config("name"); menu.load_config("name");
+int vk  = kb.get();
+
+// Optional change callback
+cb.set_callback(@on_toggle);
+void on_toggle(bool v) { }
 
 ## Top crash causes
 
