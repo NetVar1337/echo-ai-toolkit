@@ -48,7 +48,7 @@ if [ -f "$ECHO_HOME/mcp-gamehacking/dist/index.js" ]; then
 elif [ -d "$ECHO_HOME/mcp-gamehacking" ]; then
   row miss "mcp-gamehacking" "cloned but not built"
 else
-  row miss "mcp-gamehacking" "not installed"
+  row na "mcp-gamehacking" "~3.1 GB — ECHO_WITH_GAMEHACKING=1"
 fi
 if [ -f "$ECHO_HOME/angel-menu-mcp/index.js" ]; then
   row ok "angel-menu-mcp" "installed"
@@ -88,12 +88,19 @@ fi
 
 echo
 echo "Python tooling"
-PY=""
-have python3 && PY=python3
+# Python tools live in a dedicated venv when one could be created (PEP 668 safe).
+VENV_PY="$ECHO_HOME/venv/bin/python"
+[ -x "$VENV_PY" ] || VENV_PY=""
+PY="$VENV_PY"
+[ -z "$PY" ] && have python3 && PY=python3
 [ -z "$PY" ] && have python && PY=python
 if [ -n "$PY" ]; then
-  $PY -c 'import triton' 2>/dev/null && row ok "triton" "$($PY -c 'import triton;print(getattr(triton,"__version__","?"))' 2>/dev/null)" \
-    || row miss "triton" "pip install triton-library"
+  if $PY -c 'import triton' 2>/dev/null; then
+    row ok "triton" "$($PY -c 'import importlib.metadata as m;print(m.version("triton-library"))' 2>/dev/null || echo installed)"
+  else
+    row miss "triton" "pip install triton-library"
+  fi
+  [ -n "$VENV_PY" ] && row ok "python venv" "$ECHO_HOME/venv"
   [ -d "$ECHO_HOME/VMProtect-devirtualization" ] && row ok "VMProtect-devirtualization" "cloned" || row miss "VMProtect-devirtualization" "not installed"
   [ -d "$ECHO_HOME/vmp-lazy-unpack" ] && row ok "vmp-lazy-unpack" "cloned" || row miss "vmp-lazy-unpack" "not installed"
 else
@@ -109,8 +116,9 @@ echo "Compiler-built tooling"
 
 echo
 echo "Reference docs"
-for d in gamehacking-cheatsheet awesome-game-security; do
-  [ -d "$ECHO_HOME/reference/$d" ] && row ok "$d" "cloned" || row miss "$d" "not installed"
+for d in awesome-game-security gamehacking-cheatsheet; do
+  f="$ECHO_HOME/reference/$d.md"
+  [ -s "$f" ] && row ok "$d" "$(wc -c < "$f") bytes" || row miss "$d" "not fetched"
 done
 
 echo

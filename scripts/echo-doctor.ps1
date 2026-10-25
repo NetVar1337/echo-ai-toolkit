@@ -41,7 +41,7 @@ else { Row miss 'mcp.json' 'run install.ps1' }
 
 if (Test-Path (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js')) { Row ok 'mcp-gamehacking' 'built' }
 elseif (Test-Path (Join-Path $EchoHome 'mcp-gamehacking')) { Row miss 'mcp-gamehacking' 'cloned but not built' }
-else { Row miss 'mcp-gamehacking' 'not installed' }
+else { Row na 'mcp-gamehacking' '~3.1 GB - set ECHO_WITH_GAMEHACKING=1' }
 
 if (Test-Path (Join-Path $EchoHome 'angel-menu-mcp\index.js')) { Row ok 'angel-menu-mcp' 'installed' }
 else { Row miss 'angel-menu-mcp' 'not installed' }
@@ -68,11 +68,13 @@ if (Have bun) {
 } else { Row na 'web-mv' 'needs Bun' }
 
 Write-Host "`nPython tooling"
-$py = if (Have python) { 'python' } elseif (Have py) { 'py' } else { $null }
+$venvPy = Join-Path $EchoHome 'venv\Scripts\python.exe'
+$py = if (Test-Path $venvPy) { $venvPy } elseif (Have python) { 'python' } elseif (Have py) { 'py' } else { $null }
 if ($py) {
     $hasTriton = $false
     try { & $py -c 'import triton' 2>$null; $hasTriton = ($LASTEXITCODE -eq 0) } catch {}
     if ($hasTriton) { Row ok 'triton' 'installed' } else { Row miss 'triton' 'pip install triton-library' }
+    if (Test-Path $venvPy) { Row ok 'python venv' (Join-Path $EchoHome 'venv') }
 
     foreach ($d in 'VMProtect-devirtualization','vmp-lazy-unpack') {
         if (Test-Path (Join-Path $EchoHome $d)) { Row ok $d 'cloned' } else { Row miss $d 'not installed' }
@@ -86,8 +88,10 @@ foreach ($d in 'VTIL-Core','NoVmp','vtil2') {
 if ((Have llvm-config) -or (Have opt)) { Row ok 'LLVM' 'present' } else { Row na 'LLVM' 'only for Triton LLVM interface' }
 
 Write-Host "`nReference docs"
-foreach ($d in 'gamehacking-cheatsheet','awesome-game-security') {
-    if (Test-Path (Join-Path $EchoHome "reference\$d")) { Row ok $d 'cloned' } else { Row miss $d 'not installed' }
+foreach ($d in 'awesome-game-security','gamehacking-cheatsheet') {
+    $f = Join-Path $EchoHome "reference\$d.md"
+    if ((Test-Path $f) -and ((Get-Item $f).Length -gt 0)) { Row ok $d "$((Get-Item $f).Length) bytes" }
+    else { Row miss $d 'not fetched' }
 }
 
 Write-Host ''

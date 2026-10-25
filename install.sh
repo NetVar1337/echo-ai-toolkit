@@ -95,14 +95,24 @@ clone_build_node() { # name repo entry
       || { fail "$name" "clone failed"; return; }
   fi
   sub "building $name (npm install + build — this is the slow step, a few minutes)…"
-  ( cd "$dir" && npm install --silent >/dev/null 2>&1 && npm run build --silent >/dev/null 2>&1 ) \
-    || { fail "$name" "npm build failed"; return; }
-  [ -f "$dir/$entry" ] && ok "$name" || fail "$name" "expected $entry after build"
+  ( cd "$dir" \
+      && npm install --silent >/dev/null 2>&1 \
+      && { node -e "process.exit(require('./package.json').scripts?.build?0:1)" 2>/dev/null \
+             && npm run build --silent >/dev/null 2>&1 || true; } ) \
+    || { fail "$name" "npm install failed"; return; }
+  [ -f "$dir/$entry" ] && ok "$name" || fail "$name" "expected $entry after install"
 }
 
 if have node && have npm && [ "${ECHO_SKIP_MCP:-0}" != "1" ]; then
-  clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
-  clone_build_node angel-menu-mcp  Jozkah/angel-menu-mcp   index.js
+  # mcp-gamehacking carries an 18 GB skills library (8259 files). Never fetch that
+  # without asking: opt in with ECHO_WITH_GAMEHACKING=1.
+  if [ "${ECHO_WITH_GAMEHACKING:-0}" = "1" ]; then
+    sub "mcp-gamehacking is ~3.1 GB on disk — this takes a while…"
+    clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
+  else
+    skip "mcp-gamehacking" "~3.1 GB of content — re-run with ECHO_WITH_GAMEHACKING=1 to install"
+  fi
+  clone_build_node angel-menu-mcp Jozkah/angel-menu-mcp index.js
 elif [ "${ECHO_SKIP_MCP:-0}" = "1" ]; then
   skip "MCP servers" "ECHO_SKIP_MCP=1"
 fi
@@ -173,15 +183,17 @@ install_web_mv() {
 }
 install_web_mv
 
-# Reference repos — offline copies of the two big knowledge bases.
-clone_docs() { # name repo
-  local dir="$REF_DIR/$1"
-  if [ -d "$dir/.git" ]; then ok "$1 already cloned"; return; fi
-  git clone --depth 1 "https://github.com/$2" "$dir" >/dev/null 2>&1 \
-    && ok "$1" || fail "$1" "clone failed"
+# Reference docs — the value is the curated list itself, so fetch the README
+# rather than cloning. awesome-game-security is 3.19 GB on disk; its README is
+# 435 KB and contains everything an AI needs from it.
+fetch_doc() { # name repo
+  local out="$REF_DIR/$1.md"
+  [ -s "$out" ] && { ok "$1 already fetched"; return; }
+  $CURL "https://raw.githubusercontent.com/$2/HEAD/README.md" -o "$out" \
+    && [ -s "$out" ] && ok "$1 ($(wc -c < "$out") bytes)" || fail "$1" "download failed"
 }
-clone_docs gamehacking-cheatsheet ridpath/gamehacking-cheatsheet
-clone_docs awesome-game-security  gmh5225/awesome-game-security
+fetch_doc awesome-game-security  gmh5225/awesome-game-security
+fetch_doc gamehacking-cheatsheet ridpath/gamehacking-cheatsheet
 fi
 
 # ── 5. Python reverse-engineering tooling ────────────────────────────────────
@@ -189,15 +201,41 @@ if tier_at_least standard; then
 say "Python reverse-engineering tooling"
 have python3 || skip "Python tooling" "python3 not found"
 
-pip_install() { # label package
-  python3 -m pip install --quiet --disable-pip-version-check "$2" >/dev/null 2>&1 \
-    && ok "$1" || skip "$1" "pip install $2 failed"
-}
 if have python3; then
+  # Many distros (Kali, Debian, Arch) refuse a system-wide pip install (PEP 668).
+  # A dedicated venv is the portable answer and keeps the system Python untouched.
+  VENV="$ECHO_HOME/venv"
+  PIP=""
+  if [ -x "$VENV/bin/python" ]; then
+    PIP="$VENV/bin/python -m pip"
+    ok "python venv already present"
+  elif python3 -m venv "$VENV" >/dev/null 2>&1; then
+    PIP="$VENV/bin/python -m pip"
+    ok "python venv created ($VENV)"
+  else
+    # No venv support (missing ensurepip). Fall back to --user, then system.
+    if python3 -m pip install --user --quiet --disable-pip-version-check pip >/dev/null 2>&1; then
+      PIP="python3 -m pip install --user"
+      ok "python (--user fallback)"
+    else
+      PIP="python3 -m pip"
+      skip "python venv" "ensurepip unavailable — falling back to system pip"
+    fi
+  fi
+
+  # Normalise: PIP is a command prefix; append install args after it.
+  pip_install() { # label package
+    $PIP install --quiet --disable-pip-version-check "$2" >/dev/null 2>&1 \
+      && ok "$1" || skip "$1" "pip install $2 failed"
+  }
+
   # Triton — symbolic execution. The PyPI package is "triton-library" (NOT "triton",
   # which is OpenAI's GPU compiler).
-  python3 -c 'import triton' 2>/dev/null && ok "triton already installed" \
-    || pip_install "triton (symbolic execution)" triton-library
+  if "$VENV/bin/python" -c 'import triton' >/dev/null 2>&1 || python3 -c 'import triton' >/dev/null 2>&1; then
+    ok "triton already installed"
+  else
+    pip_install "triton (symbolic execution)" triton-library
+  fi
 
   clone_py() { # name repo
     local dir="$ECHO_HOME/$1"
@@ -210,9 +248,11 @@ if have python3; then
 
   # vmp-lazy-unpack is a Python package: install it editable so `py -m unpack` works.
   if [ -d "$ECHO_HOME/vmp-lazy-unpack" ]; then
-    ( cd "$ECHO_HOME/vmp-lazy-unpack" && python3 -m pip install --quiet -e . >/dev/null 2>&1 ) \
+    ( cd "$ECHO_HOME/vmp-lazy-unpack" && $PIP install --quiet -e . >/dev/null 2>&1 ) \
       && ok "vmp-lazy-unpack (pip -e)" || skip "vmp-lazy-unpack" "pip -e failed (Windows-only tool)"
   fi
+
+  [ -x "$VENV/bin/python" ] && sub "use the venv: source $VENV/bin/activate"
 fi
 fi
 

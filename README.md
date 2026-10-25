@@ -28,17 +28,32 @@ Safe to re-run — every step is idempotent. Verify at any time:
 ./scripts/echo-doctor.sh        # or .\scripts\echo-doctor.ps1 on Windows
 ```
 
-### Tiers
+### Tiers and size
 
-| Tier | Installs | Needs |
-|---|---|---|
-| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ |
-| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python |
-| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun |
+| Tier | Installs | Needs | Size |
+|---|---|---|---|
+| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ | ~10 MB |
+| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python | ~60 MB |
+| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun | ~500 MB |
 
 ```bash
 ECHO_TIER=full bash install.sh
 ```
+
+Two things are **opt-in** because they are large:
+
+| Flag | Adds | Size |
+|---|---|---|
+| `ECHO_WITH_GAMEHACKING=1` | mcp-gamehacking — 4100+ skills, 75 agents, 19+ MCP tools | **~3.1 GB** (18 GB of skills on disk) |
+| `ECHO_SKIP_MCP=1` | *skips* the MCP build entirely — useful for a fast plugin-only install | — |
+
+```bash
+ECHO_WITH_GAMEHACKING=1 bash install.sh
+```
+
+The two big knowledge bases are fetched as **README files, not clones** —
+`awesome-game-security` is 3.19 GB on disk, but its 435 KB README is the entire
+curated list, which is all an AI needs.
 
 <details>
 <summary>What gets installed, and how each one is fetched</summary>
@@ -46,19 +61,19 @@ ECHO_TIER=full bash install.sh
 | Tool | What it gives you | How it is installed | Tier |
 |---|---|---|---|
 | **echo-ai-toolkit** | 12 agents, 18 skills, 15 templates | Claude Code plugin | minimal |
-| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + `npm run build` | minimal |
 | [angel-menu-mcp](https://github.com/Jozkah/angel-menu-mcp) | toggle the Echo overlay menu from Claude | clone + `npm install` | minimal |
 | [rea](https://github.com/morluto/rea) | static binary analysis (IL2CPP, APK, WASM, firmware) | `npx -y rea-agents` on first connect | minimal |
+| [mcp-gamehacking](https://github.com/1llu50ry/mcp-gamehacking) | 4100+ skills, 75 agents, 19+ MCP tools | clone + `npm install` + `npm run build` | **opt-in** (~3.1 GB) |
 | [ponytail](https://github.com/DietrichGebert/ponytail) | lazy-senior-dev discipline | Claude Code plugin | standard |
 | [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) | coding-discipline guidelines | Claude Code plugin | standard |
 | [as_bundler](https://github.com/sinistercodes/as_bundler) | AngelScript bundler / validator / obfuscator | prebuilt release binary | standard |
 | [echo-esp-preview](https://github.com/speedsunderscore/echo-esp-preview) | `g_preview` + `esp_layout` drag-to-arrange ESP | single `.as` drop-in, copied to your scripts dir | standard |
 | [echo-angelscript-lsp](https://github.com/speedsunderscore/echo-angelscript-lsp) | VS Code completion + hover docs for ~1900 Echo symbols | `.vsix` from the release, `code --install-extension` | standard |
 | [Triton](https://github.com/JonathanSalwan/Triton) | symbolic execution + taint analysis | `pip install triton-library` | standard |
-| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone | standard |
-| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone + `pip install -e .` | standard |
-| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | offline copy of the mega cheatsheet | shallow clone | standard |
-| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | offline copy of 4000+ curated resources | shallow clone | standard |
+| [VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | Triton-based VMP devirt scripts | clone (29 MB) | standard |
+| [vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | VMP section unpacker + import resolver | clone (8 MB) + `pip install -e .` | standard |
+| [awesome-game-security](https://github.com/gmh5225/awesome-game-security) | 4000+ curated resources | README only (435 KB, *not* the 3.19 GB clone) | standard |
+| [gamehacking-cheatsheet](https://github.com/ridpath/gamehacking-cheatsheet) | the mega cheatsheet | README only (636 KB) | standard |
 | [web-mv](https://github.com/Jozkah/web-mv) | browser memory viewer (`ws://127.0.0.1:9000`) | clone + `bun install` | full |
 | [VTIL-Core](https://github.com/vtil-project/VTIL-Core) | VM-translation IR + optimizer passes | CMake build | full |
 | [NoVmp](https://github.com/can1357/NoVmp) | full VMP devirt → optimized VTIL → native | CMake build (vendors VTIL-Core) | full |

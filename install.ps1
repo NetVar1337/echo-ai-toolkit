@@ -89,14 +89,24 @@ function CloneBuildNode($name, $repo, $entry) {
     }
     Push-Location $dir
     npm install --silent 2>&1 | Out-Null
-    npm run build --silent 2>&1 | Out-Null
+    $hasBuild = $false
+    try { $pkg = Get-Content package.json -Raw | ConvertFrom-Json; $hasBuild = $null -ne $pkg.scripts.build } catch {}
+    if ($hasBuild) { npm run build --silent 2>&1 | Out-Null }
     Pop-Location
-    if (Test-Path (Join-Path $dir $entry)) { Ok $name } else { Fail $name "expected $entry after build" }
+    if (Test-Path (Join-Path $dir $entry)) { Ok $name } else { Fail $name "expected $entry after install" }
 }
-if ((Have node) -and (Have npm)) {
-    CloneBuildNode 'mcp-gamehacking' '1llu50ry/mcp-gamehacking' 'dist\index.js'
-    CloneBuildNode 'angel-menu-mcp'  'Jozkah/angel-menu-mcp'    'index.js'
-} else { Skip 'MCP servers' 'Node 18+ required' }
+if (($env:ECHO_SKIP_MCP -ne '1') -and (Have node) -and (Have npm)) {
+    # mcp-gamehacking carries an 18 GB skills library. Never fetch that without
+    # asking: opt in with $env:ECHO_WITH_GAMEHACKING = '1'.
+    if ($env:ECHO_WITH_GAMEHACKING -eq '1') {
+        Write-Host '    mcp-gamehacking is ~3.1 GB on disk - this takes a while...'
+        CloneBuildNode 'mcp-gamehacking' '1llu50ry/mcp-gamehacking' 'dist\index.js'
+    } else {
+        Skip 'mcp-gamehacking' '~3.1 GB of content - set $env:ECHO_WITH_GAMEHACKING=1 to install'
+    }
+    CloneBuildNode 'angel-menu-mcp' 'Jozkah/angel-menu-mcp' 'index.js'
+} elseif ($env:ECHO_SKIP_MCP -eq '1') { Skip 'MCP servers' 'ECHO_SKIP_MCP=1' }
+else { Skip 'MCP servers' 'Node 18+ required' }
 
 # ── 4. Echo-side tooling ─────────────────────────────────────────────────────
 if (TierAtLeast 'standard') {
@@ -159,13 +169,18 @@ if (TierAtLeast 'standard') {
         } else { Fail 'web-mv' 'clone failed' }
     }
 
-    # Reference repos — offline copies of the two big knowledge bases.
-    foreach ($pair in @(@('gamehacking-cheatsheet','ridpath/gamehacking-cheatsheet'),
-                        @('awesome-game-security','gmh5225/awesome-game-security'))) {
-        $name = $pair[0]; $dir = Join-Path $RefDir $name
-        if (Test-Path (Join-Path $dir '.git')) { Ok "$name already cloned"; continue }
-        git clone --depth 1 "https://github.com/$($pair[1])" $dir 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { Ok $name } else { Fail $name 'clone failed' }
+    # Reference docs — the value is the curated list, so fetch the README rather
+    # than cloning. awesome-game-security is 3.19 GB on disk; its README is 435 KB.
+    foreach ($pair in @(@('awesome-game-security','gmh5225/awesome-game-security'),
+                        @('gamehacking-cheatsheet','ridpath/gamehacking-cheatsheet'))) {
+        $name = $pair[0]; $out = Join-Path $RefDir "$name.md"
+        if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) { Ok "$name already fetched"; continue }
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri `
+              "https://raw.githubusercontent.com/$($pair[1])/HEAD/README.md" `
+              -OutFile $out -ErrorAction Stop
+            Ok "$name ($((Get-Item $out).Length) bytes)"
+        } catch { Fail $name 'download failed' }
     }
 }
 
@@ -175,12 +190,20 @@ if (TierAtLeast 'standard') {
     $py = if (Have python) { 'python' } elseif (Have py) { 'py' } else { $null }
     if (-not $py) { Skip 'Python tooling' 'python not found' }
     else {
+        # A dedicated venv keeps the system Python untouched and sidesteps PEP 668.
+        $venv = Join-Path $EchoHome 'venv'
+        $venvPy = Join-Path $venv 'Scripts\python.exe'
+        if (-not (Test-Path $venvPy)) {
+            & $py -m venv $venv 2>&1 | Out-Null
+        }
+        if (Test-Path $venvPy) { Ok 'python venv ready' } else { $venvPy = $py; Skip 'python venv' 'venv creation failed - using system python' }
+
         # Triton — the PyPI package is "triton-library" (NOT "triton", which is OpenAI's GPU compiler).
         $hasTriton = $false
-        try { & $py -c 'import triton' 2>$null; $hasTriton = ($LASTEXITCODE -eq 0) } catch {}
+        try { & $venvPy -c 'import triton' 2>$null; $hasTriton = ($LASTEXITCODE -eq 0) } catch {}
         if ($hasTriton) { Ok 'triton already installed' }
         else {
-            & $py -m pip install --quiet --disable-pip-version-check triton-library 2>&1 | Out-Null
+            & $venvPy -m pip install --quiet --disable-pip-version-check triton-library 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) { Ok 'triton (symbolic execution)' } else { Skip 'triton' 'pip install failed' }
         }
 
@@ -197,7 +220,7 @@ if (TierAtLeast 'standard') {
         # vmp-lazy-unpack is a Python package: install editable so `py -m unpack` works.
         $vl = Join-Path $EchoHome 'vmp-lazy-unpack'
         if (Test-Path $vl) {
-            Push-Location $vl; & $py -m pip install --quiet -e . 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
+            Push-Location $vl; & $venvPy -m pip install --quiet -e . 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok 'vmp-lazy-unpack (pip -e)' } else { Skip 'vmp-lazy-unpack' 'pip -e failed' }
         }
     }
