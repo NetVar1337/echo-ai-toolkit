@@ -1,4 +1,8 @@
-.mcp.json
-
 # Built AngelScript checker (scripts/angelscript/build.sh)
 scripts/angelscript/check
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Note: .mcp.json at the repo root IS tracked on purpose — the plugin ships it.
