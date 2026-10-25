@@ -19,6 +19,12 @@ $EchoHome  = if ($env:ECHO_HOME) { $env:ECHO_HOME } else { Join-Path $HOME '.loc
 $BinDir    = Join-Path $EchoHome 'bin'
 $RefDir    = Join-Path $EchoHome 'reference'
 
+# An unknown tier must not silently mean "download everything".
+if ($Tier -notin @('minimal','standard','full')) {
+    Write-Host "`n! unknown ECHO_TIER='$Tier' - using standard" -ForegroundColor Magenta
+    $Tier = 'standard'
+}
+
 $script:OK = @(); $script:Skipped = @(); $script:Failed = @()
 
 function Say  { Write-Host "`n==> $args" -ForegroundColor Yellow }

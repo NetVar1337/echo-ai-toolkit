@@ -20,6 +20,12 @@ ECHO_HOME="${ECHO_HOME:-$HOME/.local/share/echo-ai-toolkit}"
 BIN_DIR="$ECHO_HOME/bin"
 REF_DIR="$ECHO_HOME/reference"
 
+# An unknown tier must not silently mean "download everything".
+case "$TIER" in
+  minimal|standard|full) ;;
+  *) printf '\n\033[1;35m! unknown ECHO_TIER="%s" — using standard\033[0m\n' "$TIER"; TIER=standard ;;
+esac
+
 # ── reporting ────────────────────────────────────────────────────────────────
 OK=(); SKIPPED=(); FAILED=()
 say()  { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }

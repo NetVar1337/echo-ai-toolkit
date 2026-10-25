@@ -30,11 +30,17 @@ Safe to re-run — every step is idempotent. Verify at any time:
 
 ### Tiers and size
 
+Sizes are **measured**, not estimated:
+
 | Tier | Installs | Needs | Size |
 |---|---|---|---|
-| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ | ~10 MB |
-| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python | ~60 MB |
-| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun | ~500 MB |
+| `ECHO_TIER=minimal` | plugin + MCP servers | Node 18+ | ~35 MB |
+| `ECHO_TIER=standard` *(default)* | + Echo tooling, Python tooling, reference docs | Node + Python | ~550 MB |
+| `ECHO_TIER=full` | + compiler-built devirt stack, LLVM, web-mv | + CMake/MSVC, .NET 8, Bun | ~1.2 GB |
+
+Most of the standard tier's size is unavoidable tooling: the Python venv with Triton
+(258 MB), and `VMProtect-devirtualization`'s bundled Intel Pin (121 MB) plus sample
+traces (24 MB).
 
 ```bash
 ECHO_TIER=full bash install.sh
@@ -45,7 +51,7 @@ Two things are **opt-in** because they are large:
 | Flag | Adds | Size |
 |---|---|---|
 | `ECHO_WITH_GAMEHACKING=1` | mcp-gamehacking — 4100+ skills, 75 agents, 19+ MCP tools | **~3.1 GB** (18 GB of skills on disk) |
-| `ECHO_SKIP_MCP=1` | *skips* the MCP build entirely — useful for a fast plugin-only install | — |
+| `ECHO_SKIP_MCP=1` | *skips* the MCP build entirely — fastest plugin-only install | — |
 
 ```bash
 ECHO_WITH_GAMEHACKING=1 bash install.sh
