@@ -43,6 +43,8 @@ SOURCES = [
      "commit": "66f64f6f83e3104735dbfffbd18bfa768ecd4346", "license": "NONE"},
     {"path": "tools/VMProtect-devirtualization", "repo": "JonathanSalwan/VMProtect-devirtualization",
      "commit": "d2b26d66db59e341f179c7e326246d28c4d25491", "license": "NONE"},
+    {"path": "tools/signature-doctor", "repo": "b4rzY/Signature-Doctor",
+     "commit": "19fda46d86a4e142a547c375a4cc85cd68a963c5", "license": "NONE"},
     {"path": "tools/web-mv", "repo": "Jozkah/web-mv",
      "commit": "73c4a0b971f4fb30851656331d049636545fa599", "license": "NONE"},
     {"path": "plugins/ponytail", "repo": "DietrichGebert/ponytail",

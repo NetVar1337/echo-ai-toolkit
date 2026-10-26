@@ -19,6 +19,7 @@ clone	angel-menu-mcp	Jozkah/angel-menu-mcp	a96533e983256ad0917a8192ad43c11fac597
 clone	VMProtect-devirtualization	JonathanSalwan/VMProtect-devirtualization	d2b26d66db59e341f179c7e326246d28c4d25491
 clone	vmp-lazy-unpack	x86rc/vmp-lazy-unpack	66f64f6f83e3104735dbfffbd18bfa768ecd4346
 clone	web-mv	Jozkah/web-mv	73c4a0b971f4fb30851656331d049636545fa599
+clone	signature-doctor	b4rzY/Signature-Doctor	19fda46d86a4e142a547c375a4cc85cd68a963c5
 clone	VTIL-Core	vtil-project/VTIL-Core	9ebee8e890a3a8923cc41f07821f740910e7c9b2
 clone	NoVmp	can1357/NoVmp	6c23c9a335f70e8d5ed6299668fd802f2314c896
 clone	vtil2	pop-rip/vtil2	242d331fdbe4e596fe79234f2abea2aa8de87e21

@@ -9,9 +9,9 @@ Supply chain: the installer no longer fetches anything from a third party.
 
 ### Everything is vendored
 
-- New `vendor/` — 270 MB, 3727 files: every companion tool source (VTIL-Core, NoVmp with its
+- New `vendor/` — 272 MB, 3783 files: every companion tool source (VTIL-Core, NoVmp with its
   submodules inlined at the commits NoVmp pins, vtil2, vmp-lazy-unpack, VMProtect-devirtualization,
-  web-mv), both MCP servers, both companion Claude plugins, the `as_bundler` binaries, the LSP zip,
+  web-mv, Signature-Doctor), both MCP servers, both companion Claude plugins, the `as_bundler` binaries, the LSP zip,
   `esp_preview.as`, both reference READMEs, the `rea-agents` tarball and a hashed Python lock.
 - `vendor/MANIFEST.json` + `vendor/CHECKSUMS.sha256` record every file's sha256, upstream repo,
   commit and license. `scripts/vendor_manifest.py --check` runs in CI, and the installer verifies
@@ -43,8 +43,9 @@ Supply chain: the installer no longer fetches anything from a third party.
 
 ### Licensing
 
-Six vendored upstreams ship no license file (`linux-pe`, `vmp-lazy-unpack`,
-`VMProtect-devirtualization`, `web-mv`, `echo-esp-preview`, `andrej-karpathy-skills`). Their
+Seven vendored upstreams ship no license file (`linux-pe`, `vmp-lazy-unpack`,
+`VMProtect-devirtualization`, `web-mv`, `signature-doctor`, `echo-esp-preview`,
+`andrej-karpathy-skills`). Their
 presence here is not a license grant — see `vendor/README.md`. NoVmp is GPL-3.0 and stays
 isolated with its license intact.
 

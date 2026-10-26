@@ -378,4 +378,4 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' -L "https://github.com/$r")
             if [ "$code" = "200" ]; then echo "OK   $r"; else echo "FAIL $r ($code)"; fail=1; fi
           done
-          exit $fail"
+          exit $fail

@@ -24,6 +24,7 @@ Python.
 | `tools/vmp-lazy-unpack/` | [x86rc/vmp-lazy-unpack](https://github.com/x86rc/vmp-lazy-unpack) | `66f64f6` | **none** |
 | `tools/VMProtect-devirtualization/` | [JonathanSalwan/VMProtect-devirtualization](https://github.com/JonathanSalwan/VMProtect-devirtualization) | `d2b26d6` | **none** |
 | `tools/web-mv/` | [Jozkah/web-mv](https://github.com/Jozkah/web-mv) | `73c4a0b` | **none** |
+| `tools/signature-doctor/` | [b4rzY/Signature-Doctor](https://github.com/b4rzY/Signature-Doctor) | `19fda46` | **none** |
 | `plugins/ponytail/` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | `5.3.2` | MIT |
 | `plugins/andrej-karpathy-skills/` | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | HEAD at vendoring | **none** |
 | `bin/as_bundler`, `bin/as_bundler.exe` | as_bundler `v1.5.0` release | sha256 in `MANIFEST.json` | see upstream |
@@ -40,9 +41,9 @@ offline and reproducibly.
 
 ## Licensing — read before redistributing
 
-Six upstreams ship **no license file**, which means all rights reserved by
+Seven upstreams ship **no license file**, which means all rights reserved by
 default: `linux-pe`, `vmp-lazy-unpack`, `VMProtect-devirtualization`, `web-mv`,
-`echo-esp-preview` and `andrej-karpathy-skills`. Vendoring them into a public
+`signature-doctor`, `echo-esp-preview` and `andrej-karpathy-skills`. Vendoring them into a public
 repository redistributes them. This repo is MIT; those directories are not
 covered by it, and their presence here is not a license grant. If you are the
 rights holder for one of them and want it removed, delete the directory — the

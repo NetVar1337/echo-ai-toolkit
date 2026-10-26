@@ -5,8 +5,8 @@
    "size": 823
   },
   "README.md": {
-   "sha256": "7458c4b35990d88f41e81438d9ed9f87269bc291b48ff8cbbc2295c427138adb",
-   "size": 4788
+   "sha256": "17ff3ed6bf722d0a0482d6a460eef1614a339e6caea6bc0f1bcb69a93463f6a5",
+   "size": 4933
   },
   "bin/as_bundler": {
    "sha256": "6977cb07acb86ab70219dd360bcade54e3ff990040727da3fe420e16d3d5c8b3",
@@ -13028,6 +13028,226 @@
    "sha256": "b5c581564a056bc44da0382e1f3e99f45c4c13e6dd047ee56c98fe1afb983158",
    "size": 103
   },
+  "tools/signature-doctor/.github/workflows/ci.yml": {
+   "sha256": "faae08b28e61c1d7b6a5d8d0fd8139d7f95ca80e751d0807629444b3a245093a",
+   "size": 769
+  },
+  "tools/signature-doctor/.gitignore": {
+   "sha256": "a847f5609b33d7d315ad1b76417c3445135b949c1d262ca37ef9e1e63c5bff0b",
+   "size": 105
+  },
+  "tools/signature-doctor/.impeccable/design.json": {
+   "sha256": "708c8799195a69ade89c4c2f057df89056893f639b638cb3b29806b764aee712",
+   "size": 13525
+  },
+  "tools/signature-doctor/DESIGN.md": {
+   "sha256": "df5e188c5bde2f61b5765036180a826ade4a98bb50a9a8b148e8f61044f5a716",
+   "size": 9289
+  },
+  "tools/signature-doctor/PRODUCT.md": {
+   "sha256": "baadf72085d01e8a3314ba5ff4615c80756a5d0c5de78d136abb7f9916b4450a",
+   "size": 1057
+  },
+  "tools/signature-doctor/README.md": {
+   "sha256": "9b2392387500448c9e9ec84b23afa143ef14458d2d9d69ab4e075aa58285e6df",
+   "size": 19587
+  },
+  "tools/signature-doctor/docs/ARCHITECTURE.md": {
+   "sha256": "44648f7c9a1bc917a05cedf6a487c022ef7b8af6ab7625c41d4265cd149e75ab",
+   "size": 8132
+  },
+  "tools/signature-doctor/docs/CATALOG.md": {
+   "sha256": "cc7ab5f7b11c7637a792a97b8f5b59fb60b10363386f58e80def41520efc2b52",
+   "size": 6783
+  },
+  "tools/signature-doctor/docs/COMPATIBILITY.md": {
+   "sha256": "0fa96f8ec6fdd653ced69ba124c3276fa4458aa2daf91c0d60f12192e3821d3c",
+   "size": 8778
+  },
+  "tools/signature-doctor/docs/DESIGN-RESEARCH.md": {
+   "sha256": "8befbd5ca4a7812bbdb5fdb252177e40b709004f34c389ff089ad15ba9a71128",
+   "size": 1565
+  },
+  "tools/signature-doctor/docs/PROTOCOL.md": {
+   "sha256": "5aee2e5716050eda145c4a557588f0de7052a6953127bb177b17b6fc794902be",
+   "size": 9078
+  },
+  "tools/signature-doctor/docs/assets/command-search.png": {
+   "sha256": "d72874e1d78b662c3a693d9cff85463fa0523c64aab8237837a64f642cdfb27d",
+   "size": 21450
+  },
+  "tools/signature-doctor/docs/assets/dashboard-noir.png": {
+   "sha256": "62410713f2337a3410b0e10a86f4a4dea1410d8dd5702b914cbf252ce60c3204",
+   "size": 143052
+  },
+  "tools/signature-doctor/docs/assets/dashboard-preview.svg": {
+   "sha256": "25ffd94f9f12639d67b2c703822a975a56569b4ca7b284feb464f99d75994125",
+   "size": 34318
+  },
+  "tools/signature-doctor/docs/assets/hero.svg": {
+   "sha256": "012b33166f9485015f24e0a3d19b3f6a63eaef4f81cee761d6fd437522c7dc5f",
+   "size": 5437
+  },
+  "tools/signature-doctor/docs/assets/mobile-inspector.png": {
+   "sha256": "6697d81dcc11e403c0f8eed0cb33d62e467d8c7bc034ab0d8ee01489176a1a33",
+   "size": 24909
+  },
+  "tools/signature-doctor/examples/angelscript-connect.as": {
+   "sha256": "c387e92af9ddc613b139a2edf110fb628b4a7b4de0c501459e4fd7800ece6234",
+   "size": 16171
+  },
+  "tools/signature-doctor/package-lock.json": {
+   "sha256": "3dee86eea5d3c4c4d3a75ef07347cf66fcf02cf77b25f96191fdeec1aa6ea812",
+   "size": 19904
+  },
+  "tools/signature-doctor/package.json": {
+   "sha256": "75d107b9f44421156be03249219392b33540692b0a91957340b4e0e3863fd3cd",
+   "size": 782
+  },
+  "tools/signature-doctor/public/app.mjs": {
+   "sha256": "28a33243f53c0c0e898a2813ed6c0f8891bb4e93696bcdc6f9ecc5fbf64ca7e0",
+   "size": 56304
+  },
+  "tools/signature-doctor/public/base.css": {
+   "sha256": "44a31dc240c010a24e67148cf04b50b4bd053e00ac4dac11108ae6e45049b384",
+   "size": 104
+  },
+  "tools/signature-doctor/public/favicon.svg": {
+   "sha256": "d560068ce6456af3a896649cb513eaee3adbb5959468718928514c724b2f1822",
+   "size": 305
+  },
+  "tools/signature-doctor/public/fonts/OFL.txt": {
+   "sha256": "d826ab6583b12c26807d8716a545bdbbb672df04f48608a364ba9efdbe501c30",
+   "size": 4383
+  },
+  "tools/signature-doctor/public/fonts/manrope-latin.woff2": {
+   "sha256": "a30ddcd349703aff7464c34bef3fffdff405ee50c113440d7c8693c02d210972",
+   "size": 24836
+  },
+  "tools/signature-doctor/public/icons.mjs": {
+   "sha256": "0109317c8ce8917d1a0f1cba329f344aca2c504858d281f6f3fafae70c0744bc",
+   "size": 5849
+  },
+  "tools/signature-doctor/public/index.html": {
+   "sha256": "477d2c59a012637dfc9adc9b78b0d9ec71eeab059c51e847fd49a8fcc2f7a66f",
+   "size": 1064
+  },
+  "tools/signature-doctor/public/store.mjs": {
+   "sha256": "2c1b231b89466cabb51acfaca0fbdad2b64ed53df52975f195d0b3f8b1161d72",
+   "size": 9199
+  },
+  "tools/signature-doctor/public/styles.css": {
+   "sha256": "bb99961d4a89b2e413f40095ad18ea1a57cdbabd1cd67f5a104ea899820d71b9",
+   "size": 28946
+  },
+  "tools/signature-doctor/public/vendor/gsap.min.js": {
+   "sha256": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb",
+   "size": 72927
+  },
+  "tools/signature-doctor/public/vendor/lucide-LICENSE.txt": {
+   "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+   "size": 3208
+  },
+  "tools/signature-doctor/run.bat": {
+   "sha256": "5555e140e0e5911e5e7e05af47e9b873a917598f9db6073559f9fe98364435ad",
+   "size": 595
+  },
+  "tools/signature-doctor/run.sh": {
+   "sha256": "82c1b7b485d665180241211a8b0add2a3e9daee255f19f19feba4624cb8f59cc",
+   "size": 408
+  },
+  "tools/signature-doctor/scripts/check.mjs": {
+   "sha256": "67e600e2e1465236cb2ae98eed4f9b44f392c011b17ac0cc75cf9ce02aaca7d6",
+   "size": 1071
+  },
+  "tools/signature-doctor/scripts/sync-ui-assets.mjs": {
+   "sha256": "240969cc7db694a6d0181d17b9abc73f5646cff091751538e5869847febd4d0e",
+   "size": 2205
+  },
+  "tools/signature-doctor/scripts/verify-angelscript.mjs": {
+   "sha256": "d9157b86e1a4273b2e9348f4051cf9be489f2ae028a35ed88fe3a9f88ce580ed",
+   "size": 8833
+  },
+  "tools/signature-doctor/server/bridge.mjs": {
+   "sha256": "70a72bf4d54d34d69e7a309d28c0402572d49d33054fdf341c07740cdc093a83",
+   "size": 13741
+  },
+  "tools/signature-doctor/server/index.mjs": {
+   "sha256": "9c2159914bed76d4b2c5beb6f64daa7eb0a9529d3788dc6db732ad5d7bfb2ac0",
+   "size": 8582
+  },
+  "tools/signature-doctor/shared/catalog.mjs": {
+   "sha256": "ae89c4a9a71beca8a2bbf07c100fbbe49ea6c9b37e348d7ed1a8ee1bf459962a",
+   "size": 11883
+  },
+  "tools/signature-doctor/shared/demo.mjs": {
+   "sha256": "ecb051166f884512962f0d6819fa73f26e141943bb564975d6235c39474898dc",
+   "size": 9313
+  },
+  "tools/signature-doctor/shared/engine.mjs": {
+   "sha256": "b96ead23bae8bbfe6d4a5d17d90dc25b2a4249b0958dc50622487ef570e3ad52",
+   "size": 15742
+  },
+  "tools/signature-doctor/shared/export.mjs": {
+   "sha256": "a33428be094c36de17dafa9fcbbfde3e6e0dcd05d64c67e694dcbd4a5c976dc4",
+   "size": 15594
+  },
+  "tools/signature-doctor/shared/model.mjs": {
+   "sha256": "ba41886d48ccba3618cd20abdac2df2c8d65021236503b68291a3d285753875e",
+   "size": 2187
+  },
+  "tools/signature-doctor/tests/angelscript/README.md": {
+   "sha256": "b8bfb1aeb4f44f89ec91ea56136143eefa769154d64b9d81f2fa5d1313dba823",
+   "size": 3041
+  },
+  "tools/signature-doctor/tests/angelscript/connector-assertions.as": {
+   "sha256": "4bed88d3cbfe088baae5b1d12e917559a2693c485e6234f2c3095ad4487ddc9e",
+   "size": 4513
+  },
+  "tools/signature-doctor/tests/angelscript/connector-stubs.as": {
+   "sha256": "c4228dcd3225be98fd082e01b1c08b746a50aaf78e2c1bdfe9a57a94b8e9a897",
+   "size": 4333
+  },
+  "tools/signature-doctor/tests/angelscript/host-echo.as": {
+   "sha256": "4441fd064969bf490027b152ccc7cbb167a735ff0c182c81bbf05a34be4e5797",
+   "size": 244
+  },
+  "tools/signature-doctor/tests/angelscript/host-solanius.as": {
+   "sha256": "a41815079b29b0f66ef91fa9278546b24f9178061bea2aa3f123add3f1262811",
+   "size": 278
+  },
+  "tools/signature-doctor/tests/angelscript/process-stubs.as": {
+   "sha256": "cbfd956979e021d3ecbc7bc55e9be1f7296c8760b3e8c44ea0fee78b32f93eeb",
+   "size": 5940
+  },
+  "tools/signature-doctor/tests/angelscript/runner.cpp": {
+   "sha256": "cfbc5b4c5254eab5a0152379dcbfc13d2ad72c038dd5d9463bb0a5d2e39e8f68",
+   "size": 3459
+  },
+  "tools/signature-doctor/tests/catalog.test.mjs": {
+   "sha256": "de7714f90adcbab6f37aca51826528e0695e80632dafd0b6c4d2df8aaa444adb",
+   "size": 4804
+  },
+  "tools/signature-doctor/tests/engine.test.mjs": {
+   "sha256": "29e7a17ae570a2df734eff430f44c2d4b35d506106042aa2912ab4d8eae34ba4",
+   "size": 11940
+  },
+  "tools/signature-doctor/tests/export.test.mjs": {
+   "sha256": "ccc42443afa06096c828c8366fa71b40968742123b7192f9f988e984827be3c5",
+   "size": 9017
+  },
+  "tools/signature-doctor/tests/server.test.mjs": {
+   "sha256": "532c39cc0a1bdf1627a42ea875e3783c7100738aef68c69ada724b9c53dcd6bf",
+   "size": 13346
+  },
+  "tools/signature-doctor/tests/storage.test.mjs": {
+   "sha256": "5be0fc526e217934794168cdd203f8a135c41952413190fa05ea57132aef6ab9",
+   "size": 5373
+  },
+  "tools/signature-doctor/tests/ui.test.mjs": {
+   "sha256": "f1030b7b846821f0c47265f38963352c4f72fe41e7dadff4f9acaca01cecf07d",
+   "size": 13266
+  },
   "tools/vmp-lazy-unpack/.gitattributes": {
    "sha256": "1a1dbe176bc233b499d35a57db7513f2941c99ab9759f177830c9149be99005b",
    "size": 66
@@ -14913,7 +15133,7 @@
    "size": 72676
   }
  },
- "generated": "2026-10-26T10:10:49Z",
+ "generated": "2026-10-26T10:15:55Z",
  "sources": [
   {
    "commit": "a96533e983256ad0917a8192ad43c11fac5979cd",
@@ -14962,6 +15182,12 @@
    "license": "NONE",
    "path": "tools/VMProtect-devirtualization",
    "repo": "JonathanSalwan/VMProtect-devirtualization"
+  },
+  {
+   "commit": "19fda46d86a4e142a547c375a4cc85cd68a963c5",
+   "license": "NONE",
+   "path": "tools/signature-doctor",
+   "repo": "b4rzY/Signature-Doctor"
   },
   {
    "commit": "73c4a0b971f4fb30851656331d049636545fa599",
