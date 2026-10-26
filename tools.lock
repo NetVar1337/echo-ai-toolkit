@@ -1,0 +1,37 @@
+# Echo AI Toolkit — tool lock.
+#
+# Pins every external artifact the installer fetches, so two installs a week
+# apart are the same software. The installer reads this file and checks out the
+# pinned ref; `echo update --tools` moves the installs to the pinned refs, and
+# `echo update --lock` re-resolves them to the current upstream heads.
+#
+# Format: <kind> <name> <ref> <pin>
+#   clone  <dir>            <owner/repo>  <commit sha>
+#   raw    <filename>       <url>         <sha256 of the file>
+#   asset  <filename>       <url>         <sha256 of the file>
+#   npm    <package>        <package>     <version>
+#   pip    <package>        <package>     <version>
+#
+# Columns are tab-free single spaces; names never contain spaces.
+
+clone	mcp-gamehacking	1llu50ry/mcp-gamehacking	1d9ad84b9cf99a9c7d7c38d043be89bc6472062d
+clone	angel-menu-mcp	Jozkah/angel-menu-mcp	a96533e983256ad0917a8192ad43c11fac5979cd
+clone	VMProtect-devirtualization	JonathanSalwan/VMProtect-devirtualization	d2b26d66db59e341f179c7e326246d28c4d25491
+clone	vmp-lazy-unpack	x86rc/vmp-lazy-unpack	66f64f6f83e3104735dbfffbd18bfa768ecd4346
+clone	web-mv	Jozkah/web-mv	73c4a0b971f4fb30851656331d049636545fa599
+clone	VTIL-Core	vtil-project/VTIL-Core	9ebee8e890a3a8923cc41f07821f740910e7c9b2
+clone	NoVmp	can1357/NoVmp	6c23c9a335f70e8d5ed6299668fd802f2314c896
+clone	vtil2	pop-rip/vtil2	242d331fdbe4e596fe79234f2abea2aa8de87e21
+
+raw	esp_preview.as	https://raw.githubusercontent.com/speedsunderscore/echo-esp-preview/f3f3834963df28623aa353dac507b7c8362a7a7c/esp_preview.as	f4d3a760166712d95346e58133809560964daca67f0e93ce9ba8dc194f12b65b
+raw	awesome-game-security.md	https://raw.githubusercontent.com/gmh5225/awesome-game-security/4a3f1e71fbb4598877e6fb43a7e515f78b1ebf44/README.md	f563d71605cfd37317335fbe8bf69ce81f14862ec0cec06a59faa643d642b7b9
+raw	gamehacking-cheatsheet.md	https://raw.githubusercontent.com/ridpath/gamehacking-cheatsheet/e043efc28ade4ac8db1f07c1d3977cce8f518ff3/README.md	83f674635bdd5e2e4df58bbb1abb9cc2760a790b7f00574a54cc30088c33eb8b
+
+asset	as_bundler	https://github.com/sinistercodes/as_bundler/releases/download/v1.5.0/as_bundler	6977cb07acb86ab70219dd360bcade54e3ff990040727da3fe420e16d3d5c8b3
+asset	as_bundler.exe	https://github.com/sinistercodes/as_bundler/releases/download/v1.5.0/as_bundler.exe	6dd976a646dc612dfe68dd0eedd7c156f52980f64593ee83580908664c1bdb38
+asset	echo-angelscript-lsp-0.0.10.zip	https://github.com/speedsunderscore/echo-angelscript-lsp/releases/download/0.0.10/echo-angelscript-lsp-0.0.10.zip	34f337c8427327a70e7757108a769c6edbee10664096728969240270a7ac5f34
+
+npm	rea-agents	rea-agents	6.8.0
+
+# triton-library publishes pre-releases only; this is the current one.
+pip	triton-library	triton-library	1.0.0rc4

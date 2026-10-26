@@ -41,6 +41,67 @@ function TierAtLeast($t) {
     }
 }
 
+# ── tool lock ────────────────────────────────────────────────────────────────
+# tools.lock pins every external artifact, so two installs are the same software.
+$Lock = Join-Path $EchoHome 'tools.lock'
+New-Item -ItemType Directory -Force -Path $EchoHome | Out-Null
+$repoLock = if ($PSScriptRoot) { Join-Path $PSScriptRoot 'tools.lock' } else { $null }
+if ($repoLock -and (Test-Path $repoLock)) { Copy-Item -Force $repoLock $Lock }
+if (-not (Test-Path $Lock)) {
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/$Repo/main/tools.lock" -OutFile $Lock -ErrorAction Stop
+    } catch {}
+}
+if (-not (Test-Path $Lock)) { Write-Host '    ! tools.lock unavailable - falling back to branch heads' -ForegroundColor Magenta }
+
+function LockField($kind, $name, $index) {
+    if (-not (Test-Path $Lock)) { return '' }
+    foreach ($line in Get-Content $Lock) {
+        if (-not $line.Trim() -or $line -match '^\s*#') { continue }
+        $f = $line -split '\s+'
+        if ($f.Count -ge 4 -and $f[0] -eq $kind -and $f[1] -eq $name) { return $f[$index] }
+    }
+    return ''
+}
+function LockPin($kind, $name) { return (LockField $kind $name 3) }
+function LockRef($kind, $name) { return (LockField $kind $name 2) }
+
+function VerifySha($path, $want) {
+    if (-not $want) { return $true }
+    try { $got = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower() } catch { return $true }
+    return $got -eq $want.ToLower()
+}
+
+function FetchAsset($name, $url, $out, $sha) {
+    try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $out -ErrorAction Stop }
+    catch { Fail $name 'download failed'; return $false }
+    if (-not (VerifySha $out $sha)) {
+        Remove-Item -Force $out -ErrorAction SilentlyContinue
+        Fail $name 'sha256 mismatch - upstream asset changed'
+        return $false
+    }
+    return $true
+}
+
+function CloneAt($name, $repo, $dir, [switch]$Submodules) {
+    $sha = LockPin 'clone' $name
+    if (-not $sha) {
+        git clone --depth 1 "https://github.com/$repo" $dir 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    }
+    Sub "cloning $name @ $($sha.Substring(0,7))..."
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    git -C $dir init -q 2>&1 | Out-Null
+    git -C $dir remote add origin "https://github.com/$repo" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { git -C $dir remote set-url origin "https://github.com/$repo" 2>&1 | Out-Null }
+    git -C $dir fetch -q --depth 1 origin $sha 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail $name "fetch $($sha.Substring(0,7)) failed (pinned commit unreachable)"; return $false }
+    git -C $dir checkout -q FETCH_HEAD 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail $name 'checkout failed'; return $false }
+    if ($Submodules) { git -C $dir submodule update --init --recursive --depth 1 2>&1 | Out-Null }
+    return $true
+}
+
 # ── 0. prerequisites ─────────────────────────────────────────────────────────
 Say 'Checking prerequisites'
 if (-not (Have claude)) {
@@ -95,10 +156,9 @@ function CloneBuildNode($name, $repo, $entry) {
         Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
     }
     if (-not (Test-Path (Join-Path $dir '.git'))) {
-        git clone --depth 1 "https://github.com/$repo" $dir 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        if (-not (CloneAt $name $repo $dir)) {
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
-            Fail $name 'clone failed (re-run to retry)'; return
+            return
         }
     }
     Push-Location $dir
@@ -126,27 +186,23 @@ else { Skip 'MCP servers' 'Node 18+ required' }
 if (TierAtLeast 'standard') {
     Say 'Echo tooling'
 
-    # as_bundler — prebuilt release binary.
+    # as_bundler — prebuilt release binary, pinned with a sha256 in tools.lock.
     $AsOut = Join-Path $BinDir 'as_bundler.exe'
     if (Test-Path $AsOut) { Ok 'as_bundler already installed' }
     else {
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri `
-              'https://github.com/sinistercodes/as_bundler/releases/download/v1.5.0/as_bundler.exe' `
-              -OutFile $AsOut -ErrorAction Stop
-            Ok 'as_bundler v1.5.0'
-        } catch { Fail 'as_bundler' 'download failed' }
+        $url = LockRef 'asset' 'as_bundler.exe'; $sha = LockPin 'asset' 'as_bundler.exe'
+        if (-not $url) { Skip 'as_bundler' 'not in tools.lock' }
+        elseif (FetchAsset 'as_bundler' $url $AsOut $sha) { Ok 'as_bundler (pinned)' }
     }
 
     # echo-esp-preview — single AngelScript drop-in, straight into the Echo scripts dir.
-    try {
-        $scripts = Join-Path $env:APPDATA 'scripts'
-        New-Item -ItemType Directory -Force -Path $scripts | Out-Null
-        Invoke-WebRequest -UseBasicParsing -Uri `
-          'https://raw.githubusercontent.com/speedsunderscore/echo-esp-preview/HEAD/esp_preview.as' `
-          -OutFile (Join-Path $scripts 'esp_preview.as') -ErrorAction Stop
+    $scripts = Join-Path $env:APPDATA 'scripts'
+    New-Item -ItemType Directory -Force -Path $scripts | Out-Null
+    $espUrl = LockRef 'raw' 'esp_preview.as'; $espSha = LockPin 'raw' 'esp_preview.as'
+    if (-not $espUrl) { Skip 'esp_preview' 'not in tools.lock' }
+    elseif (FetchAsset 'esp_preview' $espUrl (Join-Path $scripts 'esp_preview.as') $espSha) {
         Ok "esp_preview.as -> $scripts"
-    } catch { Fail 'esp_preview' 'download failed' }
+    }
 
     # echo-angelscript-lsp — VS Code extension.
     if (-not (Have code)) { Skip 'echo-angelscript-lsp' "VS Code 'code' CLI not on PATH" }
@@ -157,9 +213,10 @@ if (TierAtLeast 'standard') {
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
         try {
             $zip = Join-Path $tmp 'lsp.zip'
-            Invoke-WebRequest -UseBasicParsing -Uri `
-              'https://github.com/speedsunderscore/echo-angelscript-lsp/releases/download/0.0.10/echo-angelscript-lsp-0.0.10.zip' `
-              -OutFile $zip -ErrorAction Stop
+            $lspUrl = LockRef 'asset' 'echo-angelscript-lsp-0.0.10.zip'
+            $lspSha = LockPin 'asset' 'echo-angelscript-lsp-0.0.10.zip'
+            if (-not $lspUrl) { throw 'not in tools.lock' }
+            if (-not (FetchAsset 'echo-angelscript-lsp' $lspUrl $zip $lspSha)) { throw 'download failed' }
             Expand-Archive -Path $zip -DestinationPath $tmp -Force
             $vsix = Get-ChildItem $tmp -Filter *.vsix -Recurse | Select-Object -First 1
             if ($vsix) {
@@ -182,7 +239,7 @@ if (TierAtLeast 'standard') {
     if (Have bun) {
         $dir = Join-Path $EchoHome 'web-mv'
         if (-not (Test-Path (Join-Path $dir '.git'))) {
-            git clone --depth 1 https://github.com/Jozkah/web-mv $dir 2>&1 | Out-Null
+            $null = CloneAt 'web-mv' 'Jozkah/web-mv' $dir
         }
         if (Test-Path $dir) {
             Push-Location (Join-Path $dir 'relay'); bun install 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
@@ -192,16 +249,12 @@ if (TierAtLeast 'standard') {
 
     # Reference docs — the value is the curated list, so fetch the README rather
     # than cloning. awesome-game-security is 3.19 GB on disk; its README is 435 KB.
-    foreach ($pair in @(@('awesome-game-security','gmh5225/awesome-game-security'),
-                        @('gamehacking-cheatsheet','ridpath/gamehacking-cheatsheet'))) {
-        $name = $pair[0]; $out = Join-Path $RefDir "$name.md"
+    foreach ($name in @('awesome-game-security','gamehacking-cheatsheet')) {
+        $out = Join-Path $RefDir "$name.md"
         if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) { Ok "$name already fetched"; continue }
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri `
-              "https://raw.githubusercontent.com/$($pair[1])/HEAD/README.md" `
-              -OutFile $out -ErrorAction Stop
-            Ok "$name ($((Get-Item $out).Length) bytes)"
-        } catch { Fail $name 'download failed' }
+        $url = LockRef 'raw' "$name.md"; $sha = LockPin 'raw' "$name.md"
+        if (-not $url) { Skip $name 'not in tools.lock'; continue }
+        if (FetchAsset $name $url $out $sha) { Ok "$name ($((Get-Item $out).Length) bytes)" }
     }
 }
 
@@ -263,9 +316,15 @@ if (TierAtLeast 'standard') {
     if (Test-Path $launcher) { Ok "launcher -> $launcher" }
 
     # The launcher dispatches to these, so they must sit next to it.
-    foreach ($s in 'echo-update.ps1','echo-doctor.ps1') {
+    foreach ($s in 'echo.mjs','echo-update.ps1','echo-doctor.ps1') {
         $srcS = if ($repoSrc) { Join-Path (Split-Path $repoSrc -Parent) "scripts\$s" } else { $null }
-        if ($srcS -and (Test-Path $srcS)) { Copy-Item $srcS (Join-Path $BinDir $s) -Force }
+        $dstS = Join-Path $BinDir $s
+        if ($srcS -and (Test-Path $srcS)) { Copy-Item $srcS $dstS -Force }
+        else {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/$Repo/main/scripts/$s" -OutFile $dstS -ErrorAction Stop
+            } catch {}
+        }
     }
 
     # `echo` alias as a PowerShell function in the user profile.
@@ -309,7 +368,9 @@ if (TierAtLeast 'standard') {
         try { & $venvPy -c 'import triton' 2>$null; $hasTriton = ($LASTEXITCODE -eq 0) } catch {}
         if ($hasTriton) { Ok 'triton already installed' }
         else {
-            & $venvPy -m pip install --quiet --disable-pip-version-check triton-library 2>&1 | Out-Null
+            $tritonVer = LockPin 'pip' 'triton-library'
+            $tritonPkg = if ($tritonVer) { "triton-library==$tritonVer" } else { 'triton-library' }
+            & $venvPy -m pip install --quiet --disable-pip-version-check $tritonPkg 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) { Ok 'triton (symbolic execution)' } else { Skip 'triton' 'pip install failed' }
         }
 
@@ -317,10 +378,7 @@ if (TierAtLeast 'standard') {
                             @('vmp-lazy-unpack','x86rc/vmp-lazy-unpack'))) {
             $name = $pair[0]; $dir = Join-Path $EchoHome $name
             if (Test-Path (Join-Path $dir '.git')) { Ok "$name already cloned" }
-            else {
-                git clone --depth 1 "https://github.com/$($pair[1])" $dir 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) { Ok $name } else { Fail $name 'clone failed' }
-            }
+            elseif (CloneAt $name $pair[1] $dir) { Ok $name }
         }
 
         # vmp-lazy-unpack is a Python package: install editable so `py -m unpack` works.
@@ -360,8 +418,7 @@ if (TierAtLeast 'full') {
         $dir = Join-Path $EchoHome $name
         if (-not (Have cmake)) { Skip $name 'cmake not found'; return }
         if (-not (Test-Path (Join-Path $dir '.git'))) {
-            $args = @('clone','--depth','1') + $extra + @("https://github.com/$repo", $dir)
-            & git @args 2>&1 | Out-Null
+            if (-not (CloneAt $name $repo $dir -Submodules:($extra -contains '--recurse-submodules'))) { return }
         }
         if (-not (Test-Path $dir)) { Fail $name 'clone failed'; return }
         Push-Location $dir
@@ -378,7 +435,7 @@ if (TierAtLeast 'full') {
     if (-not (Have dotnet)) { Skip 'vtil2' 'dotnet (.NET 8 SDK) not found' }
     else {
         $dir = Join-Path $EchoHome 'vtil2'
-        if (-not (Test-Path (Join-Path $dir '.git'))) { git clone --depth 1 https://github.com/pop-rip/vtil2 $dir 2>&1 | Out-Null }
+        if (-not (Test-Path (Join-Path $dir '.git'))) { $null = CloneAt 'vtil2' 'pop-rip/vtil2' $dir }
         if (Test-Path $dir) {
             Push-Location $dir; dotnet build -c Release 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok 'vtil2' } else { Skip 'vtil2' 'dotnet build failed' }
@@ -392,10 +449,12 @@ if (TierAtLeast 'full') {
 Say 'Writing mcp.json'
 $ghEntry = (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js') -replace '\\','/'
 $amEntry = (Join-Path $EchoHome 'angel-menu-mcp\index.js') -replace '\\','/'
+$reaVer = LockPin 'npm' 'rea-agents'
+$reaArg = if ($reaVer) { "rea-agents@$reaVer" } else { 'rea-agents' }
 $mcp = [ordered]@{
     mcpServers = [ordered]@{
         gamehacking = [ordered]@{ command='node'; args=@($ghEntry); description='mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools' }
-        rea         = [ordered]@{ command='npx';  args=@('-y','rea-agents'); description='REA: Reverse Engineer Anything - Unity IL2CPP, Godot, native binaries, APK, WASM, firmware' }
+        rea         = [ordered]@{ command='npx';  args=@('-y',$reaArg); description='REA: Reverse Engineer Anything - Unity IL2CPP, Godot, native binaries, APK, WASM, firmware' }
         'angel-menu'= [ordered]@{ command='node'; args=@($amEntry); description='Echo overlay menu control: list_features, get_feature, set_feature, connection_status' }
         radare2     = [ordered]@{ command='r2pm'; args=@('-r','r2mcp'); description='radare2 MCP: disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)' }
         ida         = [ordered]@{ command='uvx';  args=@('ida-mcp','stdio','--agent=echo'); description='IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)' }
