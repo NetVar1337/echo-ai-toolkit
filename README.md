@@ -157,7 +157,8 @@ cannot substitute a package without breaking the hash), and the optional Bun/Pi 
 versions are pinned in `tools.lock`. The installer itself is a `curl … | bash` — clone the repo and
 run `./install.sh` if you would rather read it first.
 
-`mcp-gamehacking` is the one thing not in git: its tree is 18 GB (3.1 GB packed), GitHub blocks
+The fetched sources stay in `~/.local/share/echo-ai-toolkit/src`, so `echo update --tools` needs no
+network at all. `mcp-gamehacking` is the one thing not in git: its tree is 18 GB (3.1 GB packed), GitHub blocks
 files over 100 MB and warns above 1 GB per repo, and every CI job would pay for the checkout. It
 ships as a split archive on this repo's releases, pinned by sha256 in `vendor/ARCHIVES` and rebuilt
 by `scripts/vendor_archive.sh`.

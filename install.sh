@@ -98,6 +98,7 @@ else
   sub "fetching $REPO@$REF — this repo is the only download (~250 MB of vendored tools)…"
   if $CURL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$REF" -o "$ECHO_HOME/src/toolkit.tar.gz" \
      && tar -xzf "$ECHO_HOME/src/toolkit.tar.gz" -C "$ECHO_HOME/src" 2>/dev/null; then
+    rm -f "$ECHO_HOME/src/toolkit.tar.gz"
     VENDOR="$(ls -d "$ECHO_HOME"/src/echo-ai-toolkit-*/vendor 2>/dev/null | head -1)"
   fi
   [ -d "${VENDOR:-/nonexistent}" ] && ok "vendor/ fetched" \

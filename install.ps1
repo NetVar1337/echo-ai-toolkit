@@ -105,6 +105,7 @@ if ($repoVendor -and (Test-Path $repoVendor)) {
         Sub "fetching $Repo@$ref (this repo - the only download)..."
         Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/$Repo/tar.gz/refs/heads/$ref" -OutFile $tar -ErrorAction Stop
         tar -xzf $tar -C $src 2>&1 | Out-Null
+        Remove-Item $tar -Force -ErrorAction SilentlyContinue
         $Vendor = (Get-ChildItem $src -Directory -Filter 'echo-ai-toolkit-*' |
                    ForEach-Object { Join-Path $_.FullName 'vendor' } |
                    Where-Object { Test-Path $_ } | Select-Object -First 1)
