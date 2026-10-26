@@ -7,7 +7,9 @@ verified against a lockfile hash.
 
 `MANIFEST.json` records the sha256 of every file here, plus the upstream repo,
 commit and license. `python3 scripts/vendor_manifest.py --check` verifies the
-tree against it, and CI runs that on every push.
+tree against it, and CI runs that on every push. `CHECKSUMS.sha256` is the same
+data in `sha256sum -c` form, so the installer can verify a single file without
+Python.
 
 ## What is here
 
@@ -31,6 +33,7 @@ tree against it, and CI runs that on every push.
 | `docs/gamehacking-cheatsheet.md` | ridpath/gamehacking-cheatsheet README | `e043efc` | see upstream |
 | `npm/rea/` | `rea-agents@6.8.0` tarball + lockfile | sha256 | see upstream |
 | `python/requirements.lock` | PyPI: triton-library, pefile, capstone, unicorn | sha256 per artifact | see upstream |
+| `ARCHIVES` | mcp-gamehacking source tarball, split into 3 parts in this repo's releases | sha256 per part | MIT |
 
 Submodules are inlined at the commits NoVmp's tree pins, so the build works
 offline and reproducibly.

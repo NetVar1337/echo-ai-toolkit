@@ -16,9 +16,11 @@ Supply chain: the installer no longer fetches anything from a third party.
 - `vendor/MANIFEST.json` + `vendor/CHECKSUMS.sha256` record every file's sha256, upstream repo,
   commit and license. `scripts/vendor_manifest.py --check` runs in CI, and the installer verifies
   each copied file — a modified vendored binary is refused, not installed.
-- `mcp-gamehacking` (18 GB tree, 3.1 GB packed) ships as a split archive in this repo's releases
-  instead of git: GitHub blocks files over 100 MB and every CI job would pay for the checkout.
-  `vendor/ARCHIVES` pins each part by sha256; `scripts/vendor_archive.sh` rebuilds it.
+- `mcp-gamehacking` (18 GB tree, 3.1 GB packed) ships as a 3-part archive (3.28 GB) in this repo's
+  releases instead of git: GitHub blocks files over 100 MB and every CI job would pay for the
+  checkout. The parts are a byte-identical mirror of GitHub's tarball for the pinned commit;
+  `vendor/ARCHIVES` pins each by sha256, `install.sh` verifies every part before extracting, and
+  `scripts/vendor_archive.sh` rebuilds the mirror.
 - The companion plugins are served by this repo's own marketplace from `vendor/plugins/`, so the
   installer no longer adds third-party marketplaces.
 

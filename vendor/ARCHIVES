@@ -1,3 +1,6 @@
 # name url sha256
 # mcp-gamehacking: 18 GB tree / 3.1 GB packed — shipped as a release archive, not git.
 # Rebuild with scripts/vendor_archive.sh; install.sh verifies every part.
+mcp-gamehacking https://github.com/NetVar1337/echo-ai-toolkit/releases/download/vendor-mcp-gamehacking-1d9ad84/mcp-gamehacking-1d9ad84.tar.gz.part00 5d16425be724819ac76afa73858157eb99a3672b5e58d10159a20548b7e8e5dd
+mcp-gamehacking https://github.com/NetVar1337/echo-ai-toolkit/releases/download/vendor-mcp-gamehacking-1d9ad84/mcp-gamehacking-1d9ad84.tar.gz.part01 20642472694d46aa960b1ea06382b8b3b06ac2ec8b9044f3b5b6c4404aa7ad1a
+mcp-gamehacking https://github.com/NetVar1337/echo-ai-toolkit/releases/download/vendor-mcp-gamehacking-1d9ad84/mcp-gamehacking-1d9ad84.tar.gz.part02 55995283d17e38c7a38c2b56d799085f06e28360a1465e163d5027e0d74916a4

@@ -1,12 +1,12 @@
 {
  "files": {
   "ARCHIVES": {
-   "sha256": "395e6822bfcfa239f4be94ed4f02092da49b44b72a7eb7a41a9f600cdf5e2fe1",
-   "size": 181
+   "sha256": "7f1e45d769acc8e2ebc6d531d2bdaa8187e4334977bdcc75524ca358d552bb88",
+   "size": 823
   },
   "README.md": {
-   "sha256": "bcba7fb69b228cbde18c5a9f758ab919746b3d489b30d93cfd813e76624f8609",
-   "size": 4554
+   "sha256": "7458c4b35990d88f41e81438d9ed9f87269bc291b48ff8cbbc2295c427138adb",
+   "size": 4788
   },
   "bin/as_bundler": {
    "sha256": "6977cb07acb86ab70219dd360bcade54e3ff990040727da3fe420e16d3d5c8b3",
@@ -14913,7 +14913,7 @@
    "size": 72676
   }
  },
- "generated": "2026-10-26T10:02:44Z",
+ "generated": "2026-10-26T10:10:49Z",
  "sources": [
   {
    "commit": "a96533e983256ad0917a8192ad43c11fac5979cd",
