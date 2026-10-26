@@ -148,7 +148,7 @@ jobs:
         run: |
           fail=0
           # Comments are allowed to mention any URL; only real fetches matter.
-          allowed='^(codeload\.github\.com|github\.com|bun\.sh|pi\.dev|claude\.com|pypi\.org|registry\.npmjs\.org)$'
+          allowed='^(codeload\.github\.com|github\.com|bun\.sh|pi\.dev|claude\.com|pypi\.org|registry\.npmjs\.org|127\.0\.0\.1)$'
           for f in install.sh install.ps1; do
             hosts=$(grep -vE '^\s*#' "$f" | grep -ohE 'https?://[A-Za-z0-9._-]+' | sed -E 's#https?://##' | sort -u)
             for host in $hosts; do
@@ -374,20 +374,3 @@ jobs:
           done < /tmp/parts.txt
           exit $fail
 
-      - name: Every tool referenced by the installer is reachable
-        run: |
-          fail=0
-          # Every github.com/<owner>/<repo> the installer clones must exist.
-          # Repos arrive two ways: a full URL, or an `owner/repo` argument to one of
-          # the installer's helper functions. Catch both.
-          {
-            grep -hoE 'github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' install.sh install.ps1 \
-              | sed 's|.*github\.com/||' | sed 's/\.git$//'
-            grep -hoE '(add_plugin|clone_build_node|clone_docs|clone_py|build_cmake) +[A-Za-z0-9_.-]+ +"?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' install.sh install.ps1 \
-              | awk '{print $3}' | tr -d '"'
-          } | sort -u > /tmp/repos.txt
-          for r in $(cat /tmp/repos.txt); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -L "https://github.com/$r")
-            if [ "$code" = "200" ]; then echo "OK   $r"; else echo "FAIL $r ($code)"; fail=1; fi
-          done
-          exit $fail

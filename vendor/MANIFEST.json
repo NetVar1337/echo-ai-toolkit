@@ -5,8 +5,8 @@
    "size": 823
   },
   "README.md": {
-   "sha256": "17ff3ed6bf722d0a0482d6a460eef1614a339e6caea6bc0f1bcb69a93463f6a5",
-   "size": 4933
+   "sha256": "fdd1d6c35064234baaf7c6705a1ded1ce17bc6898127183e89eea8d76945f3d7",
+   "size": 5338
   },
   "bin/as_bundler": {
    "sha256": "6977cb07acb86ab70219dd360bcade54e3ff990040727da3fe420e16d3d5c8b3",
@@ -820,14 +820,6 @@
    "sha256": "376677d0d7d7846e7e521fc14f129e41cdbb60f0018834f34d3ef638f30e4be0",
    "size": 144
   },
-  "plugins/ponytail/pi-extension/test/extension.test.js": {
-   "sha256": "25a613493b7610dff0d92b349ba211e75732e425b41f522224915ec10cf586a3",
-   "size": 16950
-  },
-  "plugins/ponytail/pi-extension/test/helpers.test.js": {
-   "sha256": "65cc656511d8b9d79c8a6f7ee22a723ad7b9180d1eeb1db29ca2e2760df646f8",
-   "size": 8628
-  },
   "plugins/ponytail/plugin.json": {
    "sha256": "6efc6b6c8e6e33625f9a27574f27a4d453179bcf534b09c430b00814ecbc98f3",
    "size": 25
@@ -887,94 +879,6 @@
   "plugins/ponytail/skills/ponytail/SKILL.md": {
    "sha256": "9badd22a32e19cb884e46dfa8d3aae82bb81dfa5484105b8b4f0262df823a509",
    "size": 3496
-  },
-  "plugins/ponytail/tests/activation-map.test.js": {
-   "sha256": "bcc8aff1351f039a0c8e32820b925b079080e3bb44ea999440c4d36626b18a84",
-   "size": 2943
-  },
-  "plugins/ponytail/tests/band-import.test.js": {
-   "sha256": "9e6dd986bee6a7aea98e3cc876199a0b8cc6f32cc63c1f4036545a241603029c",
-   "size": 7790
-  },
-  "plugins/ponytail/tests/band.test.tsx": {
-   "sha256": "2d60e44b6cf0f6a95e66069965d0e1b46cd413ef3a83eea3ed394101cb4de688",
-   "size": 20651
-  },
-  "plugins/ponytail/tests/behavior.test.js": {
-   "sha256": "564838bed603f0149ecf749c9bae1c0f3b63c64134e48ebdd5e0a88086a81d75",
-   "size": 3196
-  },
-  "plugins/ponytail/tests/commands.test.js": {
-   "sha256": "e39d39d57a005c344943968d3f2852e83bbef5275ce2f690549b2275d7c8f03d",
-   "size": 4539
-  },
-  "plugins/ponytail/tests/copilot-plugin.test.js": {
-   "sha256": "38769d78562f78319fbbe351fb23d357c4395210a12712e95904855793a1173d",
-   "size": 1049
-  },
-  "plugins/ponytail/tests/correctness.test.js": {
-   "sha256": "be0af3594b54797d836152966acf7c394d5aba722c78b24a0642d1e619355cd5",
-   "size": 7408
-  },
-  "plugins/ponytail/tests/cursor-hooks.test.js": {
-   "sha256": "93ec8b5863b52dc8be0d6dc85013fa696faf7f5344919e79db618a1a669a0523",
-   "size": 16887
-  },
-  "plugins/ponytail/tests/gemini-extension.test.js": {
-   "sha256": "1c236b58769e5a7cdb19182a8889229a921973905d140fd7a169ecdd256d8038",
-   "size": 3767
-  },
-  "plugins/ponytail/tests/grok-plugin.test.js": {
-   "sha256": "343e1733d03412825661099b07af8591a5355b92890b64cc9e3ccecb7c8a75cf",
-   "size": 2003
-  },
-  "plugins/ponytail/tests/hermes-plugin.test.js": {
-   "sha256": "bc437f904465f85bc28cd2ad41163814f678852ffcd024d1980c083bff165787",
-   "size": 17418
-  },
-  "plugins/ponytail/tests/hooks-windows.test.js": {
-   "sha256": "6a1a580368e97f20967400279a7f12e0c2eee939c7a53fd56b0074653707339b",
-   "size": 10404
-  },
-  "plugins/ponytail/tests/hooks.test.js": {
-   "sha256": "8faae607bd8642d93161d84c7d968a98f9884797aaf0207662ee4ef4c4d36edc",
-   "size": 48035
-  },
-  "plugins/ponytail/tests/kimi-plugin.test.js": {
-   "sha256": "36f5f79fc9962680d79d54a709dbe9c489e81188faa882657f345bd1a344a115",
-   "size": 1292
-  },
-  "plugins/ponytail/tests/loc.test.js": {
-   "sha256": "764452dbc39c9113606e7fef78efb04d457a7d25c482b4655750fa4ab8823354",
-   "size": 1087
-  },
-  "plugins/ponytail/tests/map.test.js": {
-   "sha256": "d71c11cce581279bc3b8f6e024ee66e3be70e1a3899f6b034fcc63cc8c5a4865",
-   "size": 1606
-  },
-  "plugins/ponytail/tests/openclaw-skills.test.js": {
-   "sha256": "c92ee653ba1d5d0d28dfb1f386760ee8afc8d0dd5dba0d1b1865fa6b51ab9b06",
-   "size": 1219
-  },
-  "plugins/ponytail/tests/opencode-plugin.test.js": {
-   "sha256": "2852977aee5baad530bb8763bd6e4d30ea8624143dae137b6a19faa9b392b55a",
-   "size": 16532
-  },
-  "plugins/ponytail/tests/package-scripts.test.js": {
-   "sha256": "f88b30ccbfef7e65118e5a35b72822e13831aaefd83a79ceda98352175e781d2",
-   "size": 1582
-  },
-  "plugins/ponytail/tests/package.test.js": {
-   "sha256": "e6d008916734c8c9c400c6f225a45cb113b30540fe2d5f167ef333779ba29892",
-   "size": 863
-  },
-  "plugins/ponytail/tests/qoder-plugin.test.js": {
-   "sha256": "5f54746b8e189189c9138b1ff0acde5375f130b5ecd010fe2899f201861152e8",
-   "size": 3698
-  },
-  "plugins/ponytail/tests/uninstall.test.js": {
-   "sha256": "629e93fd158a55cbf6e75da7d998990c9fa6951f967246b97110931f9077993e",
-   "size": 8192
   },
   "python/requirements.lock": {
    "sha256": "11d1f080ccbf0ebd6f7c90b6623e567a2946f0048b6e70c2756d9804b70dfaf3",
@@ -13224,30 +13128,6 @@
    "sha256": "cfbc5b4c5254eab5a0152379dcbfc13d2ad72c038dd5d9463bb0a5d2e39e8f68",
    "size": 3459
   },
-  "tools/signature-doctor/tests/catalog.test.mjs": {
-   "sha256": "de7714f90adcbab6f37aca51826528e0695e80632dafd0b6c4d2df8aaa444adb",
-   "size": 4804
-  },
-  "tools/signature-doctor/tests/engine.test.mjs": {
-   "sha256": "29e7a17ae570a2df734eff430f44c2d4b35d506106042aa2912ab4d8eae34ba4",
-   "size": 11940
-  },
-  "tools/signature-doctor/tests/export.test.mjs": {
-   "sha256": "ccc42443afa06096c828c8366fa71b40968742123b7192f9f988e984827be3c5",
-   "size": 9017
-  },
-  "tools/signature-doctor/tests/server.test.mjs": {
-   "sha256": "532c39cc0a1bdf1627a42ea875e3783c7100738aef68c69ada724b9c53dcd6bf",
-   "size": 13346
-  },
-  "tools/signature-doctor/tests/storage.test.mjs": {
-   "sha256": "5be0fc526e217934794168cdd203f8a135c41952413190fa05ea57132aef6ab9",
-   "size": 5373
-  },
-  "tools/signature-doctor/tests/ui.test.mjs": {
-   "sha256": "f1030b7b846821f0c47265f38963352c4f72fe41e7dadff4f9acaca01cecf07d",
-   "size": 13266
-  },
   "tools/vmp-lazy-unpack/.gitattributes": {
    "sha256": "1a1dbe176bc233b499d35a57db7513f2941c99ab9759f177830c9149be99005b",
    "size": 66
@@ -13916,10 +13796,6 @@
    "sha256": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
    "size": 5031
   },
-  "tools/web-mv/frontend/src/__benchmarks__/perf.test.ts": {
-   "sha256": "2e67198ae16c1a756c2b10bd2965d46d97f5934e188d0fdd7e61b399013268dc",
-   "size": 6540
-  },
   "tools/web-mv/frontend/src/app/App.tsx": {
    "sha256": "3dd1e57e96ba5d826dc5bf0b8a2683775af3333edc4c24a6a94e5c15c5b76f5d",
    "size": 5604
@@ -13999,30 +13875,6 @@
   "tools/web-mv/frontend/src/app/shell/categories.ts": {
    "sha256": "1d535f83ee2a67eb079775bec96632d4418b905645b2d0b4c1e5e1fc4d82ddef",
    "size": 4433
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/engine.test.ts": {
-   "sha256": "cfb92a11d6d38ba7ed9181f673e639557530bb024c5b03a2ac190a2935570155",
-   "size": 4689
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/history.test.ts": {
-   "sha256": "d1f0147a4989529f9d50376085e7d8e3537d6e0e3ce87131b206838b151f46b1",
-   "size": 2968
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/perf.test.ts": {
-   "sha256": "abd3b055d811d2c3f0a24e1e99c656ed3859864678b2e86c0de531ee9862fd1f",
-   "size": 2195
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/providers.test.ts": {
-   "sha256": "3b9ded66fb9915ba4f44c38f0529aaee3b9f2932f732f693ed960aff0b934541",
-   "size": 3898
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/query.test.ts": {
-   "sha256": "c38f787a7a90efca443db7a7800d129fc69dccb872cef9dd507ce8ca301c71e5",
-   "size": 2540
-  },
-  "tools/web-mv/frontend/src/app/shell/search/__tests__/ranking.test.ts": {
-   "sha256": "76d9bd5f429aea904e6b636f39ef4ff3eef4ef5a013438cb0e64c04a7b9aa7cd",
-   "size": 5819
   },
   "tools/web-mv/frontend/src/app/shell/search/engine.ts": {
    "sha256": "503efed1b7f5164bdd8ecf7af8cf9d963e90c7916f3d8f78a56b2daad3c2587e",
@@ -14164,21 +14016,9 @@
    "sha256": "112605a4c6113c984b0f8220ddef199cd75d4b98a3072c951c2208e512a719ba",
    "size": 813
   },
-  "tools/web-mv/frontend/src/decompiler/__tests__/ghidraParse.test.ts": {
-   "sha256": "a4eb8f9fb4854a6a77d2c8eb636800bc3b019eb90fa74dfe85c75c326779e375",
-   "size": 3465
-  },
   "tools/web-mv/frontend/src/decompiler/ghidraParse.ts": {
    "sha256": "becf89b84ae0ac9c7ce829e0a0f3e691092fda04e34de0041636c7a5b0447706",
    "size": 5710
-  },
-  "tools/web-mv/frontend/src/emulator/__tests__/model.test.ts": {
-   "sha256": "473e29b68340fe30e00a8b89cbb9f3a8ca81c53c7efaf753668cfb8c141235ea",
-   "size": 1273
-  },
-  "tools/web-mv/frontend/src/emulator/__tests__/traceStore.test.ts": {
-   "sha256": "cdea5d397641eb349be7431d346b670e35949572ecd74b624f24ec91aec6cf82",
-   "size": 2259
   },
   "tools/web-mv/frontend/src/emulator/model.ts": {
    "sha256": "43207eec103a1d7b9f07c315d1100ac8ff9258614fd819d819ab027c51fc0c7d",
@@ -14196,10 +14036,6 @@
    "sha256": "d2358207b2fbb410d15b013fe965e5dbffce5d2928b76726c56bc092edb8e910",
    "size": 189
   },
-  "tools/web-mv/frontend/src/network/__tests__/pcapParse.test.ts": {
-   "sha256": "3f097711ad14f9464d89761dbcdff9902480f548802a968c7971d16a9f8b3704",
-   "size": 7783
-  },
   "tools/web-mv/frontend/src/network/networkBundle.ts": {
    "sha256": "49483d270f98216aef7413901562436d31d7092d23cf5093e852c7d6534f99ba",
    "size": 5683
@@ -14207,10 +14043,6 @@
   "tools/web-mv/frontend/src/network/pcapParse.ts": {
    "sha256": "d70045133a545e242013deb8f5d0ab1ef2900983563b556fd6f000114304201a",
    "size": 14363
-  },
-  "tools/web-mv/frontend/src/patch/__tests__/patchOps.test.ts": {
-   "sha256": "e88d793e5c79be7f0b428631b7596c2842048e1d4431effa617927b18c857024",
-   "size": 1685
   },
   "tools/web-mv/frontend/src/patch/model.ts": {
    "sha256": "911c9cbbf02d2ac3a1c49baa5ad230492abadc7e9e82c4e263704893d5344778",
@@ -14224,17 +14056,9 @@
    "sha256": "234341d3ddaad13671034f5dd917003f1584179cb7c5d42111f66d912b3d8110",
    "size": 1647
   },
-  "tools/web-mv/frontend/src/project/__tests__/projectBundle.test.ts": {
-   "sha256": "562eb7437dc84ba900dbb8630c465a1ac3124fa1781fd0dc8d7fd8ce98761d5c",
-   "size": 5056
-  },
   "tools/web-mv/frontend/src/project/projectBundle.ts": {
    "sha256": "6f37ec66592bc07c83c9ceaf86603031487b472ca93058b0c1a7dcb5f53e0fae",
    "size": 6508
-  },
-  "tools/web-mv/frontend/src/protocol/__tests__/capabilities.test.ts": {
-   "sha256": "ebdcb17cb6e42fc260808e476b25c01faea5cc30a9c6bd2ad4447578deb51167",
-   "size": 9022
   },
   "tools/web-mv/frontend/src/protocol/capabilities.ts": {
    "sha256": "222ba292ed13a5ef2a16c48b99cd75a1a2285026d351ad5fb2e3044708f31525",
@@ -14268,14 +14092,6 @@
    "sha256": "e4664041a38a8da63d95b07c53f1be635cc3d497c6d40c6eaaf80b14af7db59b",
    "size": 14773
   },
-  "tools/web-mv/frontend/src/scan/__tests__/pointerChain.test.ts": {
-   "sha256": "ef057fbffbc9a503cd75fc78b8b74fbcbf0d82100ef109777fb5868b4d91968c",
-   "size": 3056
-  },
-  "tools/web-mv/frontend/src/scan/__tests__/scanHistory.test.ts": {
-   "sha256": "3812ffcba132f30ae2bba992f0666316f45ba43c476fa2c44b754ecc74e511de",
-   "size": 2268
-  },
   "tools/web-mv/frontend/src/scan/functionSigSearch.ts": {
    "sha256": "108888ecf28c6427a04eb0fe30ca8dc9568a1991ee9bd22e5f83f79aa6efce55",
    "size": 3077
@@ -14299,34 +14115,6 @@
   "tools/web-mv/frontend/src/scan/useNextScanHotkey.ts": {
    "sha256": "90acf12c6e89b0a94bfa6a7abd78a824f1581394b0bbc68a252d1897387fbd74",
    "size": 1688
-  },
-  "tools/web-mv/frontend/src/state/__tests__/capabilitiesStore.test.ts": {
-   "sha256": "4783f776698d163237af637ea72875c340082ffcdae4375fbf063322ee9c0a5a",
-   "size": 6402
-  },
-  "tools/web-mv/frontend/src/state/__tests__/decompilerStore.test.ts": {
-   "sha256": "1460dba85252ddbec74f1785274ecce97979499da0bdfad36eef972b307e26f1",
-   "size": 8083
-  },
-  "tools/web-mv/frontend/src/state/__tests__/emulatorStore.test.ts": {
-   "sha256": "b209b85a36220334aa42aa32f25daea1bcefbdf40f248c3087423f5cd831c345",
-   "size": 11084
-  },
-  "tools/web-mv/frontend/src/state/__tests__/networkStore.test.ts": {
-   "sha256": "b8fe2c898261f5ff328ccf10a6e3c276215c65c887799a3c51b3251bb5a96926",
-   "size": 14695
-  },
-  "tools/web-mv/frontend/src/state/__tests__/patchStore.test.ts": {
-   "sha256": "3b830813638b0aaa48fe7661171c25dabbb1b07c16cc2f56dc784a9a79186eb5",
-   "size": 5285
-  },
-  "tools/web-mv/frontend/src/state/__tests__/targetSession.test.ts": {
-   "sha256": "41af8f531b4b3333078a072bab5394916d97a05e3ceed02fa35866cf82ff63b0",
-   "size": 3411
-  },
-  "tools/web-mv/frontend/src/state/__tests__/watchStore.test.ts": {
-   "sha256": "dde877f1b46916df0cb9537043952b93c80593b796b8747d1648b3ac89d6b7b6",
-   "size": 9692
   },
   "tools/web-mv/frontend/src/state/address.ts": {
    "sha256": "9b9d16a4138c8aa73e6286ee61c787792964548ce549cb4de4992f0690120dff",
@@ -14432,14 +14220,6 @@
    "sha256": "9a7b00762c6a1bf5bdf9126e9277d4dd69509dc3a3fccf6bbfabd12b0ca0fef7",
    "size": 2475
   },
-  "tools/web-mv/frontend/src/timeline/__tests__/events.test.ts": {
-   "sha256": "3d35e85fb3eda6ebddc600ebf3dc9a4325cd4d33c8e3bdacbbf1a73b1266f24d",
-   "size": 1676
-  },
-  "tools/web-mv/frontend/src/timeline/__tests__/timelineStore.test.ts": {
-   "sha256": "703927d81f2cc03f897e7154d1f2d02eac92625ab2c98482bb3c28643160580d",
-   "size": 9519
-  },
   "tools/web-mv/frontend/src/timeline/events.ts": {
    "sha256": "d4b59e6d825c6ad6f594220baab4e114f60c1b46a1b002f02ac33e4bac2ac8c9",
    "size": 9378
@@ -14479,14 +14259,6 @@
   "tools/web-mv/frontend/src/ui/Window.tsx": {
    "sha256": "129f60030b7b800fce5bd3ccca75ce37ec2052294e78affc1829864708b5107f",
    "size": 6658
-  },
-  "tools/web-mv/frontend/src/ui/__tests__/csv.test.ts": {
-   "sha256": "4d1a2463d030ccd34a66409f08c1a766b76d89f92155515d98d24444fcb3d088",
-   "size": 4513
-  },
-  "tools/web-mv/frontend/src/ui/__tests__/resize.test.ts": {
-   "sha256": "9606f938bfb3d29b6936a23484b70883a2202e1e95a350b1c046b9ced4ea07e0",
-   "size": 909
   },
   "tools/web-mv/frontend/src/ui/csv.ts": {
    "sha256": "68329fee0d428011e9da382dbb732be92392f5340318246ef4bae726d5816c04",
@@ -14615,46 +14387,6 @@
   "tools/web-mv/frontend/src/views/memory/MemoryView.tsx": {
    "sha256": "4db28192dbbcf455232993edafa13136f66cf3254bdbaa4620f495327ab98e0c",
    "size": 24469
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/baseline.test.ts": {
-   "sha256": "8d4141ac0fae54bd92ce9e899c570dc3c86a16d884666ff456bad126d69f66fe",
-   "size": 2302
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/decode.test.ts": {
-   "sha256": "6c76071eb2ffc4873db1b0be417125cf12c28e42c093f626dc87238f8e96aab8",
-   "size": 8315
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/encode.test.ts": {
-   "sha256": "cb48d1382128f4442a472701c64aa472e6cac8323d5e7401fbc4608e2d84e83c",
-   "size": 10325
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/filter.test.ts": {
-   "sha256": "4f511f461d599cc849ed093f9b71b72da3c3ea1a56501ecce831628a8923be92",
-   "size": 5575
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/gridKeys.test.ts": {
-   "sha256": "99b496ca7b3e82bce7d13b6401085be53fefbe767d566ba6d3ec30f11f5a857b",
-   "size": 4628
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/guess.test.ts": {
-   "sha256": "06ff1457f48a333aa3b8e60319b2c5f83e1324eb50f88de0a8b3bf31de561da4",
-   "size": 6148
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/layout.test.ts": {
-   "sha256": "cb0bc2b338edf30251d5d3cacca77b02470b7a086d1bdeedf47aa37f3f1a8994",
-   "size": 5738
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/previewPlan.test.ts": {
-   "sha256": "c9103e3b7133e6dd6d8325fc51afd83391e73a6fd882db7963bcba54bf56d71a",
-   "size": 4409
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/serialization.test.ts": {
-   "sha256": "90723b488da074dd8e4bc1e4cd9cb7cfc9fc51831bf77412c0294af20a75fd06",
-   "size": 5435
-  },
-  "tools/web-mv/frontend/src/views/memory/__tests__/snapshot.test.ts": {
-   "sha256": "4b53358491f8e230424aec06c8841b5ef50fcc94198fb7df06235b8f7e94ee0f",
-   "size": 10882
   },
   "tools/web-mv/frontend/src/views/memory/components/AddressBar.tsx": {
    "sha256": "108107c31f58b31dc5a9af6db071ce78cb7245d1f9782f0ec546ce4d54fc76cc",
@@ -14960,38 +14692,6 @@
    "sha256": "9f2df6319eb93e43b3fc056bf755435807f8a4289ef39bae6e9a423e56a489b7",
    "size": 6722
   },
-  "tools/web-mv/frontend/src/watch/__tests__/compare.test.ts": {
-   "sha256": "2f252e979e269c2013866da00f9c83bf294dcec21e9db47b6da8e1459778a587",
-   "size": 5902
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/decode.test.ts": {
-   "sha256": "54e71aa5006577cdb330ed7dcf81836e64971ee5130a687238096ffa383511b0",
-   "size": 2734
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/history.test.ts": {
-   "sha256": "91ea9dc0c7c2912abe082c912ec71d4b0e0aee164b5bdbf8fc343170ad6c196d",
-   "size": 2231
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/model.test.ts": {
-   "sha256": "3bc50d2dc0eb67e215d53d45e7e991adf4d81e9ec6e79ad50dc5c0a12a541c87",
-   "size": 2758
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/readplan.test.ts": {
-   "sha256": "19e7debf99ba7dd8e2e83589a24b6514abf59366c928587bf316fb1bb937e51c",
-   "size": 1847
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/resolve.test.ts": {
-   "sha256": "d16826e830511434e6a829673d40f113e732b4d0a361e98649567be3eafbf3bd",
-   "size": 1764
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/scheduler.test.ts": {
-   "sha256": "948408ba410278ad46f32d1d0064e82073e73acc5296617732feb69ed43f0112",
-   "size": 4529
-  },
-  "tools/web-mv/frontend/src/watch/__tests__/triggers.test.ts": {
-   "sha256": "8d83c26ed2211417d79cca679b952d3b15cb2088c6ec03108a2f15808802599d",
-   "size": 3108
-  },
   "tools/web-mv/frontend/src/watch/compare.ts": {
    "sha256": "1aac70ec798a510f28d7fa5bfe3514e37c8b428d79ebcf549f3042af7de8b387",
    "size": 8513
@@ -15068,10 +14768,6 @@
    "sha256": "80ce38d90057ea35da80b873be05f06f599102fb66a27a9047c64a842f26fc9e",
    "size": 391
   },
-  "tools/web-mv/relay/src/ghidra.test.ts": {
-   "sha256": "7cdd6707871c7d0608d2b52cfef0372cb1e9c1952161f844cb7711f8f04667f9",
-   "size": 18811
-  },
   "tools/web-mv/relay/src/ghidra.ts": {
    "sha256": "64a79e1c11e13fe8ab2020b92af33ff48e695bb18f2b8d3cfdc7eaafa9909ebb",
    "size": 15234
@@ -15083,10 +14779,6 @@
   "tools/web-mv/relay/src/relay.ts": {
    "sha256": "8ba8e10a8ccb9fa5ed8fa746cb02fa12de3d2a135997e476ac47e6f087e30427",
    "size": 8939
-  },
-  "tools/web-mv/relay/src/tshark.test.ts": {
-   "sha256": "aaa7d6e729c1d01991d40883b7ee201f6c1fe29be388472978b13c6af7f053c8",
-   "size": 14695
   },
   "tools/web-mv/relay/src/tshark.ts": {
    "sha256": "b3d25dc893d80571e9d6260f64be5705ed4ced5e9c8a3792d970636279d385b8",
@@ -15105,7 +14797,7 @@
    "size": 72676
   }
  },
- "generated": "2026-10-26T10:18:21Z",
+ "generated": "2026-10-26T10:21:23Z",
  "sources": [
   {
    "commit": "a96533e983256ad0917a8192ad43c11fac5979cd",

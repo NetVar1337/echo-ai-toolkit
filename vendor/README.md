@@ -39,6 +39,12 @@ Python.
 Submodules are inlined at the commits NoVmp's tree pins, so the build works
 offline and reproducibly.
 
+Upstream test suites are **not** vendored: `*.test.ts(x)` and `*.spec.*` files are
+removed from every tree. They exercise upstream harnesses (vitest, bun test, the
+Claude Code hooks kit) that this repo does not provide, and `claude plugin test .`
+runs recursively — vendored tests would fail the build for reasons that have
+nothing to do with this repo. Everything needed to *run* each tool is intact.
+
 ## Licensing — read before redistributing
 
 Seven upstreams ship **no license file**, which means all rights reserved by
