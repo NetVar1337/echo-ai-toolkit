@@ -120,6 +120,18 @@ jobs:
       - name: vendor/ matches MANIFEST.json
         run: python3 scripts/vendor_manifest.py --check
 
+      - name: Every vendored file is tracked
+        run: |
+          # A file ignored by a vendored upstream .gitignore would be missing from
+          # a fresh clone and from the tarball the installer fetches.
+          tracked=$(git ls-files vendor | wc -l)
+          ondisk=$(find vendor -type f | wc -l)
+          echo "tracked $tracked / on disk $ondisk"
+          if [ "$tracked" -ne "$ondisk" ]; then
+            comm -13 <(git ls-files vendor | sort) <(find vendor -type f | sort) | head -20
+            echo "FAIL: vendored files are untracked (git add -f them)"; exit 1
+          fi
+
       - name: Every expected tree is vendored
         run: |
           fail=0

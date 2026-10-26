@@ -3456,13 +3456,6 @@ f0a2aa99d384a8f3c26652921c33a6f70bb0f26fdafcdaad5838852e767449ae  tools/vtil2/VT
 797d81b619e574923557dfa2ec203ccac7cd18d700a42985bd7fb5bb823aa536  tools/vtil2/VTIL/VTIL.vcxproj.filters
 b5c581564a056bc44da0382e1f3e99f45c4c13e6dd047ee56c98fe1afb983158  tools/vtil2/VTIL/includes/vtil/vtil
 eb14135d5de494101b7f977dabb54803c565567687c69e494a63d304c86d5306  tools/web-mv/.gitignore
-b014b9e7b41fbcb3277f727b868343cddf80c7e337280fe8a65ccb6c551ef24e  tools/web-mv/.playwright-mcp/page-2026-08-14T19-56-45-493Z.yml
-8e0fa99df94caffd636696b2f209d5c5185b9513caf9669c90df57e3606d161a  tools/web-mv/.playwright-mcp/page-2026-08-14T19-57-06-466Z.yml
-e916cbb3af7d725e4aaa6183420fd23233c01fc8162b2b7a589f32b2a79160f4  tools/web-mv/.playwright-mcp/page-2026-08-14T20-01-14-196Z.yml
-06dde0ceac73acabc21d22f76378e83bb90d463549122559b536a9c97db9f943  tools/web-mv/.playwright-mcp/page-2026-08-14T20-01-49-156Z.yml
-2f27663bc9df96cb9d43f5791d8832e0fac1a1ab6a099bbf1933a1e0ea9b76d2  tools/web-mv/.playwright-mcp/page-2026-08-14T20-06-00-809Z.yml
-92f758ada5107421482505ee78632ee657dc151c8759ca919cf4aa24d32d7f2a  tools/web-mv/.playwright-mcp/page-2026-08-14T20-33-49-498Z.yml
-5a8288fd3d4b859c4618bd71765b41423fc7e394e9e970d89a644c3f23f7aeef  tools/web-mv/.playwright-mcp/page-2026-08-14T20-57-54-887Z.yml
 ab6aa2d7e601b3472426537f9e3bd791afd5f6e53569459b8966da4b48d28a10  tools/web-mv/README.md
 c8bfebd04cfcac7047671c43c168d6415672ff7ddb3f6ad6d082f128f1b86df8  tools/web-mv/RELEASE-README.txt
 2c084cd9da96f2cbdc9853873c0b6035811c6bd9204ed1d01cbe0cd689b62e06  tools/web-mv/build-release.bat

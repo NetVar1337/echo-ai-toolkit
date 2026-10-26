@@ -66,3 +66,9 @@ if [ -z "$ONLY" ]; then
 fi
 
 python3 "$ROOT/scripts/vendor_manifest.py" --write
+
+# Some upstream .gitignores exclude the lockfile we depend on. Track it anyway:
+# an untracked vendored file is missing from a fresh clone.
+for ignored in vendor/mcp/angel-menu-mcp/package-lock.json; do
+  [ -f "$ROOT/$ignored" ] && git -C "$ROOT" add -f "$ignored"
+done
