@@ -17,15 +17,16 @@ invented names to the real ones. CI runs `scripts/check_api.py` and fails the bu
 invented API reappears.
 
 ```bash
-python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.md
-```
-
-To regenerate the index locally:
-
-```bash
 curl -fsSL https://echo-23.gitbook.io/angel/llms-full.txt -o /tmp/echo-llms-full.txt
-# then use the extraction snippet in reference/_API_CONTRACT.md
+python3 scripts/build_api_index.py /tmp/echo-llms-full.txt -o /tmp/echo-api-index.json
+python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.json
+python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.json \
+  --stub scripts/angelscript/echo_stub.as
 ```
+
+The second command checks the compile stub in `scripts/angelscript/` against the same index. If
+Echo added a call, the stub check names it — add the declaration there, or nothing compiles
+against it.
 
 ---
 

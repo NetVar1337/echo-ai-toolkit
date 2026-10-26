@@ -57,6 +57,7 @@ class button { button(){} }
 enum box_style { NORMAL, OUTLINED, FILLED, FILLED_OUTLINED, CORNERED, CORNERED_FILLED };
 enum fonts { PROGGY, TAHOMA, TAHOMA_PX, TAHOMA_BOLD, TAHOMA_BOLD_PX, SMALLEST_PIXEL_7, TOMHOMISH };
 enum font_hint { NONE, AUTO, MONO };
+enum label_style { none, warning, dangerous };
 enum angle_range { R_180, R_360 };
 
 class attach_data { uint64 pid; uint64 peb_address; uint64 base_address; }
@@ -71,6 +72,9 @@ class memory_buffer {
   vec2 read_vec2_float(uint64) { return vec2(); }
   vec3 read_vec3_float(uint64) { return vec3(); }
   vec4 read_vec4_float(uint64) { return vec4(); }
+  vec2 read_vec2_double(uint64) { return vec2(); }
+  vec3 read_vec3_double(uint64) { return vec3(); }
+  vec4 read_vec4_double(uint64) { return vec4(); }
   uint64 size() { return 0; }
 }
 
@@ -138,6 +142,7 @@ namespace process {
   bool dump(string) { return false; } bool dump(string,string) { return false; }
   bool open_socket(string) { return false; }
 }
+class bbox_2d { float x; float y; float width; float height; bool valid; bbox_2d(){} }
 namespace render {
   float get_fps() { return 0.0f; } float get_frametime() { return 0.0f; }
   bool is_foreground() { return false; }
@@ -162,6 +167,8 @@ namespace render {
   void draw_polyline(array<vec2>,int,int,int,int,float,bool) {}
   void draw_hue_bar(int,int,int,int,int,int,int,int) {}
   void draw_hue_bar_static(int,int,int,int,int,int,int,int) {}
+  bbox_2d calculate_2d_bbox(vec3,vec3,vec3,matrix4x4) { bbox_2d b; return b; }
+  bbox_2d calculate_2d_bbox_unity(vec3,vec3,vec3,matrix4x4) { bbox_2d b; return b; }
 }
 namespace ui {
   class ui_info { bool open; float dpi_scale; float x; float y; float w; float h; color accent; }
@@ -192,7 +199,9 @@ namespace ui {
   void add_tooltip(checkbox,string) {} void add_tooltip(slider,string) {}
   void add_tooltip(color_picker,string) {} void add_tooltip(combobox,string) {}
   void add_tooltip(multi_select,string) {}
+  void set_label_style(checkbox,label_style) {}
 }
+class zip_entry { string name; string data; zip_entry(){} }
 namespace util {
   string format_string(string,int) { return ""; }
   string format_string(string,uint) { return ""; }
@@ -214,6 +223,8 @@ namespace util {
   uint64 time_ms(uint64,uint64) { return 0; } uint64 time_us(uint64,uint64) { return 0; }
   uint64 time_ns(uint64,uint64) { return 0; } uint64 time_now() { return 0; }
   string get_username() { return ""; }
+  void disable_capture_protection() {}
+  array<zip_entry>@ zip_parse(string) { return null; }
 }
 namespace console {
   void log(string) {} void log(int) {} void log(uint) {} void log(uint64) {}
@@ -224,6 +235,10 @@ namespace console {
 namespace alert {
   void show(string) {} void show(string,int,int,int) {}
   void show(string,int,int,int,float) {} void dismiss() {}
+  void show_tag(string,string) {} void show_tag(string,string,int,int,int) {}
+  void show_tag(string,string,int,int,int,float) {}
+  void show_tag(string,string,int,int,int,float,bool) {}
+  void dismiss(string) {}
 }
 namespace file {
   bool exists(string) { return false; } bool write(string,string) { return false; }
@@ -272,18 +287,112 @@ namespace math {
 }
 namespace source  { bool w2s(vec3,matrix4x4,vec2 &out) { return false; } uint64 get_entity(uint64,uint64) { return 0; } }
 namespace source2 { bool w2s(vec3,matrix4x4,vec2 &out) { return false; } uint64 get_controller(uint64,uint64) { return 0; } uint64 get_pawn(uint64,uint64,uint64) { return 0; } }
-namespace unity  { bool w2s(vec3,matrix4x4,vec2 &out) { return false; } }
+namespace unity  { bool w2s(vec3,matrix4x4,vec2 &out) { return false; }
+  vec3 rust_transform_position(uint64) { return vec3(); }
+  uint32 rust_prefab_id(string) { return 0; } }
 f_view_cache build_view_cache(f_view_info i,bool b=false) { f_view_cache c; return c; }
 namespace unreal {
-  f_view_cache build_view_cache(f_view_info,bool=false) { f_view_cache c; return c; }
   bool w2s(vec3,f_view_cache,vec2 &out) { return false; }
+  u_bone_array read_bones(uint64,uint64,uint64) { u_bone_array b; return b; }
+  u_bone_array read_bones(uint64,uint64,uint64,uint64) { u_bone_array b; return b; }
 }
 namespace json {
   json_obj@ parse(string) { return null; }
   json_obj@ array() { return null; }
-  json_obj@ object() { return null; }
   json_obj@ parse(string,string &out) { return null; }
   string stringify(json_obj@,bool=false) { return ""; }
+}
+
+// ── disassembly, emulation, tracing ─────────────────────────────────────────
+class disasm_operand {
+  int type; int visibility; int action; int reg;
+  bool imm_is_signed; bool imm_is_relative; uint64 imm_value;
+  int mem_segment; int mem_base; int mem_index; uint8 mem_scale;
+  int64 mem_disp; bool mem_has_disp;
+  disasm_operand(){}
+}
+class disasm_insn {
+  uint64 runtime_address; uint8 length; int mnemonic; string text;
+  uint8 operand_count; uint8 operand_count_visible;
+  disasm_insn(){}
+  disasm_operand get_op(uint8) const { disasm_operand o; return o; }
+}
+namespace zydis {
+  string reg_name(int) { return ""; }
+  bool disasm(const array<uint8> &in,array<disasm_insn@> &out) { return false; }
+  bool disasm(const array<uint8> &in,uint64,array<disasm_insn@> &out) { return false; }
+  bool disasm_func(const array<uint8> &in,array<disasm_insn@> &out) { return false; }
+  bool disasm_func(const array<uint8> &in,uint64,array<disasm_insn@> &out) { return false; }
+}
+
+class triangle { vec3 p1; vec3 p2; vec3 p3; triangle(){} }
+class bvh_tree {
+  bvh_tree(){}
+  void add_triangle(const vec3 &in,const vec3 &in,const vec3 &in) {}
+  void add_triangles(const array<triangle> &in) {}
+  bool build() { return false; }
+  bool is_occluded(const vec3 &in,const vec3 &in) { return false; }
+  void clear() {}
+  uint64 triangle_count() { return 0; }
+  bool is_ready() { return false; }
+}
+bvh_tree@ create_bvh_tree() { return null; }
+namespace trace {
+  bool ray_triangle(const triangle &in,const vec3 &in,const vec3 &in,double) { return false; }
+  bool ray_bbox(const vec3 &in,const vec3 &in,const vec3 &in,const vec3 &in,double) { return false; }
+  bool ray_sphere(const vec3 &in,const vec3 &in,const vec3 &in,double,double) { return false; }
+  bool ray_capsule(const vec3 &in,const vec3 &in,const vec3 &in,const vec3 &in,double,double) { return false; }
+}
+
+enum x86_reg {
+  rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, rip, eflags,
+  r8, r9, r10, r11, r12, r13, r14, r15,
+  cs, ds, es, fs, gs, ss, fs_base, gs_base, mxcsr,
+  xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7,
+  xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15,
+  ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm6, ymm7,
+  ymm8, ymm9, ymm10, ymm11, ymm12, ymm13, ymm14, ymm15
+};
+class uc_memory_region { uint64 address; uint64 end; uint32 perms; uc_memory_region(){} }
+funcdef bool code_hook_fn(uint64 h, uint64 address, uint32 size);
+funcdef bool mem_hook_fn(uint64 h, int type, uint64 address, uint32 size, uint64 value);
+namespace uc {
+  namespace prot { const uint none=0; const uint read=1; const uint write=2; const uint exec=4; const uint all=7; }
+  namespace mem_type { const int read=0; const int write=1; const int fetch=2;
+    const int read_unmapped=3; const int write_unmapped=4; const int fetch_unmapped=5;
+    const int read_prot=6; const int write_prot=7; const int fetch_prot=8; }
+  namespace error { const int ok=0; const int nomem=1; const int arch=2; const int handle=3;
+    const int mode=4; const int version=5; const int read_unmapped=6; const int write_unmapped=7;
+    const int fetch_unmapped=8; const int fetch_prot=9; const int read_prot=10;
+    const int write_prot=11; const int map=12; const int hook=13; const int insn_invalid=14; }
+  uint64 create() { return 0; }
+  uint64 create_process() { return 0; }
+  void close(uint64) {}
+  bool setup_stack(uint64,uint64,uint64,uint64) { return false; }
+  int start(uint64,uint64,uint64,uint64=0,uint64=0) { return 0; }
+  void stop(uint64) {}
+  bool flush_code(uint64) { return false; }
+  uint32 last_error(uint64) { return 0; }
+  uint64 fault_address(uint64) { return 0; }
+  bool hook_code(uint64,code_hook_fn@,uint64=1,uint64=0) { return false; }
+  bool hook_memory_unmapped(uint64,mem_hook_fn@,uint64=1,uint64=0) { return false; }
+  bool reg_read64(uint64,x86_reg,uint64 &out) { return false; }
+  bool reg_write64(uint64,x86_reg,uint64) { return false; }
+  bool reg_read128(uint64,x86_reg,array<uint8> &out) { return false; }
+  bool reg_write128(uint64,x86_reg,const array<uint8> &in) { return false; }
+  bool reg_read256(uint64,x86_reg,array<uint8> &out) { return false; }
+  bool reg_write256(uint64,x86_reg,const array<uint8> &in) { return false; }
+  bool mem_map(uint64,uint64,uint64,uint) { return false; }
+  bool mem_unmap(uint64,uint64,uint64) { return false; }
+  bool mem_protect(uint64,uint64,uint64,uint) { return false; }
+  bool mem_write(uint64,uint64,const array<uint8> &in) { return false; }
+  bool mem_read(uint64,uint64,uint32,array<uint8> &out) { return false; }
+  int mem_query(uint64,uint64) { return 0; }
+  bool mem_regions(uint64,array<uc_memory_region> &out) { return false; }
+}
+
+namespace iw_engine {
+  bool w2s(vec3,vec3,matrix3x3,float,float,vec2 &out) { return false; }
 }
 
 
@@ -318,7 +427,6 @@ class mutex { void lock(){} void unlock(){} bool try_lock(){return false;} void 
 mutex@ create_mutex() { return null; }
 void create_thread(int tps, thread_callback@ cb) { }
 void on_render(thread_callback@ cb) { }
-void sleep(uint ms) { }
 
 // ── http / websocket ─────────────────────────────────────────────────────────
 funcdef void ws_open();

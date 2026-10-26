@@ -20,7 +20,8 @@ ships agents, skills, templates, and verified reference material.
 Two guards exist; both run in CI. Use them instead of trusting prose:
 
 ```bash
-python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.md
+python3 scripts/build_api_index.py /tmp/echo-llms-full.txt -o /tmp/echo-api-index.json
+python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.json
 python3 scripts/check_angelscript.py --root . \
   --checker "$PWD/scripts/angelscript/check" --workdir /tmp
 ```

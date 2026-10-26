@@ -16,9 +16,12 @@ does not exist — do not invent one.
 | `main` | `bool main()` | **Mandatory** entry point. Return `true` on success, `false` to unload the script. A script without `bool main()` does not compile. |
 | `on_unload` | `void on_unload()` | Optional. Runs when the script is unloaded — undo writes, release resources. Globals/handles are reference-counted and cleaned up automatically. |
 | `print` | `void print(? msg)` | Global. Writes to the Echo console/log. `?` accepts any type. |
-| `sleep` | `void sleep(uint ms)` | Global. Yields the current thread for `ms` milliseconds. |
 | Script location | — | `%AppData%\Roaming\scripts\<name>.as` |
 | Reload | — | Close and reopen the overlay menu to refresh the script list |
+
+There is **no `sleep()`**. Periodic work is a tick thread — `create_thread(tps, cb)` with
+`tps` 1–128 — and a one-shot task is `create_thread(0, cb)`. Delay inside a tick is a
+`util::time_now()` gate, not a sleep.
 
 ```angelscript
 void on_unload() {

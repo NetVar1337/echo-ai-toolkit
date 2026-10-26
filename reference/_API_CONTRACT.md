@@ -3,8 +3,8 @@
 **Status: this file is the single source of truth for every rewrite task in this repo.**
 
 Ground truth: `https://echo-23.gitbook.io/angel/llms-full.txt` (fetched 2026-10-25).
-Full signature index: `reference/_API_CONTRACT.md` sibling `/tmp/echo-api-index.md`
-(regenerate with the extraction snippet in the appendix).
+Full signature index: `/tmp/echo-api-index.json`, built by `scripts/build_api_index.py`
+(see the appendix).
 
 ## THE CORE PROBLEM
 
@@ -93,7 +93,7 @@ None of it compiles against the real Echo runtime. The old API names below do **
 | `file.read(f)` | `file::read(f, out string)` (out-param form) |
 | `mutex()` | `create_mutex()` |
 | `main()` returning void | `bool main()` — **must return true/false** |
-| `sleep(ms)` | `sleep(uint ms)` (correct already) |
+| `sleep(ms)` | **does not exist** — use a tick thread (`create_thread(tps, cb)`) or a `util::time_now()` gate |
 | `proc.read<T>` templated reads | per-type functions, or `process::read_buffer()` for bulk |
 
 ## NON-NEGOTIABLE RULES
@@ -298,21 +298,10 @@ uc::close(h);
 ## APPENDIX — regenerating the index
 
 ```bash
-python3 - <<'PY'
-import re
-src = open('/tmp/echo-api-spec.md').read()
-blocks = re.findall(r'```(?:cpp|c\+\+)\n(.*?)```', src, re.S)
-out = []
-for b in blocks:
-    for line in b.split('\n'):
-        l = line.strip()
-        if not l or l.startswith('//'): continue
-        if re.match(r'^[A-Za-z_][\w:<>,\s&\*\[\]\.]*?\b([a-z_]+::[a-z_0-9]+)\s*\(', l):
-            out.append(l.rstrip(';').strip())
-seen, res = set(), []
-for s in out:
-    if s not in seen: seen.add(s); res.append(s)
-open('/tmp/echo-api-index.md','w').write("\n".join(res) + "\n")
-print(len(res), "signatures")
-PY
+curl -fsSL https://echo-23.gitbook.io/angel/llms-full.txt -o /tmp/echo-llms-full.txt
+python3 scripts/build_api_index.py /tmp/echo-llms-full.txt -o /tmp/echo-api-index.json
 ```
+
+The index is JSON: `namespaced` (every `ns::fn` the docs show), `globals` (bare functions such as
+`create_thread`), and `lines` (the raw doc line for each namespaced call, useful when adding a
+declaration to the compile stub).

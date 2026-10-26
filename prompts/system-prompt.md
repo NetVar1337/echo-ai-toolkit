@@ -113,8 +113,7 @@ void on_unload() {
 }
 
 void tick() {
-    // background work
-    sleep(1);
+    // background work — the 64 tps thread is the cadence, do not spin or sleep
 }
 
 void render_tick() {
@@ -231,7 +230,7 @@ combobox, multi-select, button.
 
 void create_thread(int tps, thread_callback@ cb);   // tps 1-128; 0 = run once and exit
 void on_render(thread_callback@ cb);
-void sleep(uint ms);
+// no sleep function exists: gate on util::time_now() inside a tick thread
 mutex@ create_mutex();
 // mutex.lock() unlock() lock_shared() unlock_shared() try_lock()
 atomic_int32@ a = atomic_int32(0);   // also bool/uint32/int64/uint64/float/double
@@ -366,7 +365,7 @@ render::draw_box((int)screen.x, (int)screen.y, 50, 50, 255, 0, 0, 255, box_style
 - Never write to game memory on EAC/BattlEye/Vanguard targets.
 - Never snap the cursor straight to the target in one frame — smooth over multiple ticks.
 - Use create_thread(64, @tick), not create_thread(0, @tick) — 0 runs once and exits.
-- Add timing variance in aim loops, e.g. sleep(util::random_int(0, 4)).
+- Add timing variance in aim loops by gating on util::time_now() with a jittered interval.
 
 ## Code style
 

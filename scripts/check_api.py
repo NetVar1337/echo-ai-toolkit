@@ -18,6 +18,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -84,6 +85,7 @@ BANNED: list[tuple[str, str]] = [
     (r"\bunity\.w2s\s*\(",                      "unity.w2s()"),
     (r"\bmutex\s*\(\s*\)",                      "mutex()"),
     (r"\bvoid\s+main\s*\(\s*\)",                "void main()"),
+    (r"\bsleep\s*\(",                          "sleep() — not in the API; use a tick thread or a util::time_now() gate"),
 ]
 
 # ── AngelScript language semantics that the docs must not get wrong ──────────
@@ -105,6 +107,10 @@ ALLOW_BANNED_IN = {
     "reference/_API_CONTRACT.md",
     "scripts/check_api.py",
 }
+
+# Third-party drop-ins register their own symbols and are not Echo API.
+# Documented as external in skills/echo-ecosystem.
+EXTERNAL_NAMESPACES = {"esp_layout"}
 
 TEXT_SUFFIXES = {".md", ".as", ".txt", ".tsx", ".ts", ".json"}
 
@@ -179,32 +185,25 @@ def check_banned(files: list[Path], root: Path) -> list[tuple[str, int, str, str
     return violations
 
 
-def check_real_api(files: list[Path], root: Path, api_index: Path | None) -> list[tuple[str, int, str, str]]:
+def load_index(api_index: Path | None) -> dict:
+    """Load the JSON index produced by scripts/build_api_index.py."""
+    if api_index is None or not api_index.is_file():
+        return {"namespaced": [], "globals": [], "lines": {}}
+    return json.loads(api_index.read_text(encoding="utf-8", errors="replace"))
+
+
+def check_real_api(files: list[Path], root: Path, index: dict) -> list[tuple[str, int, str, str]]:
     """
     Flag `ns::fn(` calls that are not in the real API index.
 
     Only namespaces that Echo actually owns are checked, so ordinary C++/JS
     identifiers (std::string, React::Component) are never flagged.
     """
-    if api_index is None or not api_index.is_file():
-        return []
-
-    known: set[str] = set()
-    for line in api_index.read_text(encoding="utf-8", errors="replace").splitlines():
-        # The index lines look like:
-        #   array<uint8>@ process::read_bytes(uint64 address, uint32 size)
-        #   bool value = ui::get(checkbox)
-        # Match on the call token anywhere in the line so overloads and
-        # assignment-prefixed forms are both captured.
-        for m in re.finditer(r"\b([a-z][a-z0-9_]*::[a-z][a-z0-9_]*)\s*\(", line):
-            known.add(m.group(1))
+    known: set[str] = set(index.get("namespaced", []))
     if not known:
         return []
 
     namespaces = {ns for ns, _ in (k.split("::", 1) for k in known)}
-    # Third-party drop-in namespaces are not part of the Echo API and are
-    # documented as external (see skills/echo-ecosystem).
-    external = {"esp_layout"}
     call_re = re.compile(r"\b([a-z][a-z0-9_]*)::([a-z][a-z0-9_]*)\s*\(")
 
     violations = []
@@ -222,21 +221,124 @@ def check_real_api(files: list[Path], root: Path, api_index: Path | None) -> lis
                 continue
             scan = strip_inline_code(line)
             for ns, fn in call_re.findall(scan):
-                if ns not in namespaces or ns in external:
+                if ns not in namespaces or ns in EXTERNAL_NAMESPACES:
                     continue  # not an Echo namespace — ignore
                 if f"{ns}::{fn}" not in known:
                     violations.append((r, n, f"{ns}::{fn}()", stripped[:120]))
     return violations
 
 
+def _strip_source(text: str) -> str:
+    """Drop comments and string bodies so brace/paren scanning cannot be fooled."""
+    text = re.sub(r"//[^\n]*", "", text)
+    text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text)
+    return text
+
+
+def _body(text: str, open_brace: int) -> tuple[str, int]:
+    """Return (body, index just past the matching close brace)."""
+    depth = 0
+    for i in range(open_brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1:i], i + 1
+    return text[open_brace + 1:], len(text)
+
+
+def _decl_names(region: str) -> set[str]:
+    """
+    Function names declared in a region: the identifier before a `(` that sits at
+    brace and paren depth 0. Function bodies (depth 1) and parameter lists
+    (paren depth > 0) are skipped, so `return vec2();` is not a declaration.
+    """
+    out: set[str] = set()
+    braces = parens = 0
+    for i, c in enumerate(region):
+        if c == "{":
+            braces += 1
+        elif c == "}":
+            braces = max(0, braces - 1)
+        elif c == "(":
+            if braces == 0 and parens == 0:
+                j = i - 1
+                while j >= 0 and region[j].isspace():
+                    j -= 1
+                k = j
+                while k >= 0 and (region[k].isalnum() or region[k] == "_"):
+                    k -= 1
+                name = region[k + 1:j + 1]
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", name) and not region[:k + 1].rstrip().endswith("::"):
+                    out.add(name)
+            parens += 1
+        elif c == ")":
+            parens = max(0, parens - 1)
+    return out
+
+
+def parse_stub(path: Path) -> tuple[set[str], set[str], set[str]]:
+    """
+    Return (namespace calls, class methods, globals) declared by the compile stub.
+
+    The stub is what every template is compiled against, so it must not contain a
+    symbol the docs do not, and must contain every symbol the docs do.
+    """
+    text = _strip_source(path.read_text(encoding="utf-8", errors="replace"))
+    text = re.sub(r"\b(?:funcdef|typedef)\b[^;]*;", "", text)
+
+    namespaced: set[str] = set()
+    methods: set[str] = set()
+    masked = list(text)
+
+    for m in re.finditer(r"\b(namespace|class)\s+([a-z0-9_]+)\s*\{", text):
+        kind, name = m.group(1), m.group(2)
+        body, end = _body(text, m.end() - 1)
+        for decl in _decl_names(body):
+            if kind == "namespace":
+                namespaced.add(f"{name}::{decl}")
+            elif decl != name:  # skip constructors: vec2() {}
+                methods.add(f"{name}::{decl}")
+        for i in range(m.end() - 1, end):
+            masked[i] = " "
+
+    return namespaced, methods, _decl_names("".join(masked))
+
+
+def check_stub(stub: Path, index: dict) -> list[str]:
+    """Compare the compile stub against the live API index, both directions."""
+    documented = set(index.get("namespaced", []))
+    documented_globals = set(index.get("globals", []))
+    if not documented:
+        return []
+
+    namespaced, methods, globals_ = parse_stub(stub)
+    problems: list[str] = []
+
+    for sym in sorted(documented - namespaced - methods):
+        problems.append(f"stub missing   {sym}()  — documented but not declared, so nothing compiles against it")
+
+    for sym in sorted(namespaced - documented):
+        if sym.split("::", 1)[0] in EXTERNAL_NAMESPACES:
+            continue
+        problems.append(f"stub invents   {sym}()  — declared but absent from the docs")
+
+    for name in sorted(globals_ - documented_globals):
+        problems.append(f"stub invents   {name}()  — global declared but absent from the docs")
+
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Check that the toolkit only teaches the real Echo API.")
     ap.add_argument("--root", default=".", help="repo root (default: cwd)")
-    ap.add_argument("--api-index", default=None, help="path to the real API signature index")
+    ap.add_argument("--api-index", default=None, help="JSON index from scripts/build_api_index.py")
+    ap.add_argument("--stub", default=None, help="compile stub to verify against the index")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
-    api_index = Path(args.api_index).resolve() if args.api_index else None
+    index = load_index(Path(args.api_index).resolve() if args.api_index else None)
 
     files = collect_files(root)
     if not files:
@@ -244,7 +346,8 @@ def main() -> int:
         return 0
 
     banned = check_banned(files, root)
-    unknown = check_real_api(files, root, api_index)
+    unknown = check_real_api(files, root, index)
+    stub_problems = check_stub(Path(args.stub).resolve(), index) if args.stub else []
 
     if banned:
         print(f"\n\033[1;31m✗ {len(banned)} invented-API usage(s) found\033[0m\n")
@@ -260,7 +363,13 @@ def main() -> int:
             print(f"      {text}")
         print()
 
-    if banned or unknown:
+    if stub_problems:
+        print(f"\n\033[1;31m✗ compile stub disagrees with the docs ({len(stub_problems)})\033[0m\n")
+        for p in stub_problems:
+            print(f"  {p}")
+        print()
+
+    if banned or unknown or stub_problems:
         print("The Echo Universal API is namespaced (process::, render::, ui::, ...).")
         print("See reference/_API_CONTRACT.md for the full old -> new mapping.")
         return 1

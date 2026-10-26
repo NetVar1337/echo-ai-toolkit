@@ -87,7 +87,7 @@ atomic_double@   atomic_double(double value);
 
 void create_thread(int tps, thread_callback@ cb);  // tps 1-128; 0 = run once
 void on_render(thread_callback@ cb);                // every frame, render thread
-void sleep(uint ms);
+// no sleep function exists: gate on util::time_now() inside a tick thread
 ```
 
 Ticking threads (`tps` 1–128) can only be created from `main()`. One-shot threads
@@ -592,7 +592,7 @@ writing to a protected target is against policy.
 - Never write to game memory on EAC/BattlEye/Vanguard targets.
 - Never snap the cursor straight to the target — smooth over multiple ticks.
 - Use `create_thread(64, @tick)`, not `create_thread(0, @tick)` (0 runs once and exits).
-- Add small timing variance in aim loops, e.g. `sleep(util::random_int(0, 4));`.
+- Add small timing variance in aim loops by gating on `util::time_now()` with a jittered interval.
 
 ---
 

@@ -151,24 +151,30 @@ Note `input::mouse_move(x, y)` takes **absolute** screen coordinates, not a delt
 ### 8. Moving the mouse at a robotic exact cadence
 
 ```angelscript
-// BAD — the mouse moves with a constant delta on a constant interval, forever
+// BAD — the mouse moves with a constant delta on every tick, forever
 void aim_tick_bad() {
     input::mouse_move(int(target_x), int(target_y));
-    sleep(15);                    // exactly 15 ms, every tick
 }
 
-// GOOD — jitter the movement and the interval; the thread rate stays normal
+// GOOD — jitter the movement, and gate the next move on a randomised interval.
+// The tick rate stays fixed; the *output* is what varies.
+uint64 g_next_move = 0;
+
 void aim_tick() {
+    uint64 now = util::time_now();
+    if (now < g_next_move) return;
+    g_next_move = now + uint64(util::random_int(8, 24));
+
     float factor = 0.08f;
     input::mouse_move(int(current_x + (target_x - current_x) * factor),
                       int(current_y + (target_y - current_y) * factor));
-    sleep(uint(util::random_int(8, 24)));
 }
 ```
 
 The thread *rate* is not the anti-pattern — 64 tps is a normal, healthy rate (see items 13/14).
 What behavioural AC looks for is the *movement pattern*: constant delta, constant interval,
-forever. Vary the output, not the loop rate.
+forever. Vary the output, not the loop rate. There is no `sleep()` in the API — a delay inside
+a tick is a `util::time_now()` gate, as above.
 
 ---
 
@@ -265,36 +271,42 @@ vec3 read_bone_world(uint64 bone_address, ftransform parent_tf) {
 ### 12. Not handling game restart
 
 ```angelscript
-// BAD — the loop keeps running after the game exits
+// BAD — a busy loop inside a thread: it spins as fast as the CPU allows
 void session_loop_bad() {
-    while (true) { tick(); sleep(1); }
+    while (true) { tick(); }
 }
 
-// GOOD
-void session_loop() {
-    while (process::is_alive()) { tick(); sleep(1); }
-}
-```
-
-Re-attach pattern — the loop belongs in a thread, so `main()` stays free to return
-`true` (keep the script loaded) or `false` (unload):
-
-```angelscript
-void session_loop() {
-    while (true) {
-        if (!process::is_alive()) {
-            attach_data ad = process::attach("game.exe");
-            if (ad.pid == 0) {
-                sleep(1000);
-                continue;
-            }
-        }
-        run_session();   // user code — the per-session work loop
-    }
+// GOOD — the tick thread already provides the cadence; do the work in it
+void session_tick() {
+    if (!process::is_alive()) return;
+    tick();
 }
 
 bool main() {
-    create_thread(64, @session_loop);
+    create_thread(64, @session_tick);
+    return true;
+}
+```
+
+Re-attach pattern — re-attach is retried on a time gate, never in a spin:
+
+```angelscript
+uint64 g_next_attach = 0;
+
+void session_tick() {
+    if (!process::is_alive()) {
+        uint64 now = util::time_now();
+        if (now < g_next_attach) return;      // retry once a second, not every tick
+        g_next_attach = now + 1000;
+        attach_data ad = process::attach("game.exe");
+        if (ad.pid == 0) return;
+        on_attach(ad);                        // reset offsets, rebuild your snapshot
+    }
+    run_session();   // user code — the per-session work loop
+}
+
+bool main() {
+    create_thread(64, @session_tick);
     return true;
 }
 ```

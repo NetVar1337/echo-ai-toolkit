@@ -464,19 +464,29 @@ Autofire holds LMB while on target. Burst mode fires N rounds, then pauses to re
 ```angelscript
 const int  BURST_SIZE   = 3;     // rounds per burst
 const uint BURST_GAP_MS = 200;   // pause between bursts (ms)
+const uint RELEASE_MS   = 40;    // how long the trigger stays down (ms)
 
 int    g_burst_count = 0;
 uint64 g_burst_last  = 0;
+uint64 g_release_at  = 0;        // 0 = trigger not held
 
 void autofire_tick(double fov_to_best) {
     bool on_target = fov_to_best < 0.6;
+    uint64 now = util::time_now();
+
+    // The trigger release is a time gate on this same tick — the API has no sleep.
+    if (g_release_at != 0 && now >= g_release_at) {
+        input::mouse_release();
+        g_release_at = 0;
+    }
 
     if (!on_target) {
+        if (g_release_at != 0) { input::mouse_release(); g_release_at = 0; }
         g_burst_count = 0; // reset burst on lost target
         return;
     }
 
-    uint64 now = util::time_now();
+    if (g_release_at != 0) return;   // one shot at a time
 
     // Burst mode: fire BURST_SIZE shots, then pause
     if (g_burst_count >= BURST_SIZE) {
@@ -485,11 +495,7 @@ void autofire_tick(double fov_to_best) {
     }
 
     input::mouse_press();
-    // Release shortly after to simulate a single press:
-    create_thread(0, @function() {
-        sleep(10);
-        input::mouse_release();
-    });
+    g_release_at = now + RELEASE_MS;
 
     g_burst_count++;
     g_burst_last = now;
