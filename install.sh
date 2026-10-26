@@ -630,7 +630,11 @@ register_mcp() { # name command [args...]
     && ok "MCP $name registered" || skip "MCP $name" "registration failed — add manually from mcp.json"
 }
 [ -f "$GH_ENTRY" ] && register_mcp gamehacking node "$GH_ENTRY"
-register_mcp rea npx -y rea-agents
+if [ -n "$REA_ENTRY" ]; then
+  register_mcp rea node "$REA_ENTRY"
+else
+  register_mcp rea npx -y "rea-agents@$(lock_pin npm rea-agents)"
+fi
 [ -f "$AM_ENTRY" ] && register_mcp angel-menu node "$AM_ENTRY"
 have r2pm && register_mcp radare2 r2pm -r r2mcp
 register_mcp ida uvx ida-mcp stdio --agent=echo

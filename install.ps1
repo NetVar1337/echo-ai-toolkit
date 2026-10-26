@@ -582,7 +582,8 @@ function Register-Mcp {
 if (Test-Path (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js')) {
     Register-Mcp 'gamehacking' @('node', ($ghEntry -replace '/','\\'))
 }
-Register-Mcp 'rea' @('npx', '-y', 'rea-agents')
+if ($reaEntry) { Register-Mcp 'rea' @('node', $reaEntry) }
+else { Register-Mcp 'rea' @('npx', '-y', "rea-agents@$reaVer") }
 if (Test-Path (Join-Path $EchoHome 'angel-menu-mcp\index.js')) {
     Register-Mcp 'angel-menu' @('node', ($amEntry -replace '/','\\'))
 }
