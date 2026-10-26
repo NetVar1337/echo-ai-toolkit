@@ -55,12 +55,13 @@ function have(cmd) {
   return spawnSync(IS_WIN ? 'where' : 'which', [cmd], { stdio: 'ignore' }).status === 0;
 }
 
-function run(cmd, args, { timeout = 0, inherit = true } = {}) {
+function run(cmd, args, { timeout = 0, inherit = true, cwd = undefined } = {}) {
   const r = spawnSync(cmd, args, {
     stdio: inherit ? 'inherit' : 'pipe',
     encoding: 'utf8',
     timeout: timeout || undefined,
     shell: IS_WIN,
+    cwd,
   });
   return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
 }
@@ -277,7 +278,7 @@ const BUILD = {
   'web-mv': { cmd: 'bun', args: ['install', '--frozen-lockfile'], cwd: 'relay' },
   'VTIL-Core': { cmd: 'cmake', args: ['--build', 'build', '--config', 'Release'] },
   NoVmp: { cmd: 'cmake', args: ['--build', 'build', '--config', 'Release'] },
-  vtil2: { cmd: 'dotnet', args: ['build', '-c', 'Release'] },
+  vtil2: { cmd: 'dotnet', args: ['build', 'VTIL-Core.sln', '-c', 'Release'] },
 };
 
 function copyTree(src, dest) {
@@ -297,11 +298,11 @@ async function updateTools() {
   if (!vendor) { fail('vendor/', 'missing — clone the repo or run the installer'); return; }
   ok(`vendor/ ${vendor}`);
 
-  for (const [name, sub] of Object.entries(VENDOR_SUB)) {
+  for (const [name, subPath] of Object.entries(VENDOR_SUB)) {
     if (name === 'mcp-gamehacking') continue; // release archive, see vendor/ARCHIVES
-    const src = join(vendor, sub);
+    const src = join(vendor, subPath);
     const dir = join(ECHO_HOME, name);
-    if (!existsSync(src)) { skip(name, `vendor/${sub} missing`); continue; }
+    if (!existsSync(src)) { skip(name, `vendor/${subPath} missing`); continue; }
     try {
       if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
       copyTree(src, dir);
@@ -321,18 +322,18 @@ async function updateTools() {
   }
 
   // Binaries and READMEs come from vendor/ too.
-  for (const [sub, dest] of [
+  for (const [relPath, dest] of [
     ['scripts/esp_preview.as', join(REF_DIR, 'esp_preview.as')],
     ['docs/awesome-game-security.md', join(REF_DIR, 'awesome-game-security.md')],
     ['docs/gamehacking-cheatsheet.md', join(REF_DIR, 'gamehacking-cheatsheet.md')],
     [`bin/${IS_WIN ? 'as_bundler.exe' : 'as_bundler'}`, join(BIN_DIR, IS_WIN ? 'as_bundler.exe' : 'as_bundler')],
   ]) {
-    const src = join(vendor, sub);
-    if (!existsSync(src)) { skip(basename(sub), `vendor/${sub} missing`); continue; }
+    const src = join(vendor, relPath);
+    if (!existsSync(src)) { skip(basename(relPath), `vendor/${relPath} missing`); continue; }
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(src, dest);
-    if (sub.startsWith('bin/') && !IS_WIN) chmodSync(dest, 0o755);
-    ok(`${basename(sub)} (vendored)`);
+    if (relPath.startsWith('bin/') && !IS_WIN) chmodSync(dest, 0o755);
+    ok(`${basename(relPath)} (vendored)`);
   }
 
   // Python packages: hash-pinned by vendor/python/requirements.lock.
@@ -589,14 +590,10 @@ function doctor() {
     row('miss', 'tools.lock', 'missing — run install.sh');
   } else {
     row('ok', 'tools.lock', `${lock.length} pins`);
-    const offPin = lock.filter((r) => r.kind === 'clone').filter((r) => {
-      const dir = join(ECHO_HOME, r.name);
-      if (!existsSync(join(dir, '.git'))) return false;
-      const head = capture('git', ['-C', dir, 'rev-parse', 'HEAD']).out.trim();
-      return head && head !== r.pin;
-    });
-    if (offPin.length) row('miss', 'pinned refs', `${offPin.length} tool(s) off-pin — run: echo update --tools`);
-    else row('ok', 'pinned refs', 'all installed tools match the lock');
+    // Tools are plain copies of vendor/, so "installed" means the tree is there.
+    const absent = Object.keys(VENDOR_SUB).filter((name) => !existsSync(join(ECHO_HOME, name)));
+    if (absent.length) row('miss', 'installed tools', `${absent.length} missing — run: echo update --tools`);
+    else row('ok', 'installed tools', 'every vendored tool is installed');
   }
 
   console.log(`\n  ${green(rows.ok)} ok   ${red(rows.miss)} missing   ${magenta(rows.na)} not applicable\n`);

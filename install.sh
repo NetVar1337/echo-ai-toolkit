@@ -95,7 +95,7 @@ if [ -n "$REPO_SRC" ] && [ -d "$REPO_SRC/vendor" ]; then
 else
   REF="${ECHO_REF:-main}"
   mkdir -p "$ECHO_HOME/src"
-  sub "fetching $REPO@$REF (this repo — the only download)…"
+  sub "fetching $REPO@$REF — this repo is the only download (~250 MB of vendored tools)…"
   if $CURL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$REF" -o "$ECHO_HOME/src/toolkit.tar.gz" \
      && tar -xzf "$ECHO_HOME/src/toolkit.tar.gz" -C "$ECHO_HOME/src" 2>/dev/null; then
     VENDOR="$(ls -d "$ECHO_HOME"/src/echo-ai-toolkit-*/vendor 2>/dev/null | head -1)"
@@ -556,7 +556,8 @@ if have dotnet; then
     vendor_copy tools/vtil2 "$ECHO_HOME/vtil2" >/dev/null 2>&1
   fi
   if [ -d "$ECHO_HOME/vtil2" ]; then
-    ( cd "$ECHO_HOME/vtil2" && dotnet build -c Release >/dev/null 2>&1 ) \
+    # The repo root holds several projects; build the solution explicitly.
+    ( cd "$ECHO_HOME/vtil2" && dotnet build VTIL-Core.sln -c Release >/dev/null 2>&1 ) \
       && ok "vtil2" || skip "vtil2" "dotnet build failed"
   fi
 else

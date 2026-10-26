@@ -503,7 +503,8 @@ if (TierAtLeast 'full') {
         $dir = Join-Path $EchoHome 'vtil2'
         if (-not (Test-Path $dir) -or -not (Get-ChildItem $dir -ErrorAction SilentlyContinue)) { $null = VendorCopy 'tools/vtil2' $dir }
         if (Test-Path $dir) {
-            Push-Location $dir; dotnet build -c Release 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
+            # The repo root holds several projects; build the solution explicitly.
+            Push-Location $dir; dotnet build VTIL-Core.sln -c Release 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok 'vtil2' } else { Skip 'vtil2' 'dotnet build failed' }
         }
     }

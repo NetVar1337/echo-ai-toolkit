@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 
 # Note: .mcp.json at the repo root IS tracked on purpose — the plugin ships it.
+dist-vendor/

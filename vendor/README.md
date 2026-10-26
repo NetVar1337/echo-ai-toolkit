@@ -53,9 +53,10 @@ aggregated, not linked into anything else in this repo.
 - **`mcp-gamehacking`** (3.1 GB git, 18 GB working tree, 4100+ skills). Vendored
   as a split archive in this repo's releases, not in git: GitHub blocks files
   over 100 MB, warns above 1 GB per repo, and every CI job would pay a
-  multi-gigabyte checkout. `vendor/ARCHIVES.json` pins the parts by sha256 and
-  `install.sh` verifies them before extracting. `scripts/vendor_archive.sh`
-  rebuilds the archive from the pinned commit.
+  multi-gigabyte checkout. `vendor/ARCHIVES` pins the parts by sha256 and
+  `install.sh` verifies each one before extracting, then builds against the
+  package-lock that ships inside the archive. `scripts/vendor_archive.sh`
+  rebuilds it from the pinned commit.
 - **Registry packages** — `npm ci` and `pip --require-hashes` fetch from the
   registry, but every artifact is verified against a lockfile hash, so the
   registry cannot substitute anything. That is the same guarantee as vendoring
