@@ -215,17 +215,17 @@ install_mcp_gamehacking() {
   [ -f "$meta" ] || { fail "mcp-gamehacking" "vendor/ARCHIVES missing"; return; }
   local tmp="$ECHO_HOME/src/mcp-gamehacking" url sha n=0
   rm -rf "$tmp"; mkdir -p "$tmp"
-  grep -v '^#' "$meta" | awk '$1=="mcp-gamehacking" {print $2" "$3}' | sort > "$tmp/parts"
-  [ -s "$tmp/parts" ] || { fail "mcp-gamehacking" "no archive parts listed in vendor/ARCHIVES"; return; }
+  grep -v '^#' "$meta" | awk '$1=="mcp-gamehacking" {print $2" "$3}' | sort > "$tmp/parts.txt"
+  [ -s "$tmp/parts.txt" ] || { fail "mcp-gamehacking" "no archive parts listed in vendor/ARCHIVES"; return; }
   while read -r url sha; do
     n=$((n+1))
-    sub "downloading archive part $n of $(wc -l < "$tmp/parts")…"
+    sub "downloading archive part $n of $(wc -l < "$tmp/parts.txt")…"
     $CURL "$url" -o "$tmp/part$(printf '%02d' "$n")" \
       || { fail "mcp-gamehacking" "part $n download failed"; return; }
     verify_sha "$tmp/part$(printf '%02d' "$n")" "$sha" \
       || { fail "mcp-gamehacking" "part $n checksum mismatch"; return; }
-  done < "$tmp/parts"
-  cat "$tmp"/part* > "$tmp/archive.tar.gz"
+  done < "$tmp/parts.txt"
+  cat "$tmp"/part[0-9]* > "$tmp/archive.tar.gz"
   tar -xzf "$tmp/archive.tar.gz" -C "$tmp" \
     || { fail "mcp-gamehacking" "extract failed"; return; }
   # The archive is the upstream source tree; the build runs here against the
