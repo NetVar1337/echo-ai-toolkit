@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Echo ships patches on its own schedule. Check weekly so the toolkit cannot
+  # go stale silently between commits.
+  schedule:
+    - cron: '0 7 * * 1'
 
 jobs:
   json:
@@ -42,29 +46,70 @@ jobs:
           test -s /tmp/echo-llms-full.txt
 
       - name: Build API signature index
-        run: |
-          python3 - <<'PY'
-          import re
-          src = open('/tmp/echo-llms-full.txt').read()
-          blocks = re.findall(r'```(?:cpp|c\+\+)\n(.*?)```', src, re.S)
-          out = []
-          for b in blocks:
-              for line in b.split('\n'):
-                  l = line.strip()
-                  if not l or l.startswith('//'):
-                      continue
-                  if re.search(r'\b[a-z][a-z0-9_]*::[a-z][a-z0-9_]*\s*\(', l):
-                      out.append(l.rstrip(';').strip())
-          seen, res = set(), []
-          for s in out:
-              if s not in seen:
-                  seen.add(s); res.append(s)
-          open('/tmp/echo-api-index.md', 'w').write('\n'.join(res) + '\n')
-          print(f'{len(res)} signatures extracted')
-          PY
+        run: python3 scripts/build_api_index.py /tmp/echo-llms-full.txt -o /tmp/echo-api-index.json
 
       - name: Check docs teach only the real API
-        run: python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.md
+        run: python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.json
+
+      - name: Check the compile stub matches the real API
+        run: python3 scripts/check_api.py --root . --api-index /tmp/echo-api-index.json --stub scripts/angelscript/echo_stub.as
+
+  drift:
+    name: Echo docs drift
+    # The guard above runs when you push. Echo does not. This one runs weekly and
+    # files an issue when the live docs no longer match what the repo teaches.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live docs and rebuild the index
+        run: |
+          curl -fsSL https://echo-23.gitbook.io/angel/llms-full.txt -o /tmp/echo-llms-full.txt
+          test -s /tmp/echo-llms-full.txt
+          python3 scripts/build_api_index.py /tmp/echo-llms-full.txt -o /tmp/echo-api-index.json
+
+      - name: Compare the repo against the live docs
+        id: check
+        run: |
+          if python3 scripts/check_api.py --root . \
+               --api-index /tmp/echo-api-index.json \
+               --stub scripts/angelscript/echo_stub.as > /tmp/drift.txt 2>&1; then
+            echo "status=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=1" >> "$GITHUB_OUTPUT"
+          fi
+          cat /tmp/drift.txt
+
+      - name: File the drift issue
+        if: steps.check.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='Echo docs drifted from the toolkit'
+          {
+            printf 'The weekly check against https://echo-23.gitbook.io/angel/llms-full.txt failed.\n\n'
+            printf '```\n%s\n```\n' "$(tail -n 60 /tmp/drift.txt)"
+          } > /tmp/body.md
+          n=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body-file /tmp/body.md
+          else
+            gh issue create --title "$title" --body-file /tmp/body.md || gh issue create --title "$title" --body-file /tmp/body.md
+          fi
+
+      - name: Close the drift issue once clean
+        if: steps.check.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='Echo docs drifted from the toolkit'
+          for n in $(gh issue list --state open --search "$title in:title" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment 'The live docs match the repo again.'
+          done
 
   layout:
     name: Plugin layout
@@ -148,6 +193,14 @@ jobs:
           done
           echo "$n skills are Pi-compatible (name + description frontmatter)"
           exit $fail
+
+      - name: CLI is syntactically valid and doctor runs
+        run: |
+          node --check scripts/echo.mjs
+          echo "OK   scripts/echo.mjs parses"
+          ECHO_HOME=/tmp/nonexistent node scripts/echo.mjs doctor > /tmp/doctor.txt
+          grep -q 'Pinned tools' /tmp/doctor.txt || { echo "FAIL: doctor output incomplete"; exit 1; }
+          echo "OK   echo doctor runs with no install present"
 
       - name: Launcher refuses cleanly without pi
         run: |
@@ -236,6 +289,38 @@ jobs:
               $fail = 1
             } else { Write-Host "OK   $f" }
           }
+          exit $fail
+
+      - name: tools.lock is well formed
+        run: |
+          fail=0
+          n=0
+          while read -r kind name ref pin; do
+            case "$kind" in
+              \#*|"") continue ;;
+              clone)
+                echo "$pin" | grep -qE '^[0-9a-f]{40}$' || { echo "FAIL clone $name: pin is not a commit sha"; fail=1; }
+                echo "$ref"  | grep -qE '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || { echo "FAIL clone $name: ref is not owner/repo"; fail=1; } ;;
+              raw|asset)
+                echo "$pin" | grep -qE '^[0-9a-f]{64}$' || { echo "FAIL $kind $name: pin is not a sha256"; fail=1; }
+                echo "$ref" | grep -qE '^https://' || { echo "FAIL $kind $name: ref is not a URL"; fail=1; } ;;
+              npm|pip)
+                [ -n "$pin" ] || { echo "FAIL $kind $name: no version"; fail=1; } ;;
+              *) echo "FAIL unknown kind: $kind"; fail=1 ;;
+            esac
+            n=$((n+1))
+          done < tools.lock
+          echo "$n pins validated"
+          exit $fail
+
+      - name: Every pinned repo and URL is reachable
+        run: |
+          fail=0
+          grep -vE '^\s*#|^\s*$' tools.lock | awk '$1=="clone"{print "https://github.com/"$3} $1=="raw"||$1=="asset"{print $3}' > /tmp/pins.txt
+          while read -r url; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url")
+            if [ "$code" = "200" ]; then echo "OK   $url"; else echo "FAIL $url ($code)"; fail=1; fi
+          done < /tmp/pins.txt
           exit $fail
 
       - name: Every tool referenced by the installer is reachable
