@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "echo-ai-toolkit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "12 specialist agents, 18 skills and 15 verified templates for Echo Universal API (AngelScript) development, plus a one-command installer that wires up 17 companion tools \u2014 mcp-gamehacking, angel-menu-mcp, rea, as_bundler, echo-esp-preview, echo-angelscript-lsp, Triton, VMProtect-devirtualization, vmp-lazy-unpack, NoVmp, VTIL-Core, vtil2, web-mv, ponytail, karpathy-skills and offline copies of gamehacking-cheatsheet and awesome-game-security.",
   "author": {
     "name": "NetVar1337",

@@ -111,6 +111,44 @@ jobs:
             gh issue close "$n" --comment 'The live docs match the repo again.'
           done
 
+  vendor:
+    name: Vendored tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: vendor/ matches MANIFEST.json
+        run: python3 scripts/vendor_manifest.py --check
+
+      - name: Every expected tree is vendored
+        run: |
+          fail=0
+          for d in mcp/angel-menu-mcp tools/VTIL-Core tools/NoVmp tools/vtil2 \
+                   tools/vmp-lazy-unpack tools/VMProtect-devirtualization tools/web-mv \
+                   plugins/ponytail plugins/andrej-karpathy-skills \
+                   bin scripts docs npm python; do
+            [ -e "vendor/$d" ] || { echo "FAIL vendor/$d missing"; fail=1; }
+          done
+          [ -s vendor/ARCHIVES ] || { echo "FAIL vendor/ARCHIVES missing (mcp-gamehacking archive)"; fail=1; }
+          exit $fail
+
+      - name: Installers reach nothing but this repo and pinned registries
+        run: |
+          fail=0
+          # Comments are allowed to mention any URL; only real fetches matter.
+          allowed='^(codeload\.github\.com|github\.com|bun\.sh|pi\.dev|claude\.com|pypi\.org|registry\.npmjs\.org)$'
+          for f in install.sh install.ps1; do
+            hosts=$(grep -vE '^\s*#' "$f" | grep -ohE 'https?://[A-Za-z0-9._-]+' | sed -E 's#https?://##' | sort -u)
+            for host in $hosts; do
+              if echo "$host" | grep -qE "$allowed"; then
+                echo "OK   $f -> $host"
+              else
+                echo "FAIL $f fetches $host"; fail=1
+              fi
+            done
+          done
+          exit $fail
+
   layout:
     name: Plugin layout
     runs-on: ubuntu-latest
@@ -304,7 +342,7 @@ jobs:
               raw|asset)
                 echo "$pin" | grep -qE '^[0-9a-f]{64}$' || { echo "FAIL $kind $name: pin is not a sha256"; fail=1; }
                 echo "$ref" | grep -qE '^https://' || { echo "FAIL $kind $name: ref is not a URL"; fail=1; } ;;
-              npm|pip)
+              npm|pip|toolver)
                 [ -n "$pin" ] || { echo "FAIL $kind $name: no version"; fail=1; } ;;
               *) echo "FAIL unknown kind: $kind"; fail=1 ;;
             esac
@@ -313,14 +351,15 @@ jobs:
           echo "$n pins validated"
           exit $fail
 
-      - name: Every pinned repo and URL is reachable
+      - name: The mcp-gamehacking archive parts are reachable
         run: |
           fail=0
-          grep -vE '^\s*#|^\s*$' tools.lock | awk '$1=="clone"{print "https://github.com/"$3} $1=="raw"||$1=="asset"{print $3}' > /tmp/pins.txt
+          grep -vE '^\s*#|^\s*$' vendor/ARCHIVES | awk '{print $2}' > /tmp/parts.txt
+          [ -s /tmp/parts.txt ] || { echo "FAIL vendor/ARCHIVES lists no parts"; exit 1; }
           while read -r url; do
             code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url")
             if [ "$code" = "200" ]; then echo "OK   $url"; else echo "FAIL $url ($code)"; fail=1; fi
-          done < /tmp/pins.txt
+          done < /tmp/parts.txt
           exit $fail
 
       - name: Every tool referenced by the installer is reachable

@@ -105,42 +105,66 @@ the legacy option disabled. Borderless or windowed only. Echo is Windows-only.
 In order, each step idempotent — re-running is always safe:
 
 1. **Checks prerequisites** and reports what is missing.
-2. **Installs the plugin** — registers the marketplace, installs `echo-ai-toolkit`.
-3. **Installs companion plugins** — `ponytail`, `andrej-karpathy-skills`.
-4. **Builds the MCP servers** — `mcp-gamehacking` (the long one), `angel-menu-mcp`.
-5. **Installs Echo tooling** — `as_bundler` binary, `esp_preview.as` into your scripts dir,
-   the VS Code LSP, `web-mv` (installing Bun first if needed).
-6. **Fetches reference docs** — the `awesome-game-security` and `gamehacking-cheatsheet` READMEs.
+2. **Fetches [`vendor/`](vendor/)** — the only download: this repo's own tarball, or the checkout
+   you already have.
+3. **Installs the plugin** — registers the marketplace, installs `echo-ai-toolkit`.
+4. **Installs companion plugins** — `ponytail`, `andrej-karpathy-skills`, both vendored and served
+   by this repo's marketplace.
+5. **Installs the MCP servers** — `angel-menu-mcp` from `vendor/`, `mcp-gamehacking` from this
+   repo's split release archive.
+6. **Installs Echo tooling** — `as_bundler`, `esp_preview.as`, the VS Code LSP, `web-mv`, and the
+   reference READMEs, all from `vendor/`.
 7. **Writes the Pi profile** — `SYSTEM.md`, `APPEND_SYSTEM.md`, `AGENTS.md`, 4 prompt templates,
    all 18 skills, and the `echo` launcher.
 8. **Writes `mcp.json`** with all 5 servers and absolute paths.
-9. **Installs the Python stack** — a venv, Triton, `VMProtect-devirtualization`, `vmp-lazy-unpack`.
-10. **Installs the compiler stack** — CMake/.NET/LLVM if absent, then NoVmp, VTIL-Core, vtil2.
+9. **Installs the Python stack** — a venv, then `vendor/python/requirements.lock` (Triton,
+   capstone, pefile, unicorn) installed with `--require-hashes`.
+10. **Installs the compiler stack** — CMake/.NET/LLVM if absent, then NoVmp, VTIL-Core, vtil2,
+    built from `vendor/`.
 11. **Adds the `echo` alias** to your shell rc.
 
 Anything whose prerequisite cannot be met is **skipped with the exact command to fix it** — never
 a hard failure. The install always completes, and `echo doctor` shows the gaps.
 
-### Pinned, not "latest"
+### Vendored, not fetched
 
-[`tools.lock`](tools.lock) pins every external artifact the installer fetches: 8 git clones by
-commit SHA, 3 raw files and 3 release assets by sha256, and the two package versions. Two installs
-a week apart are the same software, and a compromised or renamed upstream cannot silently become
-part of your toolkit.
+Every tool, plugin, binary and reference doc the installer installs **lives in this repository**
+under [`vendor/`](vendor/) — 270 MB, 3727 files, each recorded by sha256 in
+`vendor/MANIFEST.json`. A renamed, compromised or deleted upstream cannot change what you install,
+because nothing is fetched from upstream.
 
 ```bash
-echo update --tools     # move installed tools to the pinned refs, then rebuild
-echo update --lock      # re-resolve the pins to current upstream heads, rewrite tools.lock
-echo doctor             # "pinned refs" row reports any tool that is off-pin
+echo update --tools     # restore every tool from vendor/ and rebuild
+echo update --lock      # move the pins in tools.lock to current upstream heads
+scripts/vendor_refresh.sh   # maintainers: re-fetch vendor/ at the new pins
+echo doctor             # "Vendored tools" and "Pinned tools" rows report drift
 ```
 
-The installer itself still bootstraps with `curl … | bash`, and installs Bun and Pi with their own
-upstream scripts. That trust is unavoidable for a one-command install — clone the repo and run
-`./install.sh` if you would rather read it first. Everything after bootstrap is pinned.
+What that means in practice:
+
+| | Before | Now |
+|---|---|---|
+| Companion tool sources | 8 × `git clone` at install | `vendor/tools/`, `vendor/mcp/` |
+| Release binaries | 3 × download from upstream | `vendor/bin/`, sha256-checked at install |
+| Reference READMEs | 2 × raw.githubusercontent.com | `vendor/docs/` |
+| Companion plugins | 2 third-party marketplaces | `vendor/plugins/`, our marketplace |
+| MCP server deps | `npm install` | `npm ci` against vendored lockfiles |
+| Python packages | unpinned `pip install` | `--require-hashes` against `vendor/python/requirements.lock` |
+| `mcp-gamehacking` | 3.1 GB clone from upstream | split archive in **this** repo's releases, sha256 per part |
+
+Three things still touch the network, all pinned: `npm ci` and `pip --require-hashes` (the registry
+cannot substitute a package without breaking the hash), and the optional Bun/Pi binaries, whose
+versions are pinned in `tools.lock`. The installer itself is a `curl … | bash` — clone the repo and
+run `./install.sh` if you would rather read it first.
+
+`mcp-gamehacking` is the one thing not in git: its tree is 18 GB (3.1 GB packed), GitHub blocks
+files over 100 MB and warns above 1 GB per repo, and every CI job would pay for the checkout. It
+ships as a split archive on this repo's releases, pinned by sha256 in `vendor/ARCHIVES` and rebuilt
+by `scripts/vendor_archive.sh`.
 
 ### Size, and how to install less
 
-**A full install is ~22 GB**, measured. Almost all of it is `mcp-gamehacking`: a 21 GB checkout
+**A full install is ~22 GB**, measured. Almost all of it is `mcp-gamehacking`: an 18 GB tree
 containing 18 GB of `skills/` (4161 skill directories, each with its own `source.txt`). GitHub
 reports that repo as 3.1 GB because that is the *compressed git* size — the working tree is what
 lands on your disk.
@@ -433,7 +457,9 @@ are compiled in CI against a real AngelScript 2.38.0 build.
 | [vtil2](https://github.com/pop-rip/vtil2) | VTIL redesign in C# | `dotnet build` |
 | [llvm-project](https://github.com/llvm/llvm-project) | OLLVM passes + Triton's LLVM interface | **system package** via `apt` / `brew` / `winget` — never built from source |
 
-Everything lands in `~/.local/share/echo-ai-toolkit/`. Update it all with `echo update --tools`.
+Everything lands in `~/.local/share/echo-ai-toolkit/`, and every one of them is installed from
+`vendor/` in this repo — none is fetched from the upstream project at install time. Update with
+`echo update --tools`.
 
 ---
 
@@ -444,8 +470,8 @@ Written to `~/.local/share/echo-ai-toolkit/mcp.json` and shipped as the plugin's
 | Server | Command | Needs |
 |---|---|---|
 | `gamehacking` | `node …/mcp-gamehacking/dist/index.js` | `ECHO_SKIP_GAMEHACKING=1` to omit |
-| `rea` | `npx -y rea-agents` | Node |
-| `angel-menu` | `node …/angel-menu-mcp/index.js` | Node |
+| `rea` | `node …/rea/node_modules/rea-agents/scripts/rea.mjs` | Node (`npm ci` against `vendor/npm/rea/package-lock.json`) |
+| `angel-menu` | `node …/angel-menu-mcp/index.js` | Node (installed from `vendor/`) |
 | `radare2` | `r2pm -r r2mcp` | radare2 + `r2pm -Uci r2mcp` |
 | `ida` | `uvx ida-mcp stdio` | IDA 9.4+ with idalib, Python 3.11+ |
 
@@ -508,7 +534,7 @@ be closed and reopened to refresh the list. Discord must be running with the ove
 
 ## How this repo is verified
 
-Four guards, all in CI:
+Five guards, all in CI:
 
 ```bash
 # 1. Every API call exists in the real Echo API
@@ -526,6 +552,9 @@ python3 scripts/check_angelscript.py --root . \
 
 # 4. The plugin loads and its hooks work
 claude plugin validate . && claude plugin test .
+
+# 5. vendor/ matches its manifest, and the installers reach no third-party host
+python3 scripts/vendor_manifest.py --check
 ```
 
 `scripts/angelscript/build.sh` fetches AngelScript 2.38.0 and builds the checker. Guard 3 is what
@@ -538,8 +567,8 @@ both the stub and the docs would compile and look correct. The stub check compar
 live API index in both directions, so it caught `sleep()` — a function the toolkit taught in seven
 files that appears nowhere in Echo's documentation.
 
-CI runs 8 jobs: `json`, `api`, `drift`, `layout`, `angelscript`, `pi-profile`, `plugin`,
-`installers`. `drift` runs weekly on a schedule, re-fetches the live docs, and opens an issue when
+CI runs 9 jobs: `json`, `api`, `drift`, `vendor`, `layout`, `angelscript`, `pi-profile`,
+`plugin`, `installers`. `drift` runs weekly on a schedule, re-fetches the live docs, and opens an issue when
 they no longer match what the repo teaches — Echo patches on its own schedule, so a guard that only
 runs on push would let the toolkit go stale silently.
 
@@ -559,7 +588,13 @@ scripts/build_api_index.py docs → machine-readable API index
 scripts/check_angelscript.py + scripts/angelscript/   compile + grammar guard
 scripts/echo.mjs           `echo update|doctor|status|tools|version` (one implementation)
 scripts/echo-*.sh|ps1      thin shims that exec echo.mjs
-tools.lock                 pinned refs for every external tool
+tools.lock                 pin record: refs, versions, hashes
+vendor/                    every tool, plugin, binary and doc the installer installs
+vendor/MANIFEST.json       sha256 + upstream + license for every vendored file
+vendor/ARCHIVES            split release archive for mcp-gamehacking
+scripts/vendor_manifest.py --write / --check
+scripts/vendor_refresh.sh  re-fetch vendor/ at the pins
+scripts/vendor_archive.sh  rebuild the mcp-gamehacking archive
 install.sh | install.ps1   the installers
 hooks/register.tsx         slash commands, keyword routing, side panel
 llms.txt                   single-file LLM context bundle

@@ -33,5 +33,9 @@ asset	echo-angelscript-lsp-0.0.10.zip	https://github.com/speedsunderscore/echo-a
 
 npm	rea-agents	rea-agents	6.8.0
 
+# Optional components whose own installers are version-pinned rather than vendored.
+toolver	bun	bun	1.4.4
+toolver	pi	@earendil-works/pi-coding-agent	1.4.0
+
 # triton-library publishes pre-releases only; this is the current one.
 pip	triton-library	triton-library	1.0.0rc4

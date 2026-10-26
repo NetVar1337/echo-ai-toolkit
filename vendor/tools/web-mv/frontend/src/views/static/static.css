@@ -1,0 +1,359 @@
+/* Static-analysis view layout and its view-specific controls. The shared panel/list/row vocabulary
+   lives in ui/panels.css; this file only adds the three-pane workspace, pane sizing, the
+   sort/search bars, the function-row controls, and the disassembly host. */
+
+/* Namespaced (sv-*) so these generic layout names never collide with the app shell's
+   .rail (activity rail) or the workspace tab container's .workspace. */
+.sv-workspace {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    box-sizing: border-box;
+    /* Four panes are inherently wide; keep them scrollable INSIDE the view rather than
+       clipping or pushing the page into horizontal scroll on smaller desktops. */
+    overflow-x: auto;
+}
+
+/* Pane resizer sits in the 12px gap between panes. Zero-width itself, it would otherwise add a
+   second gap on each side (24px seam); the negative margins pull that back to the original 12px so
+   the grip and its 1px line land centred in the existing gap. Grip visuals come from .ws-resizer*. */
+.sv-resizer {
+    margin: 0 -6px;
+    align-self: stretch;
+}
+
+.sv-rail {
+    flex: 0 0 232px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.sv-rail .panel-modules {
+    flex: 2 1 0;
+}
+.sv-rail .panel-pinned {
+    flex: 1 1 0;
+}
+.panel-functions {
+    /* Width is content-derived inline (see FunctionList); these just bound it. */
+    flex: 0 0 auto;
+    min-width: 260px;
+    max-width: 720px;
+}
+.panel-disasm {
+    flex: 1 1 auto;
+}
+
+/* Sort bar ---------------------------------------------------------------- */
+
+.sortbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+.sortbar-label {
+    color: var(--text);
+    margin-right: 2px;
+}
+
+.sortbar button {
+    font: inherit;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 8px;
+}
+
+.sortbar button:hover {
+    border-color: var(--accent-border);
+}
+
+.sortbar button.active {
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+}
+
+/* Search bar -------------------------------------------------------------- */
+
+.searchbar {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+}
+
+.search {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-h);
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 8px;
+}
+
+.search:focus {
+    outline: none;
+    border-color: var(--accent-border);
+}
+
+/* Function rows ----------------------------------------------------------- */
+
+/* A row is a grid sharing one template (set on the list via --fn-cols) so the columns align
+   into a table. Cells fill the row height and are divided by thin splitters, so the name and
+   address sit in fixed lanes instead of drifting apart across a flexed gap. */
+.fn-row {
+    display: grid;
+    grid-template-columns: var(--fn-cols, auto minmax(0, 1fr) auto auto);
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+}
+.fn-row > * {
+    padding: 0 12px;
+    line-height: 28px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fn-row > .pin {
+    padding: 0 6px 0 12px;
+    line-height: 28px;
+}
+/* Splitters before each fixed column (the name lane has none - it opens straight off the pin). */
+.fn-row > .addr,
+.fn-row > .dim {
+    border-left: 1px solid var(--border);
+}
+.fn-row > .dim {
+    text-align: right;
+}
+
+/* Function-row controls --------------------------------------------------- */
+
+.pin {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text);
+}
+.pin.active {
+    color: var(--accent);
+}
+.fn-name.custom {
+    color: var(--accent);
+}
+.rename {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 13px;
+    box-sizing: border-box;
+    border: 1px solid var(--accent-border);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text-h);
+    padding: 0 4px;
+    min-width: 0;
+}
+.rename:focus {
+    outline: none;
+}
+
+/* Pinned-row controls ----------------------------------------------------- */
+
+/* Rename pen + remove, matching the memory viewer's class-edit/class-del. Hidden until the
+   row is hovered (the pen also shows on the selected row) so the list stays clean; scoped to
+   .panel-pinned so the function rows keep their own star-only controls. */
+.pin-edit,
+.pin-del {
+    flex: 0 0 auto;
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 0 6px;
+    line-height: 1.4;
+    visibility: hidden;
+    transition: color 0.12s ease, border-color 0.12s ease;
+}
+.pin-edit:hover,
+.pin-del:hover {
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+.panel-pinned .row:hover .pin-edit,
+.panel-pinned .row:hover .pin-del,
+.panel-pinned .row.selected .pin-edit {
+    visibility: visible;
+}
+
+/* Disassembly host -------------------------------------------------------- */
+
+.disasm-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Function Sigsearch controls & tags ------------------------------------ */
+
+.sortbar-sep {
+    flex: 1 1 auto;
+}
+
+.search-mode-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.search-mode-tabs button {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+}
+.search-mode-tabs button.active {
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+}
+
+.sigsearch-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--code-bg);
+}
+
+.sigsearch-input-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.sig-input {
+    flex: 1 1 auto;
+}
+.sig-scan-btn {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    color: #fff;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 4px 10px;
+    white-space: nowrap;
+}
+.sig-scan-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sigsearch-opts-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text);
+}
+.sig-field.check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+.sig-stats {
+    color: var(--accent);
+    margin-left: auto;
+}
+.sig-clear-btn {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+}
+.sig-error {
+    font-size: 12px;
+    color: #e46a62;
+}
+
+.fn-sig-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 0 4px;
+    margin-left: 6px;
+    border-radius: 3px;
+    background: rgba(105, 165, 200, 0.2);
+    color: #69a5c8;
+    border: 1px solid rgba(105, 165, 200, 0.4);
+    display: inline-block;
+    vertical-align: middle;
+}
+.fn-sig-tag.prologue {
+    background: rgba(105, 165, 200, 0.2);
+    color: var(--accent-strong);
+    border-color: rgba(105, 165, 200, 0.5);
+    font-weight: bold;
+}
+
+
+/* Inferred-prototype bar between the disassembly head and the editor. A heuristic hint
+   (arg registers, return, frame size) parsed from the decoded instructions. */
+.disasm-prototype {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--code-bg);
+    font-family: var(--mono);
+    font-size: 12px;
+}
+.disasm-proto-sig {
+    color: var(--text-h);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.disasm-proto-frame {
+    color: var(--text);
+    opacity: 0.7;
+    flex: 0 0 auto;
+}

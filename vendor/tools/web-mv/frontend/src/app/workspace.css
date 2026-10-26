@@ -1,0 +1,542 @@
+/* Workspace: the tab strip and the view host beneath it. The tab strip is the whole navigation
+   model - open items are tabs, the active tab's view fills the area below. A second group only
+   appears when a tab is explicitly sent "to the side". */
+
+.workspace {
+    --tabbar-h: 38px;
+    --tab-h: 32px;
+    --tab-radius: var(--radius);
+
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.ws-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+/* Resize divider between adjacent groups ---------------------------------- */
+
+/* Zero layout width: a collapsed flex item whose hit area is absolutely centred over the boundary,
+   so adding a divider never spreads the panes apart. The visible 1px line is drawn here (::after),
+   replacing the old `.ws-group + .ws-group` border, which no longer sees the groups as adjacent. */
+.ws-resizer {
+    position: relative;
+    flex: 0 0 0px;
+    width: 0;
+    align-self: stretch;
+    z-index: 7;
+}
+.ws-resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-0.5px);
+    background: var(--border);
+    pointer-events: none;
+}
+
+.ws-resizer-hit {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 11px;
+    cursor: col-resize;
+    touch-action: none;
+}
+.ws-resizer-hit:focus-visible {
+    outline: none;
+}
+
+/* Five dots, hidden while idle; shown on hover, keyboard focus, or active drag. Opacity only, so
+   nothing shifts when they appear. */
+.ws-resizer-grip {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.ws-resizer--h .ws-resizer-grip {
+    flex-direction: row;
+}
+.ws-resizer-hit:hover .ws-resizer-grip,
+.ws-resizer-hit:focus-visible .ws-resizer-grip,
+.ws-resizer.dragging .ws-resizer-grip {
+    opacity: 0.55;
+}
+.ws-resizer.dragging .ws-resizer-grip {
+    opacity: 1;
+}
+
+.ws-resizer-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text);
+}
+.ws-resizer-hit:focus-visible .ws-resizer-dot,
+.ws-resizer.dragging .ws-resizer-dot {
+    background: var(--accent);
+}
+.ws-resizer.dragging::after {
+    background: var(--accent);
+}
+
+/* While dragging, force the resize cursor everywhere and kill selection - the pointer leaves the
+   11px hit area but the gesture continues. */
+body.ws-resizing,
+body.ws-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Focus accent only matters when there is more than one group. */
+.workspace.split .ws-group.focused::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 6;
+    pointer-events: none;
+}
+.workspace.split .ws-group:not(.focused) .ws-tabbar {
+    opacity: 0.9;
+}
+
+.ws-viewport {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+}
+/* Views remount on tab switch (keyed on tab id), so this fades each page in and
+   makes switching read as one seamless surface rather than a hard swap. */
+.ws-viewport > * {
+    animation: view-in 0.14s ease-out;
+}
+@keyframes view-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Tab strip ---------------------------------------------------------------- */
+
+.ws-tabbar {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: var(--tabbar-h);
+    padding: 0 6px;
+    background: var(--bg-shell);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+    user-select: none;
+}
+
+.ws-tabs-scroll {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+.ws-tabs-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+/* Edge fades signal that tabs continue past the visible strip. Applied as a mask so no extra
+   element is needed; the two-class rule wins over either single-class rule. */
+.ws-tabbar.fade-left .ws-tabs-scroll {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px);
+    mask-image: linear-gradient(90deg, transparent 0, #000 28px);
+}
+.ws-tabbar.fade-right .ws-tabs-scroll {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+.ws-tabbar.fade-left.fade-right .ws-tabs-scroll {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, transparent 0, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+.ws-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 1 auto;
+    min-width: 92px;
+    max-width: 200px;
+    height: var(--tab-h);
+    padding: 0 8px 0 11px;
+    font-family: var(--heading);
+    font-size: 13px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: var(--tab-radius) var(--tab-radius) 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+.ws-tab:hover {
+    background: var(--social-bg);
+    color: var(--text-h);
+}
+.ws-tab.active {
+    color: var(--text-h);
+    background: var(--bg);
+    border-color: var(--border);
+    border-bottom: 1px solid var(--bg);
+    margin-bottom: -1px;
+}
+/* Active tab accent line, merging the tab into the content below it. */
+.ws-tab.active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--accent);
+}
+.ws-tab.dragging {
+    opacity: 0.5;
+}
+
+.ws-tab-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    opacity: 0.85;
+}
+.ws-tab.active .ws-tab-icon {
+    opacity: 1;
+}
+
+.ws-tab-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ws-tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-right: -3px;
+    padding: 0;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.ws-tab:hover .ws-tab-close,
+.ws-tab.active .ws-tab-close {
+    opacity: 0.55;
+}
+.ws-tab-close:hover {
+    opacity: 1;
+    background: var(--social-bg);
+    color: var(--text-h);
+}
+
+/* Insertion indicator during drag-to-reorder. */
+.ws-drop-indicator {
+    position: absolute;
+    top: 4px;
+    bottom: 3px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    z-index: 5;
+    pointer-events: none;
+    transform: translateX(-1px);
+}
+
+/* Trailing actions (overflow + new tab) --------------------------------- */
+
+.ws-tabbar-actions {
+    display: flex;
+    align-items: center;
+    align-self: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    padding-left: 2px;
+    z-index: 3;
+}
+
+.ws-action-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.ws-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ws-icon-btn:hover {
+    background: var(--social-bg);
+    color: var(--text-h);
+    border-color: var(--border);
+}
+.ws-new-tab:hover {
+    color: var(--accent);
+}
+
+/* Menus (new tab / overflow / context) ---------------------------------- */
+
+.ws-menu {
+    position: absolute;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 180px;
+    padding: 5px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--surface-0), var(--shadow);
+    font-family: var(--sans);
+    transform-origin: top right;
+    animation: ws-menu-in 0.12s ease-out;
+}
+@keyframes ws-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.ws-menu--new,
+.ws-menu--overflow {
+    top: calc(100% + 6px);
+    right: 0;
+}
+.ws-menu--new {
+    min-width: 264px;
+}
+.ws-menu--overflow {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+.ws-menu--context {
+    position: fixed;
+    min-width: 192px;
+    transform-origin: top left;
+}
+
+.ws-menu-head {
+    padding: 4px 10px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+    opacity: 0.75;
+}
+
+.ws-menu-sep {
+    height: 1px;
+    margin: 4px 2px;
+    background: var(--border);
+}
+
+.ws-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text-h);
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease;
+}
+.ws-menu-item:hover,
+.ws-menu-item:focus-visible {
+    background: var(--accent-bg);
+    color: var(--accent);
+    outline: none;
+}
+
+.ws-menu-item-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    color: var(--text);
+}
+.ws-menu-item:hover .ws-menu-item-icon,
+.ws-menu-item--tab.active .ws-menu-item-icon {
+    color: var(--accent);
+}
+
+.ws-menu-item--rich {
+    align-items: flex-start;
+    padding: 8px 10px;
+}
+.ws-menu-item--rich .ws-menu-item-icon {
+    margin-top: 1px;
+}
+.ws-menu-item-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+.ws-menu-item-label {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.25;
+}
+.ws-menu-item-desc {
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--text);
+    opacity: 0.85;
+}
+.ws-menu-item:hover .ws-menu-item-desc {
+    color: var(--accent);
+    opacity: 0.8;
+}
+.ws-menu-item--tab.active {
+    color: var(--accent);
+}
+
+/* Empty state ----------------------------------------------------------- */
+
+.ws-empty {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 0;
+    padding: 24px;
+}
+.ws-empty-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+}
+.ws-empty-title {
+    margin: 0;
+    font-family: var(--heading);
+    font-size: 18px;
+    color: var(--text-h);
+}
+.ws-empty-sub {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--text);
+}
+.ws-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+.ws-empty-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    font-family: var(--heading);
+    font-size: 13px;
+    color: var(--text-h);
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ws-empty-btn:hover {
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ws-menu {
+        animation: none;
+    }
+    .ws-tab,
+    .ws-tab-close,
+    .ws-icon-btn,
+    .ws-empty-btn,
+    .ws-resizer-grip {
+        transition: none;
+    }
+}
+
+/* Reusable accessible pane splitter (ui/ResizeHandle). Dotted grip matches the group divider. */
+.resize-handle { flex: 0 0 auto; width: 7px; cursor: col-resize; display: flex; align-items: center; justify-content: center; background: transparent; align-self: stretch; }
+.resize-handle:hover .resize-grip, .resize-handle:focus-visible .resize-grip { opacity: 1; }
+.resize-handle:focus-visible { outline: 2px solid var(--accent, var(--live)); outline-offset: -2px; }
+.resize-grip { width: 2px; height: 26px; border-radius: 2px; background-image: radial-gradient(currentColor 40%, transparent 40%); background-size: 2px 4px; color: var(--ink-3); opacity: 0.35; transition: opacity 0.12s; }
+@media (prefers-reduced-motion: reduce) { .resize-grip { transition: none; } }

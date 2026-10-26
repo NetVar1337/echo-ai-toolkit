@@ -3,6 +3,49 @@
 All notable changes to this repo. The plugin version in
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) is what marketplaces key off.
 
+## 0.5.0 — 2026-10-26
+
+Supply chain: the installer no longer fetches anything from a third party.
+
+### Everything is vendored
+
+- New `vendor/` — 270 MB, 3727 files: every companion tool source (VTIL-Core, NoVmp with its
+  submodules inlined at the commits NoVmp pins, vtil2, vmp-lazy-unpack, VMProtect-devirtualization,
+  web-mv), both MCP servers, both companion Claude plugins, the `as_bundler` binaries, the LSP zip,
+  `esp_preview.as`, both reference READMEs, the `rea-agents` tarball and a hashed Python lock.
+- `vendor/MANIFEST.json` + `vendor/CHECKSUMS.sha256` record every file's sha256, upstream repo,
+  commit and license. `scripts/vendor_manifest.py --check` runs in CI, and the installer verifies
+  each copied file — a modified vendored binary is refused, not installed.
+- `mcp-gamehacking` (18 GB tree, 3.1 GB packed) ships as a split archive in this repo's releases
+  instead of git: GitHub blocks files over 100 MB and every CI job would pay for the checkout.
+  `vendor/ARCHIVES` pins each part by sha256; `scripts/vendor_archive.sh` rebuilds it.
+- The companion plugins are served by this repo's own marketplace from `vendor/plugins/`, so the
+  installer no longer adds third-party marketplaces.
+
+### Dependency installs are hash-pinned
+
+- `npm ci` against vendored lockfiles (`angel-menu-mcp`, `rea-agents`) instead of `npm install`.
+- `pip install --require-hashes -r vendor/python/requirements.lock` for Triton, capstone, pefile
+  and unicorn; `vmp-lazy-unpack` installs with `--no-deps` on top of it.
+- Bun and Pi — the two components that still use their own upstream installers — are version-pinned
+  in `tools.lock` (`toolver` rows), and Bun's installed version is checked against the pin.
+
+### Installer and CLI
+
+- `install.sh` / `install.ps1` install from `vendor/`; under `curl | bash` they fetch this repo's
+  own tarball once and use that. Every `raw.githubusercontent.com` fetch is gone.
+- `echo update --tools` restores from `vendor/`; `echo update --lock` prints the maintainer steps;
+  `echo doctor` gained `Vendored tools` and per-tree rows.
+- New CI job `vendor`: manifest match, expected trees present, and a host allowlist proving the
+  installers reach nothing but this repo and pinned registries.
+
+### Licensing
+
+Six vendored upstreams ship no license file (`linux-pe`, `vmp-lazy-unpack`,
+`VMProtect-devirtualization`, `web-mv`, `echo-esp-preview`, `andrej-karpathy-skills`). Their
+presence here is not a license grant — see `vendor/README.md`. NoVmp is GPL-3.0 and stays
+isolated with its license intact.
+
 ## 0.4.0 — 2026-10-26
 
 Correctness and reproducibility. No new agents, skills or templates; the surface is the same.

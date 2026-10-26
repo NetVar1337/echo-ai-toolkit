@@ -22,7 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync,
-  chmodSync, statSync, readdirSync,
+  chmodSync, statSync, readdirSync, rmSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -243,70 +243,125 @@ function syncProfile() {
   ok('cli refreshed');
 }
 
+// vendor/ is the source of truth for tool bytes: the installer copies from it and
+// so does `echo update --tools`. Nothing here fetches a third-party host.
+function vendorDir() {
+  const local = join(dirname(SELF), '..', 'vendor');
+  if (existsSync(join(local, 'MANIFEST.json'))) return local;
+  const src = join(ECHO_HOME, 'src');
+  try {
+    const dir = readdirSync(src, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('echo-ai-toolkit-'))
+      .map((d) => join(src, d.name, 'vendor'))
+      .find((v) => existsSync(join(v, 'MANIFEST.json')));
+    return dir || null;
+  } catch {
+    return null;
+  }
+}
+
+const VENDOR_SUB = {
+  'mcp-gamehacking': 'mcp/mcp-gamehacking',
+  'angel-menu-mcp': 'mcp/angel-menu-mcp',
+  'VMProtect-devirtualization': 'tools/VMProtect-devirtualization',
+  'vmp-lazy-unpack': 'tools/vmp-lazy-unpack',
+  'web-mv': 'tools/web-mv',
+  'VTIL-Core': 'tools/VTIL-Core',
+  NoVmp: 'tools/NoVmp',
+  vtil2: 'tools/vtil2',
+};
+
 const BUILD = {
-  'mcp-gamehacking': { cmd: 'npm', args: ['run', 'build'] },
-  'angel-menu-mcp': null,
-  'web-mv': null,
+  'mcp-gamehacking': null,
+  'angel-menu-mcp': { cmd: 'npm', args: ['ci', '--omit=dev'] },
+  'web-mv': { cmd: 'bun', args: ['install', '--frozen-lockfile'], cwd: 'relay' },
   'VTIL-Core': { cmd: 'cmake', args: ['--build', 'build', '--config', 'Release'] },
   NoVmp: { cmd: 'cmake', args: ['--build', 'build', '--config', 'Release'] },
   vtil2: { cmd: 'dotnet', args: ['build', '-c', 'Release'] },
 };
 
-function gitAt(dir, sha) {
-  run('git', ['-C', dir, 'fetch', '-q', '--depth', '1', 'origin', sha], { inherit: false });
-  return run('git', ['-C', dir, 'checkout', '-q', 'FETCH_HEAD'], { inherit: false }).status === 0;
+function copyTree(src, dest) {
+  // cp -R / robocopy via node: keep it dependency-free.
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const from = join(src, entry.name);
+    const to = join(dest, entry.name);
+    if (entry.isDirectory()) copyTree(from, to);
+    else if (entry.isFile()) copyFileSync(from, to);
+  }
 }
 
 async function updateTools() {
   say('Companion tools');
-  const rows = readLock();
-  if (!rows.length) { skip('tools.lock', 'missing — run the installer'); return; }
+  const vendor = vendorDir();
+  if (!vendor) { fail('vendor/', 'missing — clone the repo or run the installer'); return; }
+  ok(`vendor/ ${vendor}`);
 
-  for (const row of rows.filter((r) => r.kind === 'clone')) {
-    const dir = join(ECHO_HOME, row.name);
-    if (!existsSync(join(dir, '.git'))) { skip(row.name, 'not installed'); continue; }
-    if (!gitAt(dir, row.pin)) { fail(row.name, `could not check out ${row.pin.slice(0, 7)}`); continue; }
-    const head = capture('git', ['-C', dir, 'rev-parse', '--short', 'HEAD']).out.trim();
-    const build = BUILD[row.name];
-    if (build && have(build.cmd)) {
-      sub(`rebuilding ${row.name}…`);
-      if (run(build.cmd, build.args, { inherit: false }).status === 0) ok(`${row.name} @ ${head} (rebuilt)`);
-      else fail(row.name, 'rebuild failed');
-    } else {
-      ok(`${row.name} @ ${head}`);
-    }
-  }
-
-  for (const row of rows.filter((r) => r.kind === 'raw' || r.kind === 'asset')) {
-    // Only this platform's as_bundler: the LSP zip is a temp-file install, and the
-    // lock carries both as_bundler builds.
-    if (row.kind === 'asset' && row.name !== (IS_WIN ? 'as_bundler.exe' : 'as_bundler')) continue;
-    const out = row.kind === 'raw' && row.name === 'esp_preview.as'
-      ? join(ECHO_HOME, 'reference', row.name)
-      : row.kind === 'raw' ? join(REF_DIR, row.name) : join(BIN_DIR, row.name);
+  for (const [name, sub] of Object.entries(VENDOR_SUB)) {
+    if (name === 'mcp-gamehacking') continue; // release archive, see vendor/ARCHIVES
+    const src = join(vendor, sub);
+    const dir = join(ECHO_HOME, name);
+    if (!existsSync(src)) { skip(name, `vendor/${sub} missing`); continue; }
     try {
-      if (existsSync(out) && verify(out, row.pin)) { ok(`${row.name} (pinned, verified)`); continue; }
-      await download(row.ref, out);
-      if (!verify(out, row.pin)) { fail(row.name, 'sha256 mismatch — upstream asset changed'); continue; }
-      if (row.kind === 'asset' && !IS_WIN) chmodSync(out, 0o755);
-      ok(`${row.name} (re-fetched, verified)`);
+      if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+      copyTree(src, dir);
     } catch (e) {
-      fail(row.name, `download failed (${e.message})`);
+      fail(name, `copy failed (${e.message})`);
+      continue;
+    }
+    const build = BUILD[name];
+    if (build && have(build.cmd)) {
+      sub(`building ${name}…`);
+      const cwd = build.cwd ? join(dir, build.cwd) : dir;
+      if (run(build.cmd, build.args, { inherit: false, cwd }).status === 0) ok(`${name} (rebuilt)`);
+      else fail(name, 'build failed');
+    } else {
+      ok(`${name} (vendored)`);
     }
   }
 
-  const venvPy = join(ECHO_HOME, 'venv', IS_WIN ? 'Scripts/python.exe' : 'bin/python');
-  for (const row of rows.filter((r) => r.kind === 'pip')) {
-    if (!existsSync(venvPy)) { skip(row.name, 'no venv'); continue; }
-    const want = `${row.name}==${row.pin}`;
-    if (run(venvPy, ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', want], { inherit: false }).status === 0) {
-      ok(`${row.name} ${row.pin}`);
-    } else {
-      skip(row.name, `pip install ${want} failed`);
-    }
+  // Binaries and READMEs come from vendor/ too.
+  for (const [sub, dest] of [
+    ['scripts/esp_preview.as', join(REF_DIR, 'esp_preview.as')],
+    ['docs/awesome-game-security.md', join(REF_DIR, 'awesome-game-security.md')],
+    ['docs/gamehacking-cheatsheet.md', join(REF_DIR, 'gamehacking-cheatsheet.md')],
+    [`bin/${IS_WIN ? 'as_bundler.exe' : 'as_bundler'}`, join(BIN_DIR, IS_WIN ? 'as_bundler.exe' : 'as_bundler')],
+  ]) {
+    const src = join(vendor, sub);
+    if (!existsSync(src)) { skip(basename(sub), `vendor/${sub} missing`); continue; }
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(src, dest);
+    if (sub.startsWith('bin/') && !IS_WIN) chmodSync(dest, 0o755);
+    ok(`${basename(sub)} (vendored)`);
   }
-  for (const row of rows.filter((r) => r.kind === 'npm')) {
-    ok(`${row.name} ${row.pin} (pinned via npx)`);
+
+  // Python packages: hash-pinned by vendor/python/requirements.lock.
+  const venvPy = join(ECHO_HOME, 'venv', IS_WIN ? 'Scripts/python.exe' : 'bin/python');
+  const req = join(vendor, 'python', 'requirements.lock');
+  if (!existsSync(venvPy)) {
+    skip('python packages', 'no venv');
+  } else if (!existsSync(req)) {
+    skip('python packages', 'vendor/python/requirements.lock missing');
+  } else if (run(venvPy, ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', '--require-hashes', '-r', req], { inherit: false }).status === 0) {
+    ok('triton, capstone, pefile, unicorn (hash-pinned)');
+  } else {
+    skip('python packages', 'pip --require-hashes failed');
+  }
+
+  // rea-agents: vendored tarball + lockfile, so no npx resolution at runtime.
+  const reaDir = join(ECHO_HOME, 'rea');
+  const reaSrc = join(vendor, 'npm', 'rea');
+  if (!existsSync(reaSrc)) {
+    skip('rea', 'vendor/npm/rea missing');
+  } else {
+    try {
+      if (existsSync(reaDir)) rmSync(reaDir, { recursive: true, force: true });
+      copyTree(reaSrc, reaDir);
+      if (run('npm', ['ci', '--silent'], { inherit: false, cwd: reaDir }).status === 0) ok('rea-agents (vendored, hash-pinned)');
+      else fail('rea', 'npm ci failed');
+    } catch (e) {
+      fail('rea', `install failed (${e.message})`);
+    }
   }
 }
 
@@ -392,6 +447,9 @@ async function relock() {
   }
   writeFileSync(target, body.join('\n') + '\n');
   ok(`wrote ${target}`);
+  console.log('\n  Next: scripts/vendor_refresh.sh   (re-fetch vendor/ at the new pins)');
+  console.log('        python3 scripts/vendor_manifest.py --write');
+  console.log('        echo update --tools          (restore the installed tools from vendor/)');
 }
 
 // ── doctor ───────────────────────────────────────────────────────────────────
@@ -510,6 +568,19 @@ function doctor() {
     const f = join(REF_DIR, `${d}.md`);
     if (existsSync(f) && sizeOf(f) > 0) row('ok', d, `${sizeOf(f)} bytes`);
     else row('miss', d, 'not fetched');
+  }
+
+  console.log('\nVendored tools');
+  const vendor = vendorDir();
+  if (vendor) {
+    row('ok', 'vendor/', vendor);
+    const missing = Object.entries(VENDOR_SUB)
+      .filter(([name, sub]) => name !== 'mcp-gamehacking' && !existsSync(join(vendor, sub)))
+      .map(([name]) => name);
+    if (missing.length) row('miss', 'vendored trees', `${missing.length} missing: ${missing.join(', ')}`);
+    else row('ok', 'vendored trees', 'every tool tree present');
+  } else {
+    row('miss', 'vendor/', 'missing — clone the repo');
   }
 
   console.log('\nPinned tools');

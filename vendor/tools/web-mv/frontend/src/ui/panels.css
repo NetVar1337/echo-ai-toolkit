@@ -1,0 +1,165 @@
+/* Shared panel vocabulary: the framed panel, its head, the body region that hosts a
+   list/editor with status overlays layered on top, and the list/row primitives. Uses the
+   design tokens from index.css. Per-view layout (pane sizing, the workspace grid) and
+   view-specific controls live in each view's own stylesheet.
+
+   Panels follow the echo container recipe: a var(--surface-2) body inside a beveled rim,
+   a var(--surface-0) title bar with an accent-tinted heading, and a 2px accent hue bar
+   running under the title. */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--surface-0);
+}
+
+.panel-head {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px 9px;
+    background: var(--bg-deep);
+    font-family: var(--heading);
+    flex: 0 0 auto;
+}
+/* The accent hue bar under the title, as drawn by render::draw_hue_bar. */
+.panel-head::after {
+    content: "";
+    position: absolute;
+    left: 1px;
+    right: 1px;
+    bottom: 0;
+    height: 2px;
+    background: var(--hue-bar);
+    pointer-events: none;
+}
+
+.panel-head h2 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+}
+
+.panel-head .meta {
+    flex: 1 1 auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.panel-head .meta .warn {
+    color: #e2a13a;
+}
+
+.panel-head button {
+    flex: 0 0 auto;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-h);
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2px 9px;
+}
+.panel-head button:hover {
+    color: var(--accent);
+    border-color: var(--accent-border);
+}
+.panel-head button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Body region whose children (a list / an editor host) fill it, with status messages
+   layered on top as overlays. Position context for `.overlay`. */
+.panel-body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+
+.panel-status {
+    padding: 12px;
+    font-size: 13px;
+    color: var(--text);
+}
+.panel-status.error {
+    color: #e46a62;
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    text-align: center;
+}
+
+/* Lists + rows ------------------------------------------------------------ */
+
+.list {
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.4;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+    color: var(--text-h);
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+.row:hover {
+    background: var(--social-bg);
+}
+.row.selected {
+    background: var(--accent-bg);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row .addr {
+    color: var(--accent);
+}
+.row .grow {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.row .dim {
+    color: var(--text-dim);
+    flex: 0 0 auto;
+}
+.row .method {
+    opacity: 0.85;
+}
+.row .mod {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

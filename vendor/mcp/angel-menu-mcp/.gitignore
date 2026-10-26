@@ -1,0 +1,9 @@
+node_modules/
+npm-debug.log*
+package-lock.json
+.DS_Store
+
+# local authoring drafts (not part of the package)
+RELEASE_POST.md
+RELEASE_THREAD.txt
+MENU_CONTROL_BRIEF.md

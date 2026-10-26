@@ -1,0 +1,142 @@
+/* Floating Window Component Styling — echo popup recipe: near-opaque var(--surface-0)
+   body with a var(--line) outline and a hard drop shadow, a var(--surface-0) header with an
+   accent-tinted title over a 2px hue-bar underline, flat square controls. */
+
+.ui-window-frame {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--surface-0), 0 16px 40px rgba(0, 0, 0, 0.65);
+    user-select: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ui-window-frame.pinned {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 1px var(--surface-0), 0 16px 40px rgba(0, 0, 0, 0.65),
+        0 0 12px rgba(105, 165, 200, 0.25);
+}
+
+.ui-window-frame.dragging {
+    box-shadow: 0 0 0 1px var(--surface-0), 0 24px 56px rgba(0, 0, 0, 0.8),
+        0 0 16px rgba(105, 165, 200, 0.3);
+}
+
+.ui-window-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 12px 8px;
+    background: var(--bg-deep);
+    cursor: grab;
+    flex: 0 0 auto;
+}
+.ui-window-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--hue-bar);
+    pointer-events: none;
+}
+
+.ui-window-header:active {
+    cursor: grabbing;
+}
+
+.ui-window-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--heading);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ui-window-pin-badge {
+    font-size: 12px;
+}
+
+.ui-window-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.win-btn {
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 2px 6px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s ease;
+}
+
+.win-btn:hover {
+    background: var(--btn-bg);
+    border-color: var(--border);
+    color: var(--text-h);
+}
+
+.win-btn.close-btn:hover {
+    background: rgba(228, 106, 98, 0.85);
+    color: #ffffff;
+    border-color: rgba(228, 106, 98, 0.5);
+}
+
+.win-btn.pin-btn.active {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+.ui-window-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    user-select: text;
+    background: var(--bg);
+}
+
+.ui-window-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    background: radial-gradient(circle at 10px 10px, rgba(255, 255, 255, 0.4) 1.5px, transparent 2px);
+    background-size: 4px 4px;
+    border-bottom-right-radius: var(--radius);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+}
+
+.ui-window-resize-handle:hover {
+    opacity: 1;
+}

@@ -47,10 +47,9 @@ $Lock = Join-Path $EchoHome 'tools.lock'
 New-Item -ItemType Directory -Force -Path $EchoHome | Out-Null
 $repoLock = if ($PSScriptRoot) { Join-Path $PSScriptRoot 'tools.lock' } else { $null }
 if ($repoLock -and (Test-Path $repoLock)) { Copy-Item -Force $repoLock $Lock }
-if (-not (Test-Path $Lock)) {
-    try {
-        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/$Repo/main/tools.lock" -OutFile $Lock -ErrorAction Stop
-    } catch {}
+$SrcRoot = if ($Vendor) { Split-Path $Vendor -Parent } else { $null }
+if (-not (Test-Path $Lock) -and $SrcRoot -and (Test-Path (Join-Path $SrcRoot 'tools.lock'))) {
+    Copy-Item (Join-Path $SrcRoot 'tools.lock') $Lock -Force
 }
 if (-not (Test-Path $Lock)) { Write-Host '    ! tools.lock unavailable - falling back to branch heads' -ForegroundColor Magenta }
 
@@ -72,35 +71,7 @@ function VerifySha($path, $want) {
     return $got -eq $want.ToLower()
 }
 
-function FetchAsset($name, $url, $out, $sha) {
-    try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $out -ErrorAction Stop }
-    catch { Fail $name 'download failed'; return $false }
-    if (-not (VerifySha $out $sha)) {
-        Remove-Item -Force $out -ErrorAction SilentlyContinue
-        Fail $name 'sha256 mismatch - upstream asset changed'
-        return $false
-    }
-    return $true
-}
 
-function CloneAt($name, $repo, $dir, [switch]$Submodules) {
-    $sha = LockPin 'clone' $name
-    if (-not $sha) {
-        git clone --depth 1 "https://github.com/$repo" $dir 2>&1 | Out-Null
-        return ($LASTEXITCODE -eq 0)
-    }
-    Sub "cloning $name @ $($sha.Substring(0,7))..."
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    git -C $dir init -q 2>&1 | Out-Null
-    git -C $dir remote add origin "https://github.com/$repo" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { git -C $dir remote set-url origin "https://github.com/$repo" 2>&1 | Out-Null }
-    git -C $dir fetch -q --depth 1 origin $sha 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail $name "fetch $($sha.Substring(0,7)) failed (pinned commit unreachable)"; return $false }
-    git -C $dir checkout -q FETCH_HEAD 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail $name 'checkout failed'; return $false }
-    if ($Submodules) { git -C $dir submodule update --init --recursive --depth 1 2>&1 | Out-Null }
-    return $true
-}
 
 # ── 0. prerequisites ─────────────────────────────────────────────────────────
 Say 'Checking prerequisites'
@@ -115,6 +86,70 @@ if (Have python) { Ok "python $(& python -V 2>&1)" } elseif (Have py) { Ok 'py l
 if (Have npm)  { Ok 'npm' } else { Skip 'npm' 'not found' }
 
 New-Item -ItemType Directory -Force -Path $EchoHome, $BinDir, $RefDir | Out-Null
+
+# ── 1. vendored toolchain ────────────────────────────────────────────────────
+# Every tool installs from vendor/ in this repo. Nothing below fetches a
+# third-party repository, release asset or README.
+Say 'Vendored toolchain'
+$Vendor = $null
+$repoVendor = if ($PSScriptRoot) { Join-Path $PSScriptRoot 'vendor' } else { $null }
+if ($repoVendor -and (Test-Path $repoVendor)) {
+    $Vendor = $repoVendor
+    Ok "vendor/ from the checkout"
+} else {
+    $ref = if ($env:ECHO_REF) { $env:ECHO_REF } else { 'main' }
+    $src = Join-Path $EchoHome 'src'
+    New-Item -ItemType Directory -Force -Path $src | Out-Null
+    $tar = Join-Path $src 'toolkit.tar.gz'
+    try {
+        Sub "fetching $Repo@$ref (this repo - the only download)..."
+        Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/$Repo/tar.gz/refs/heads/$ref" -OutFile $tar -ErrorAction Stop
+        tar -xzf $tar -C $src 2>&1 | Out-Null
+        $Vendor = (Get-ChildItem $src -Directory -Filter 'echo-ai-toolkit-*' |
+                   ForEach-Object { Join-Path $_.FullName 'vendor' } |
+                   Where-Object { Test-Path $_ } | Select-Object -First 1)
+    } catch {}
+    if ($Vendor -and (Test-Path $Vendor)) { Ok 'vendor/ fetched' }
+    else { Fail 'vendor' 'could not fetch this repo - clone it and run .\install.ps1' }
+}
+
+function VendorPath($sub) {
+    if (-not $Vendor) { return $null }
+    $p = Join-Path $Vendor $sub
+    if (Test-Path $p) { return $p }
+    return $null
+}
+
+function VendorVerify($name, $sub) {
+    $sums = Join-Path $Vendor 'CHECKSUMS.sha256'
+    if (-not (Test-Path $sums)) { return $true }
+    $want = (Select-String -Path $sums -Pattern ("  " + [regex]::Escape($sub) + '$') -SimpleMatch:$false |
+             Select-Object -First 1)
+    if (-not $want) { return $true }
+    $expected = ($want.Line -split '\s+')[0]
+    $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $Vendor $sub)).Hash.ToLower()
+    if ($actual -eq $expected.ToLower()) { return $true }
+    Fail $name "checksum mismatch in vendor/$sub"
+    return $false
+}
+
+function VendorCopy($sub, $dest) {
+    $src = VendorPath $sub
+    if (-not $src) { Skip (Split-Path $sub -Leaf) 'not in vendor/'; return $false }
+    if (-not $dest.StartsWith($EchoHome)) { Fail (Split-Path $sub -Leaf) "refusing to replace $dest"; return $false }
+    if (Test-Path $dest) { Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force
+    return $true
+}
+
+function VendorFile($sub, $dest) {
+    $src = VendorPath $sub
+    if (-not $src) { Skip (Split-Path $sub -Leaf) 'not in vendor/'; return $false }
+    New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
+    Copy-Item -Path $src -Destination $dest -Force
+    return (VendorVerify (Split-Path $sub -Leaf) $sub)
+}
 
 # ── 1. the plugin ────────────────────────────────────────────────────────────
 Say "Installing the $Plugin plugin"
@@ -134,40 +169,82 @@ if ($installed -match [regex]::Escape($Plugin)) {
 
 # ── 2. Claude Code companion plugins ─────────────────────────────────────────
 Say 'Claude Code companion plugins'
-function AddPlugin($name, $marketplace, $pluginId) {
+# Both are vendored in vendor/plugins/ and served by this repo's own marketplace.
+function AddVendoredPlugin($name) {
     $list = (claude plugin list 2>&1 | Out-String)
     if ($list -match [regex]::Escape("$name@")) { Ok "$name already installed"; return }
-    $null = claude plugin marketplace add $marketplace 2>&1
-    if ($LASTEXITCODE -ne 0) { Skip $name "marketplace $marketplace unreachable"; return }
-    $null = claude plugin install "$pluginId@$pluginId" 2>&1
-    if ($LASTEXITCODE -eq 0) { Ok $name } else { Skip $name 'install failed' }
+    $null = claude plugin install "$name@$Plugin" 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok "$name (vendored)" } else { Skip $name "install from $Plugin marketplace failed" }
 }
-AddPlugin 'ponytail' 'DietrichGebert/ponytail' 'ponytail'
-AddPlugin 'andrej-karpathy-skills' 'forrestchang/andrej-karpathy-skills' 'andrej-karpathy-skills'
+AddVendoredPlugin 'ponytail'
+AddVendoredPlugin 'andrej-karpathy-skills' 
 
 # ── 3. MCP servers ───────────────────────────────────────────────────────────
 Say 'MCP servers'
 function CloneBuildNode($name, $repo, $entry) {
     $dir = Join-Path $EchoHome $name
-    if (Test-Path (Join-Path $dir $entry)) { Ok "$name already built"; return }
-    # A multi-GB clone can die partway and leave .git behind without a working tree.
-    if ((Test-Path (Join-Path $dir '.git')) -and -not (Test-Path (Join-Path $dir 'package.json'))) {
-        Sub "removing incomplete $name clone..."
-        Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+    if ((Test-Path (Join-Path $dir $entry)) -and (Test-Path (Join-Path $dir 'node_modules'))) {
+        Ok "$name already installed"; return
     }
-    if (-not (Test-Path (Join-Path $dir '.git'))) {
-        if (-not (CloneAt $name $repo $dir)) {
-            Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
-            return
-        }
+    if (-not (VendorCopy $repo $dir)) {
+        Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+        return
     }
     Push-Location $dir
-    npm install --silent 2>&1 | Out-Null
-    $hasBuild = $false
-    try { $pkg = Get-Content package.json -Raw | ConvertFrom-Json; $hasBuild = $null -ne $pkg.scripts.build } catch {}
-    if ($hasBuild) { npm run build --silent 2>&1 | Out-Null }
+    npm ci --omit=dev --silent 2>&1 | Out-Null
     Pop-Location
     if (Test-Path (Join-Path $dir $entry)) { Ok $name } else { Fail $name "expected $entry after install" }
+}
+
+# mcp-gamehacking ships as a split archive in this repo's releases: 3.1 GB of git
+# is over GitHub's practical repo size, and every checkout would pay for it.
+function Install-McpGamehacking {
+    $dir = Join-Path $EchoHome 'mcp-gamehacking'
+    $entry = Join-Path $dir 'dist\index.js'
+    if (Test-Path $entry) { Ok 'mcp-gamehacking already installed'; return }
+    if (VendorPath 'mcp/mcp-gamehacking') {
+        if (VendorCopy 'mcp/mcp-gamehacking' $dir) { Ok 'mcp-gamehacking (vendored in-tree)' }
+        return
+    }
+    $meta = if ($Vendor) { Join-Path $Vendor 'ARCHIVES' } else { $null }
+    if (-not $meta -or -not (Test-Path $meta)) { Fail 'mcp-gamehacking' 'vendor/ARCHIVES missing'; return }
+    $tmp = Join-Path $EchoHome 'src\mcp-gamehacking'
+    if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $parts = Get-Content $meta | Where-Object { $_ -and $_ -notmatch '^#' } |
+             ForEach-Object { $f = $_ -split '\s+'; if ($f[0] -eq 'mcp-gamehacking') { [pscustomobject]@{ Url = $f[1]; Sha = $f[2] } } } |
+             Sort-Object Url
+    if (-not $parts) { Fail 'mcp-gamehacking' 'no archive parts listed in vendor/ARCHIVES'; return }
+    $n = 0
+    foreach ($part in $parts) {
+        $n++
+        Sub "downloading archive part $n of $($parts.Count)..."
+        $out = Join-Path $tmp ('part{0:D2}' -f $n)
+        try { Invoke-WebRequest -UseBasicParsing -Uri $part.Url -OutFile $out -ErrorAction Stop }
+        catch { Fail 'mcp-gamehacking' "part $n download failed"; return }
+        if (-not (VerifySha $out $part.Sha)) { Fail 'mcp-gamehacking' "part $n checksum mismatch"; return }
+    }
+    $archive = Join-Path $tmp 'archive.tar.gz'
+    $fs = [System.IO.File]::Create($archive)
+    foreach ($part in (Get-ChildItem $tmp -Filter 'part*' | Sort-Object Name)) {
+        $bytes = [System.IO.File]::ReadAllBytes($part.FullName)
+        $fs.Write($bytes, 0, $bytes.Length)
+    }
+    $fs.Close()
+    tar -xzf $archive -C $tmp 2>&1 | Out-Null
+    $inner = Get-ChildItem $tmp -Directory -Filter 'mcp-gamehacking*' | Select-Object -First 1
+    if (-not $inner) { Fail 'mcp-gamehacking' 'archive layout unexpected'; return }
+    if (Test-Path $dir) { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+    Move-Item $inner.FullName $dir
+    # The archive is the upstream source tree; build here against the vendored lock.
+    if (-not (Test-Path $entry) -and (Have npm)) {
+        Sub 'building mcp-gamehacking (npm ci + build)...'
+        Push-Location $dir
+        npm ci --silent 2>&1 | Out-Null
+        try { $pkg = Get-Content package.json -Raw | ConvertFrom-Json; if ($pkg.scripts.build) { npm run build --silent 2>&1 | Out-Null } } catch {}
+        Pop-Location
+    }
+    if (Test-Path $entry) { Ok 'mcp-gamehacking (verified archive)' } else { Fail 'mcp-gamehacking' "missing $entry" }
 }
 if (($env:ECHO_SKIP_MCP -ne '1') -and (Have node) -and (Have npm)) {
     # mcp-gamehacking is part of a full install: 18 GB of skills on disk, ~3.1 GB
@@ -175,10 +252,9 @@ if (($env:ECHO_SKIP_MCP -ne '1') -and (Have node) -and (Have npm)) {
     if ($env:ECHO_SKIP_GAMEHACKING -eq '1') {
         Skip 'mcp-gamehacking' 'ECHO_SKIP_GAMEHACKING=1'
     } else {
-        Write-Host '    mcp-gamehacking is ~3.1 GB - this is the long step, give it time...'
-        CloneBuildNode 'mcp-gamehacking' '1llu50ry/mcp-gamehacking' 'dist\index.js'
+        Install-McpGamehacking
     }
-    CloneBuildNode 'angel-menu-mcp' 'Jozkah/angel-menu-mcp' 'index.js'
+    CloneBuildNode 'angel-menu-mcp' 'mcp/angel-menu-mcp' 'index.js'
 } elseif ($env:ECHO_SKIP_MCP -eq '1') { Skip 'MCP servers' 'ECHO_SKIP_MCP=1' }
 else { Skip 'MCP servers' 'Node 18+ required' }
 
@@ -189,18 +265,12 @@ if (TierAtLeast 'standard') {
     # as_bundler — prebuilt release binary, pinned with a sha256 in tools.lock.
     $AsOut = Join-Path $BinDir 'as_bundler.exe'
     if (Test-Path $AsOut) { Ok 'as_bundler already installed' }
-    else {
-        $url = LockRef 'asset' 'as_bundler.exe'; $sha = LockPin 'asset' 'as_bundler.exe'
-        if (-not $url) { Skip 'as_bundler' 'not in tools.lock' }
-        elseif (FetchAsset 'as_bundler' $url $AsOut $sha) { Ok 'as_bundler (pinned)' }
-    }
+    elseif (VendorFile 'bin/as_bundler.exe' $AsOut) { Ok 'as_bundler (vendored)' }
 
     # echo-esp-preview — single AngelScript drop-in, straight into the Echo scripts dir.
     $scripts = Join-Path $env:APPDATA 'scripts'
     New-Item -ItemType Directory -Force -Path $scripts | Out-Null
-    $espUrl = LockRef 'raw' 'esp_preview.as'; $espSha = LockPin 'raw' 'esp_preview.as'
-    if (-not $espUrl) { Skip 'esp_preview' 'not in tools.lock' }
-    elseif (FetchAsset 'esp_preview' $espUrl (Join-Path $scripts 'esp_preview.as') $espSha) {
+    if (VendorFile 'scripts/esp_preview.as' (Join-Path $scripts 'esp_preview.as')) {
         Ok "esp_preview.as -> $scripts"
     }
 
@@ -213,10 +283,7 @@ if (TierAtLeast 'standard') {
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
         try {
             $zip = Join-Path $tmp 'lsp.zip'
-            $lspUrl = LockRef 'asset' 'echo-angelscript-lsp-0.0.10.zip'
-            $lspSha = LockPin 'asset' 'echo-angelscript-lsp-0.0.10.zip'
-            if (-not $lspUrl) { throw 'not in tools.lock' }
-            if (-not (FetchAsset 'echo-angelscript-lsp' $lspUrl $zip $lspSha)) { throw 'download failed' }
+            if (-not (VendorFile 'bin/echo-angelscript-lsp-0.0.10.zip' $zip)) { throw 'not in vendor/' }
             Expand-Archive -Path $zip -DestinationPath $tmp -Force
             $vsix = Get-ChildItem $tmp -Filter *.vsix -Recurse | Select-Object -First 1
             if ($vsix) {
@@ -231,18 +298,23 @@ if (TierAtLeast 'standard') {
     if (-not (Have bun)) {
         Sub 'installing Bun (needed by web-mv)...'
         try {
+            # bun ships its own installer; the version it lands is checked against
+            # the pin below, so a substituted binary is visible rather than silent.
             Invoke-RestMethod -UseBasicParsing -Uri 'https://bun.sh/install.ps1' | Invoke-Expression
             $env:PATH = (Join-Path $HOME '.bun\bin') + ';' + $env:PATH
         } catch {}
-        if (Have bun) { Ok "bun $(& bun --version 2>$null)" } else { Skip 'web-mv' 'Bun install failed (https://bun.sh)' }
+        if (Have bun) {
+            $got = (& bun --version 2>$null)
+            $want = LockPin 'toolver' 'bun'
+            if ($want -and ($got -ne $want)) { Skip 'bun' "installed $got, pinned $want" }
+            else { Ok "bun $got" }
+        } else { Skip 'web-mv' 'Bun install failed (https://bun.sh)' }
     }
     if (Have bun) {
         $dir = Join-Path $EchoHome 'web-mv'
-        if (-not (Test-Path (Join-Path $dir '.git'))) {
-            $null = CloneAt 'web-mv' 'Jozkah/web-mv' $dir
-        }
+        $null = VendorCopy 'tools/web-mv' $dir
         if (Test-Path $dir) {
-            Push-Location (Join-Path $dir 'relay'); bun install 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
+            Push-Location (Join-Path $dir 'relay'); bun install --frozen-lockfile 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok "web-mv (run: cd `"$dir\relay`"; bun run start)" } else { Fail 'web-mv' 'bun install failed' }
         } else { Fail 'web-mv' 'clone failed' }
     }
@@ -252,9 +324,7 @@ if (TierAtLeast 'standard') {
     foreach ($name in @('awesome-game-security','gamehacking-cheatsheet')) {
         $out = Join-Path $RefDir "$name.md"
         if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) { Ok "$name already fetched"; continue }
-        $url = LockRef 'raw' "$name.md"; $sha = LockPin 'raw' "$name.md"
-        if (-not $url) { Skip $name 'not in tools.lock'; continue }
-        if (FetchAsset $name $url $out $sha) { Ok "$name ($((Get-Item $out).Length) bytes)" }
+        if (VendorFile "docs/$name.md" $out) { Ok "$name ($((Get-Item $out).Length) bytes)" }
     }
 }
 
@@ -265,8 +335,9 @@ if (TierAtLeast 'standard') {
     $piProfile = Join-Path $EchoHome 'pi'
     New-Item -ItemType Directory -Force -Path (Join-Path $piProfile 'prompts'), (Join-Path $piProfile 'skills') | Out-Null
 
-    $repoSrc = if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'pi'))) { Join-Path $PSScriptRoot 'pi' } else { $null }
-    $base = "https://raw.githubusercontent.com/$Repo/main"
+    $repoSrc = if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'pi'))) { Join-Path $PSScriptRoot 'pi' }
+               elseif ($SrcRoot -and (Test-Path (Join-Path $SrcRoot 'pi'))) { Join-Path $SrcRoot 'pi' }
+               else { $null }
 
     if ($repoSrc) {
         foreach ($f in 'SYSTEM.md','APPEND_SYSTEM.md','AGENTS.md') {
@@ -278,13 +349,7 @@ if (TierAtLeast 'standard') {
         $skillSrc = Join-Path (Split-Path $repoSrc -Parent) 'skills'
         $echoSrc  = Join-Path $repoSrc 'bin\echo.ps1'
     } else {
-        foreach ($f in 'SYSTEM.md','APPEND_SYSTEM.md','AGENTS.md') {
-            try { Invoke-WebRequest -UseBasicParsing -Uri "$base/pi/$f" -OutFile (Join-Path $piProfile $f) -ErrorAction Stop } catch {}
-        }
-        foreach ($p in 'echo-api','echo-esp','echo-reverse','echo-verify') {
-            try { Invoke-WebRequest -UseBasicParsing -Uri "$base/pi/prompts/$p.md" -OutFile (Join-Path $piProfile "prompts\$p.md") -ErrorAction Stop } catch {}
-        }
-        $skillSrc = Join-Path $HOME '.claude\plugins\marketplaces\echo-ai-toolkit\skills'
+        $skillSrc = $null
         $echoSrc  = $null
     }
 
@@ -320,10 +385,8 @@ if (TierAtLeast 'standard') {
         $srcS = if ($repoSrc) { Join-Path (Split-Path $repoSrc -Parent) "scripts\$s" } else { $null }
         $dstS = Join-Path $BinDir $s
         if ($srcS -and (Test-Path $srcS)) { Copy-Item $srcS $dstS -Force }
-        else {
-            try {
-                Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/$Repo/main/scripts/$s" -OutFile $dstS -ErrorAction Stop
-            } catch {}
+        elseif ($SrcRoot -and (Test-Path (Join-Path $SrcRoot "scripts\$s"))) {
+            Copy-Item (Join-Path $SrcRoot "scripts\$s") $dstS -Force
         }
     }
 
@@ -368,23 +431,26 @@ if (TierAtLeast 'standard') {
         try { & $venvPy -c 'import triton' 2>$null; $hasTriton = ($LASTEXITCODE -eq 0) } catch {}
         if ($hasTriton) { Ok 'triton already installed' }
         else {
-            $tritonVer = LockPin 'pip' 'triton-library'
-            $tritonPkg = if ($tritonVer) { "triton-library==$tritonVer" } else { 'triton-library' }
-            & $venvPy -m pip install --quiet --disable-pip-version-check $tritonPkg 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) { Ok 'triton (symbolic execution)' } else { Skip 'triton' 'pip install failed' }
+            $req = if ($Vendor) { Join-Path $Vendor 'python\requirements.lock' } else { $null }
+            if (-not $req -or -not (Test-Path $req)) { Skip 'triton' 'vendor/python/requirements.lock missing' }
+            else {
+                & $venvPy -m pip install --quiet --disable-pip-version-check --require-hashes -r $req 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) { Ok 'triton, capstone, pefile, unicorn (hash-pinned)' }
+                else { Skip 'python packages' 'pip --require-hashes failed (no matching wheel?)' }
+            }
         }
 
         foreach ($pair in @(@('VMProtect-devirtualization','JonathanSalwan/VMProtect-devirtualization'),
                             @('vmp-lazy-unpack','x86rc/vmp-lazy-unpack'))) {
             $name = $pair[0]; $dir = Join-Path $EchoHome $name
-            if (Test-Path (Join-Path $dir '.git')) { Ok "$name already cloned" }
-            elseif (CloneAt $name $pair[1] $dir) { Ok $name }
+            if ((Test-Path $dir) -and (Get-ChildItem $dir -ErrorAction SilentlyContinue)) { Ok "$name already installed" }
+            elseif (VendorCopy "tools/$name" $dir) { Ok "$name (vendored)" }
         }
 
         # vmp-lazy-unpack is a Python package: install editable so `py -m unpack` works.
         $vl = Join-Path $EchoHome 'vmp-lazy-unpack'
         if (Test-Path $vl) {
-            Push-Location $vl; & $venvPy -m pip install --quiet -e . 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
+            Push-Location $vl; & $venvPy -m pip install --quiet --no-deps -e . 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok 'vmp-lazy-unpack (pip -e)' } else { Skip 'vmp-lazy-unpack' 'pip -e failed' }
         }
     }
@@ -417,8 +483,8 @@ if (TierAtLeast 'full') {
     function BuildCMake($name, $repo, [string[]]$extra) {
         $dir = Join-Path $EchoHome $name
         if (-not (Have cmake)) { Skip $name 'cmake not found'; return }
-        if (-not (Test-Path (Join-Path $dir '.git'))) {
-            if (-not (CloneAt $name $repo $dir -Submodules:($extra -contains '--recurse-submodules'))) { return }
+        if (-not (Test-Path $dir) -or -not (Get-ChildItem $dir -ErrorAction SilentlyContinue)) {
+            if (-not (VendorCopy $repo $dir)) { return }
         }
         if (-not (Test-Path $dir)) { Fail $name 'clone failed'; return }
         Push-Location $dir
@@ -428,14 +494,14 @@ if (TierAtLeast 'full') {
         Pop-Location
         if ($rc -eq 0) { Ok $name } else { Skip $name 'cmake build failed (needs a C++ toolchain)' }
     }
-    BuildCMake 'VTIL-Core' 'vtil-project/VTIL-Core' @()
-    BuildCMake 'NoVmp' 'can1357/NoVmp' @('--recurse-submodules','--shallow-submodules')
+    BuildCMake 'VTIL-Core' 'tools/VTIL-Core' @()
+    BuildCMake 'NoVmp' 'tools/NoVmp' @()
 
     # vtil2 — .NET 8.
     if (-not (Have dotnet)) { Skip 'vtil2' 'dotnet (.NET 8 SDK) not found' }
     else {
         $dir = Join-Path $EchoHome 'vtil2'
-        if (-not (Test-Path (Join-Path $dir '.git'))) { $null = CloneAt 'vtil2' 'pop-rip/vtil2' $dir }
+        if (-not (Test-Path $dir) -or -not (Get-ChildItem $dir -ErrorAction SilentlyContinue)) { $null = VendorCopy 'tools/vtil2' $dir }
         if (Test-Path $dir) {
             Push-Location $dir; dotnet build -c Release 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
             if ($rc -eq 0) { Ok 'vtil2' } else { Skip 'vtil2' 'dotnet build failed' }
@@ -449,12 +515,29 @@ if (TierAtLeast 'full') {
 Say 'Writing mcp.json'
 $ghEntry = (Join-Path $EchoHome 'mcp-gamehacking\dist\index.js') -replace '\\','/'
 $amEntry = (Join-Path $EchoHome 'angel-menu-mcp\index.js') -replace '\\','/'
-$reaVer = LockPin 'npm' 'rea-agents'
-$reaArg = if ($reaVer) { "rea-agents@$reaVer" } else { 'rea-agents' }
+# rea-agents: installed from the vendored tarball with npm ci against the vendored
+# lockfile, so the MCP server is hash-pinned and needs no npx resolution at runtime.
+$reaEntry = $null
+$reaDir = Join-Path $EchoHome 'rea'
+$reaTarget = Join-Path $reaDir 'node_modules\rea-agents\scripts\rea.mjs'
+if ((Have node) -and (Have npm)) {
+    if (Test-Path $reaTarget) { $reaEntry = $reaTarget; Ok 'rea already installed' }
+    elseif (VendorCopy 'npm/rea' $reaDir) {
+        Push-Location $reaDir; npm ci --silent 2>&1 | Out-Null; $rc = $LASTEXITCODE; Pop-Location
+        if ($rc -eq 0 -and (Test-Path $reaTarget)) { $reaEntry = $reaTarget; Ok 'rea-agents (vendored, hash-pinned)' }
+        else { Fail 'rea' 'npm ci failed' }
+    }
+}
+$reaVer = LockPin 'npm' 'rea-agents' 
+$reaServer = if ($reaEntry) {
+    [ordered]@{ command='node'; args=@($reaEntry); description='REA: Reverse Engineer Anything - Unity IL2CPP, Godot, native binaries, APK, WASM, firmware' }
+} else {
+    [ordered]@{ command='npx'; args=@('-y',"rea-agents@$reaVer"); description='REA: Reverse Engineer Anything - vendored install unavailable, falling back to npx' }
+}
 $mcp = [ordered]@{
     mcpServers = [ordered]@{
         gamehacking = [ordered]@{ command='node'; args=@($ghEntry); description='mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools' }
-        rea         = [ordered]@{ command='npx';  args=@('-y',$reaArg); description='REA: Reverse Engineer Anything - Unity IL2CPP, Godot, native binaries, APK, WASM, firmware' }
+        rea         = $reaServer
         'angel-menu'= [ordered]@{ command='node'; args=@($amEntry); description='Echo overlay menu control: list_features, get_feature, set_feature, connection_status' }
         radare2     = [ordered]@{ command='r2pm'; args=@('-r','r2mcp'); description='radare2 MCP: disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)' }
         ida         = [ordered]@{ command='uvx';  args=@('ida-mcp','stdio','--agent=echo'); description='IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)' }

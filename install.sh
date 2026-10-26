@@ -53,25 +53,14 @@ tier_at_least() {
 }
 
 # ── tool lock ────────────────────────────────────────────────────────────────
-# tools.lock pins every external artifact, so two installs are the same software.
-# The repo copy wins; under `curl | bash` there is none, so fetch it.
+# tools.lock is the pin record: vendor/ is built from it and `echo update --lock`
+# moves it. The installer only reads it for versions it reports.
 LOCK="$ECHO_HOME/tools.lock"
 mkdir -p "$ECHO_HOME"
-if [ -n "$REPO_SRC" ] && [ -f "$REPO_SRC/tools.lock" ]; then
-  cp -f "$REPO_SRC/tools.lock" "$LOCK" 2>/dev/null
-fi
-if [ ! -s "$LOCK" ]; then
-  $CURL "https://raw.githubusercontent.com/$REPO/main/tools.lock" -o "$LOCK" 2>/dev/null
-fi
-[ -s "$LOCK" ] || printf '\033[1;35m! tools.lock unavailable — falling back to branch heads\033[0m\n'
 
 lock_pin() { # kind name → pin (sha / version / sha256)
   [ -s "$LOCK" ] || return 0
   awk -v k="$1" -v n="$2" '$1==k && $2==n {print $4; exit}' "$LOCK"
-}
-lock_ref() { # kind name → ref (repo, package, or url)
-  [ -s "$LOCK" ] || return 0
-  awk -v k="$1" -v n="$2" '$1==k && $2==n {print $3; exit}' "$LOCK"
 }
 
 verify_sha() { # file expected-sha256
@@ -79,40 +68,9 @@ verify_sha() { # file expected-sha256
   [ -n "$want" ] || return 0
   if have sha256sum; then got=$(sha256sum "$1" 2>/dev/null | cut -d' ' -f1)
   elif have shasum;  then got=$(shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1)
-  else return 0; fi   # no hasher: pinning still pins the URL, integrity is best-effort
+  else return 0; fi   # no hasher: the archive is still pinned by URL and size
   [ "$got" = "$want" ]
 }
-
-fetch_asset() { # name url out [sha256]
-  $CURL "$2" -o "$3" || { fail "$1" "download failed"; return 1; }
-  if ! verify_sha "$3" "$4"; then
-    rm -f "$3"; fail "$1" "sha256 mismatch — upstream asset changed"; return 1
-  fi
-}
-
-clone_at() { # name repo dir [submodules]
-  local name="$1" repo="$2" dir="$3" subs="${4:-0}" sha
-  sha="$(lock_pin clone "$name")"
-  if [ -z "$sha" ]; then
-    sub "cloning $name (branch head — not in tools.lock)…"
-    git clone --depth 1 "https://github.com/$repo" "$dir" >/dev/null 2>&1
-    return $?
-  fi
-  sub "cloning $name @ ${sha:0:7}…"
-  mkdir -p "$dir" || return 1
-  git -C "$dir" init -q >/dev/null 2>&1 || { fail "$name" "git init failed"; return 1; }
-  git -C "$dir" remote add origin "https://github.com/$repo" 2>/dev/null \
-    || git -C "$dir" remote set-url origin "https://github.com/$repo"
-  git -C "$dir" fetch -q --depth 1 origin "$sha" >/dev/null 2>&1 \
-    || { fail "$name" "fetch ${sha:0:7} failed (pinned commit unreachable)"; return 1; }
-  git -C "$dir" checkout -q FETCH_HEAD >/dev/null 2>&1 \
-    || { fail "$name" "checkout ${sha:0:7} failed"; return 1; }
-  if [ "$subs" = "1" ]; then
-    git -C "$dir" submodule update --init --recursive --depth 1 >/dev/null 2>&1 || true
-  fi
-  return 0
-}
-
 # ── 0. prerequisites ─────────────────────────────────────────────────────────
 say "Checking prerequisites"
 have claude || { printf '\n\033[1;31mclaude CLI not found.\033[0m Install Claude Code first: https://claude.com/claude-code\n' >&2; exit 1; }
@@ -123,6 +81,79 @@ have python3 && ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2)" || skip "python3
 have npm  && ok "npm"                          || skip "npm"  "not found"
 
 mkdir -p "$ECHO_HOME" "$BIN_DIR" "$REF_DIR"
+
+# ── 1. vendored toolchain ────────────────────────────────────────────────────
+# Every tool installs from vendor/ in this repo. Nothing below fetches a
+# third-party repository, release asset or README: the only network the installer
+# needs is this repo itself, plus package registries whose artifacts are checked
+# against a lockfile hash.
+say "Vendored toolchain"
+VENDOR=""
+if [ -n "$REPO_SRC" ] && [ -d "$REPO_SRC/vendor" ]; then
+  VENDOR="$REPO_SRC/vendor"
+  ok "vendor/ from the checkout ($(du -sh "$VENDOR" 2>/dev/null | cut -f1))"
+else
+  REF="${ECHO_REF:-main}"
+  mkdir -p "$ECHO_HOME/src"
+  sub "fetching $REPO@$REF (this repo — the only download)…"
+  if $CURL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$REF" -o "$ECHO_HOME/src/toolkit.tar.gz" \
+     && tar -xzf "$ECHO_HOME/src/toolkit.tar.gz" -C "$ECHO_HOME/src" 2>/dev/null; then
+    VENDOR="$(ls -d "$ECHO_HOME"/src/echo-ai-toolkit-*/vendor 2>/dev/null | head -1)"
+  fi
+  [ -d "${VENDOR:-/nonexistent}" ] && ok "vendor/ fetched" \
+    || fail "vendor" "could not fetch this repo — clone it and run ./install.sh"
+fi
+
+SRC_ROOT=""
+[ -n "${VENDOR:-}" ] && SRC_ROOT="$(dirname "$VENDOR")"
+
+# tools.lock travels with the same source as vendor/.
+if [ -n "${VENDOR:-}" ] && [ -f "$(dirname "$VENDOR")/tools.lock" ]; then
+  cp -f "$(dirname "$VENDOR")/tools.lock" "$LOCK" 2>/dev/null
+elif [ -n "$REPO_SRC" ] && [ -f "$REPO_SRC/tools.lock" ]; then
+  cp -f "$REPO_SRC/tools.lock" "$LOCK" 2>/dev/null
+fi
+
+# Integrity: vendor/CHECKSUMS.sha256 is generated with vendor/MANIFEST.json.
+vendor_verify() { # name subpath
+  local sums="$VENDOR/CHECKSUMS.sha256"
+  [ -f "$sums" ] || return 0
+  ( cd "$VENDOR" && grep -qE "  $2$" "$sums" 2>/dev/null ) || return 0
+  ( cd "$VENDOR" && grep -E "  $2$" "$sums" | sha256sum -c --quiet - ) 2>/dev/null \
+    && return 0
+  fail "$1" "checksum mismatch in vendor/$2"
+  return 1
+}
+
+vendor_path() { [ -n "${VENDOR:-}" ] && [ -e "$VENDOR/$1" ] && printf '%s' "$VENDOR/$1"; }
+
+vendor_copy() { # subpath dest — replace dest with the vendored tree
+  local src dest
+  src="$(vendor_path "$1")"
+  dest="$2"
+  if [ -z "$src" ]; then
+    skip "$(basename "$1")" "not in vendor/ (clone the repo and re-run)"
+    return 1
+  fi
+  case "$dest" in
+    "$ECHO_HOME"/*) rm -rf "$dest" ;;
+    *) fail "$(basename "$1")" "refusing to replace $dest"; return 1 ;;
+  esac
+  mkdir -p "$dest" && cp -R "$src/." "$dest/" \
+    || { fail "$(basename "$1")" "copy failed"; return 1; }
+  return 0
+}
+
+vendor_file() { # subpath dest [mode] — copy one vendored file
+  local src dest
+  src="$(vendor_path "$1")"
+  dest="$2"
+  if [ -z "$src" ]; then skip "$(basename "$1")" "not in vendor/"; return 1; fi
+  mkdir -p "$(dirname "$dest")" && cp -f "$src" "$dest" \
+    || { fail "$(basename "$1")" "copy failed"; return 1; }
+  [ -n "${3:-}" ] && chmod "$3" "$dest"
+  vendor_verify "$(basename "$1")" "$1"
+}
 
 # ── 1. the plugin ────────────────────────────────────────────────────────────
 say "Installing the $PLUGIN plugin"
@@ -140,47 +171,77 @@ else
 fi
 
 # ── 2. Claude Code companion plugins ─────────────────────────────────────────
+# Both are vendored in vendor/plugins/ and served by this repo's own marketplace,
+# so nothing is fetched from a third-party marketplace.
 say "Claude Code companion plugins"
-add_plugin() { # name marketplace
-  if to 60 claude plugin list | grep -q "^  .* $1@"; then
+add_vendored_plugin() { # name
+  if to 60 claude plugin list | grep -q "$1"; then
     ok "$1 already installed"; return
   fi
-  if to 120 claude plugin marketplace add "$2" >/dev/null; then
-    if to 180 claude plugin install "$1@$3" >/dev/null; then ok "$1"; else skip "$1" "install failed"; fi
+  if to 180 claude plugin install "$1@$PLUGIN" >/dev/null; then
+    ok "$1 (vendored)"
   else
-    skip "$1" "marketplace $2 unreachable"
+    skip "$1" "install from $PLUGIN marketplace failed"
   fi
 }
-add_plugin ponytail  "DietrichGebert/ponytail"                  ponytail
-add_plugin andrej-karpathy-skills "forrestchang/andrej-karpathy-skills" karpathy-skills
+add_vendored_plugin ponytail
+add_vendored_plugin andrej-karpathy-skills
 
 # ── 3. MCP servers ───────────────────────────────────────────────────────────
 say "MCP servers"
 have node && have npm || skip "MCP servers" "Node 18+ required"
 
-clone_build_node() { # name repo entry
-  local name="$1" repo="$2" entry="$3" dir="$ECHO_HOME/$1"
-  if [ -f "$dir/$entry" ]; then ok "$name already built"; return; fi
-  # A multi-GB clone can die partway and leave .git behind without a working tree.
-  # Treat "has .git but no package.json" as a broken clone and start over.
-  if [ -d "$dir/.git" ] && [ ! -f "$dir/package.json" ]; then
-    sub "removing incomplete $name clone…"
-    rm -rf "$dir"
-  fi
-  if [ ! -d "$dir/.git" ]; then
-    sub "cloning $name…"
-    if ! clone_at "$name" "$repo" "$dir"; then
-      rm -rf "$dir"
-      return
-    fi
-  fi
-  sub "building $name (npm install + build — this is the slow step, a few minutes)…"
-  ( cd "$dir" \
-      && npm install --silent >/dev/null 2>&1 \
-      && { node -e "process.exit(require('./package.json').scripts?.build?0:1)" 2>/dev/null \
-             && npm run build --silent >/dev/null 2>&1 || true; } ) \
-    || { fail "$name" "npm install failed"; return; }
+install_vendored_node() { # name vendor-subpath entry
+  local name="$1" sub="$2" entry="$3" dir="$ECHO_HOME/$1"
+  if [ -f "$dir/$entry" ] && [ -d "$dir/node_modules" ]; then ok "$name already installed"; return; fi
+  vendor_copy "$sub" "$dir" || return
+  sub "installing $name dependencies (npm ci, hash-pinned by the vendored lockfile)…"
+  ( cd "$dir" && npm ci --omit=dev --silent >/dev/null 2>&1 ) \
+    || { fail "$name" "npm ci failed"; return; }
   [ -f "$dir/$entry" ] && ok "$name" || fail "$name" "expected $entry after install"
+}
+
+# mcp-gamehacking: 4100+ skills, 3.1 GB of git. It ships as a split archive in this
+# repo's releases rather than in git — GitHub blocks files over 100 MB, and every CI
+# checkout would pay for the whole library. vendor/ARCHIVES pins each part by sha256.
+install_mcp_gamehacking() {
+  local dir="$ECHO_HOME/mcp-gamehacking" entry="dist/index.js"
+  if [ -f "$dir/$entry" ]; then ok "mcp-gamehacking already installed"; return; fi
+  if [ -d "${VENDOR:-/nonexistent}/mcp/mcp-gamehacking" ]; then
+    vendor_copy mcp/mcp-gamehacking "$dir" && ok "mcp-gamehacking (vendored in-tree)" && return
+  fi
+  local meta="${VENDOR:-/nonexistent}/ARCHIVES"
+  [ -f "$meta" ] || { fail "mcp-gamehacking" "vendor/ARCHIVES missing"; return; }
+  local tmp="$ECHO_HOME/src/mcp-gamehacking" url sha n=0
+  rm -rf "$tmp"; mkdir -p "$tmp"
+  grep -v '^#' "$meta" | awk '$1=="mcp-gamehacking" {print $2" "$3}' | sort > "$tmp/parts"
+  [ -s "$tmp/parts" ] || { fail "mcp-gamehacking" "no archive parts listed in vendor/ARCHIVES"; return; }
+  while read -r url sha; do
+    n=$((n+1))
+    sub "downloading archive part $n of $(wc -l < "$tmp/parts")…"
+    $CURL "$url" -o "$tmp/part$(printf '%02d' "$n")" \
+      || { fail "mcp-gamehacking" "part $n download failed"; return; }
+    verify_sha "$tmp/part$(printf '%02d' "$n")" "$sha" \
+      || { fail "mcp-gamehacking" "part $n checksum mismatch"; return; }
+  done < "$tmp/parts"
+  cat "$tmp"/part* > "$tmp/archive.tar.gz"
+  tar -xzf "$tmp/archive.tar.gz" -C "$tmp" \
+    || { fail "mcp-gamehacking" "extract failed"; return; }
+  # The archive is the upstream source tree; the build runs here against the
+  # vendored package-lock, so the dependency tree is hash-pinned.
+  local top
+  top="$(ls -d "$tmp"/mcp-gamehacking* 2>/dev/null | head -1)"
+  [ -n "$top" ] || { fail "mcp-gamehacking" "archive layout unexpected"; return; }
+  rm -rf "$dir" && mv "$top" "$dir"
+  if [ ! -f "$dir/$entry" ] && have npm; then
+    sub "building mcp-gamehacking (npm ci + build)…"
+    ( cd "$dir" && npm ci --silent >/dev/null 2>&1 \
+        && { node -e "process.exit(require('./package.json').scripts?.build?0:1)" 2>/dev/null \
+               && npm run build --silent >/dev/null 2>&1 || true; } ) || true
+  fi
+  [ -f "$dir/$entry" ] \
+    && ok "mcp-gamehacking ($(du -sh "$dir" 2>/dev/null | cut -f1), verified archive)" \
+    || fail "mcp-gamehacking" "missing $entry after extract"
 }
 
 if have node && have npm && [ "${ECHO_SKIP_MCP:-0}" != "1" ]; then
@@ -189,10 +250,9 @@ if have node && have npm && [ "${ECHO_SKIP_MCP:-0}" != "1" ]; then
   if [ "${ECHO_SKIP_GAMEHACKING:-0}" = "1" ]; then
     skip "mcp-gamehacking" "ECHO_SKIP_GAMEHACKING=1"
   else
-    sub "mcp-gamehacking is ~3.1 GB — this is the long step, give it time…"
-    clone_build_node mcp-gamehacking 1llu50ry/mcp-gamehacking dist/index.js
+    install_mcp_gamehacking
   fi
-  clone_build_node angel-menu-mcp Jozkah/angel-menu-mcp index.js
+  install_vendored_node angel-menu-mcp mcp/angel-menu-mcp index.js
 elif [ "${ECHO_SKIP_MCP:-0}" = "1" ]; then
   skip "MCP servers" "ECHO_SKIP_MCP=1"
 fi
@@ -210,40 +270,30 @@ install_as_bundler() {
     *)       skip "as_bundler" "no prebuilt binary for $(uname -s)"; return ;;
   esac
   [ -x "$out" ] && { ok "as_bundler already installed"; return; }
-  local url sha
-  url="$(lock_ref asset "$asset")"; sha="$(lock_pin asset "$asset")"
-  [ -n "$url" ] || { skip "as_bundler" "not in tools.lock"; return; }
-  fetch_asset as_bundler "$url" "$out" "$sha" \
-    && chmod +x "$out" && ok "as_bundler $(basename "$(dirname "$url")")"
+  vendor_file "bin/$asset" "$out" +x && ok "as_bundler (vendored)"
 }
 install_as_bundler
 
 # echo-esp-preview — a single AngelScript drop-in file.
 install_esp_preview() {
-  local target url sha
+  local target
   case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) target="${APPDATA:-$HOME/AppData/Roaming}/scripts/esp_preview.as" ;;
     *)                    target="$REF_DIR/esp_preview.as" ;;
   esac
-  mkdir -p "$(dirname "$target")"
-  url="$(lock_ref raw esp_preview.as)"; sha="$(lock_pin raw esp_preview.as)"
-  [ -n "$url" ] || { skip "esp_preview" "not in tools.lock"; return; }
-  fetch_asset esp_preview "$url" "$target" "$sha" && ok "esp_preview.as -> $target"
+  vendor_file scripts/esp_preview.as "$target" && ok "esp_preview.as -> $target"
 }
 install_esp_preview
 
 # echo-angelscript-lsp — VS Code extension (.vsix inside a release zip).
 install_lsp() {
-  local zip_name="echo-angelscript-lsp-0.0.10.zip" url sha tmp
+  local zip_name="echo-angelscript-lsp-0.0.10.zip" tmp
   have code || { skip "echo-angelscript-lsp" "VS Code 'code' CLI not on PATH"; return; }
   if to 20 code --list-extensions | grep -qi 'echo-angelscript-lsp'; then
     ok "echo-angelscript-lsp already installed"; return
   fi
-  url="$(lock_ref asset "$zip_name")"; sha="$(lock_pin asset "$zip_name")"
-  [ -n "$url" ] || { skip "echo-angelscript-lsp" "not in tools.lock"; return; }
   tmp="$(mktemp -d)"
-  fetch_asset echo-angelscript-lsp "$url" "$tmp/lsp.zip" "$sha" \
-    || { rm -rf "$tmp"; return; }
+  vendor_file "bin/$zip_name" "$tmp/lsp.zip" || { rm -rf "$tmp"; return; }
   unzip -qo "$tmp/lsp.zip" -d "$tmp" 2>/dev/null || { fail "echo-angelscript-lsp" "unzip failed"; rm -rf "$tmp"; return; }
   local vsix; vsix="$(find "$tmp" -name '*.vsix' | head -1)"
   [ -n "$vsix" ] || { fail "echo-angelscript-lsp" "no .vsix in archive"; rm -rf "$tmp"; return; }
@@ -261,16 +311,17 @@ install_web_mv() {
   if ! have bun; then
     sub "installing Bun (needed by web-mv)…"
     if have curl; then
-      curl -fsSL https://bun.sh/install 2>/dev/null | bash >/dev/null 2>&1
+      # bun's installer takes the release tag, so the binary is version-pinned.
+      curl -fsSL https://bun.sh/install 2>/dev/null \
+        | bash -s "bun-v$(lock_pin toolver bun)" >/dev/null 2>&1
       [ -x "$HOME/.bun/bin/bun" ] && export PATH="$HOME/.bun/bin:$PATH"
     fi
     if ! have bun; then skip "web-mv" "Bun install failed (https://bun.sh)"; return; fi
     ok "bun $(bun --version 2>/dev/null)"
   fi
-  if [ ! -d "$dir/.git" ]; then
-    clone_at web-mv Jozkah/web-mv "$dir" || { fail "web-mv" "clone failed"; return; }
-  fi
-  ( cd "$dir/relay" && bun install >/dev/null 2>&1 ) \
+  vendor_copy tools/web-mv "$dir" || return
+  # bun.lock is vendored, so the dependency tree is hash-pinned.
+  ( cd "$dir/relay" && bun install --frozen-lockfile >/dev/null 2>&1 ) \
     && ok "web-mv (run: cd $dir/relay && bun run start)" || fail "web-mv" "bun install failed"
 }
 install_web_mv
@@ -278,13 +329,10 @@ install_web_mv
 # Reference docs — the value is the curated list itself, so fetch the README
 # rather than cloning. awesome-game-security is 3.19 GB on disk; its README is
 # 435 KB and contains everything an AI needs from it.
-fetch_doc() { # name — URL and sha256 come from tools.lock
-  local out="$REF_DIR/$1.md" url sha
+fetch_doc() { # name — vendored copy of the upstream README
+  local out="$REF_DIR/$1.md"
   [ -s "$out" ] && { ok "$1 already fetched"; return; }
-  url="$(lock_ref raw "$1.md")"; sha="$(lock_pin raw "$1.md")"
-  [ -n "$url" ] || { skip "$1" "not in tools.lock"; return; }
-  fetch_asset "$1" "$url" "$out" "$sha" && [ -s "$out" ] \
-    && ok "$1 ($(wc -c < "$out") bytes)"
+  vendor_file "docs/$1.md" "$out" && ok "$1 ($(wc -c < "$out") bytes)"
 }
 fetch_doc awesome-game-security
 fetch_doc gamehacking-cheatsheet
@@ -317,18 +365,15 @@ install_pi() {
     done
     [ -f "$src/bin/echo" ] && cp -f "$src/bin/echo" "$BIN_DIR/echo"
   else
-    local base="https://raw.githubusercontent.com/$REPO/main"
+    # The tarball fetched for vendor/ already contains pi/ and skills/.
+    local src2="$SRC_ROOT"
     for f in SYSTEM.md APPEND_SYSTEM.md AGENTS.md; do
-      $CURL "$base/pi/$f" -o "$profile/$f"
+      [ -f "$src2/pi/$f" ] && cp -f "$src2/pi/$f" "$profile/$f"
     done
-    for p in echo-api echo-esp echo-reverse echo-verify; do
-      $CURL "$base/pi/prompts/$p.md" -o "$profile/prompts/$p.md"
-    done
-    $CURL "$base/pi/bin/echo" -o "$BIN_DIR/echo"
+    cp -f "$src2"/pi/prompts/*.md "$profile/prompts/" 2>/dev/null
+    [ -f "$src2/pi/bin/echo" ] && cp -f "$src2/pi/bin/echo" "$BIN_DIR/echo"
     local n=0
-    # Skills are fetched from the marketplace clone the plugin manager keeps.
-    local skill_src
-    skill_src="$(ls -d "$HOME"/.claude/plugins/marketplaces/echo-ai-toolkit/skills 2>/dev/null | head -1)"
+    local skill_src="$src2/skills"
     if [ -n "$skill_src" ] && [ -d "$skill_src" ]; then
       local d name
       for d in "$skill_src"/*/; do
@@ -346,9 +391,8 @@ install_pi() {
   for s in echo.mjs echo-update.sh echo-doctor.sh; do
     if [ -f "$REPO_SRC/scripts/$s" ]; then
       cp -f "$REPO_SRC/scripts/$s" "$BIN_DIR/$s" && chmod +x "$BIN_DIR/$s"
-    else
-      $CURL "https://raw.githubusercontent.com/$REPO/main/scripts/$s" -o "$BIN_DIR/$s" 2>/dev/null \
-        && chmod +x "$BIN_DIR/$s"
+    elif [ -f "$SRC_ROOT/scripts/$s" ]; then
+      cp -f "$SRC_ROOT/scripts/$s" "$BIN_DIR/$s" && chmod +x "$BIN_DIR/$s"
     fi
   done
 
@@ -392,7 +436,7 @@ JSON
   if have pi; then
     ok "pi $(pi --version 2>/dev/null | head -1)"
   else
-    skip "pi binary" "install: curl -fsSL https://pi.dev/install.sh | sh  (needs Node 22.19+)"
+    skip "pi binary" "install: npm install -g @earendil-works/pi-coding-agent@$(lock_pin toolver pi)  (needs Node 22.19+)"
   fi
 }
 install_pi
@@ -432,28 +476,32 @@ if have python3; then
   }
 
   # Triton — symbolic execution. The PyPI package is "triton-library" (NOT "triton",
-  # which is OpenAI's GPU compiler). Version comes from tools.lock.
-  TRITON="triton-library"
-  TRITON_VER="$(lock_pin pip triton-library)"
-  [ -n "$TRITON_VER" ] && TRITON="triton-library==$TRITON_VER"
+  # which is OpenAI's GPU compiler). Every artifact is hash-pinned by
+  # vendor/python/requirements.lock, so the registry cannot substitute anything.
+  REQ="$VENDOR/python/requirements.lock"
   if "$VENV/bin/python" -c 'import triton' >/dev/null 2>&1 || python3 -c 'import triton' >/dev/null 2>&1; then
     ok "triton already installed"
+  elif [ -f "$REQ" ]; then
+    $PIP install --quiet --disable-pip-version-check --require-hashes -r "$REQ" >/dev/null 2>&1 \
+      && ok "triton, capstone, pefile, unicorn (hash-pinned)" \
+      || skip "python packages" "pip --require-hashes failed (no matching wheel for this Python?)"
   else
-    pip_install "triton (symbolic execution)" "$TRITON"
+    skip "triton" "vendor/python/requirements.lock missing"
   fi
 
-  clone_py() { # name repo
+  install_py_tree() { # name vendor-subpath
     local dir="$ECHO_HOME/$1"
-    if [ -d "$dir/.git" ]; then ok "$1 already cloned"; return; fi
-    clone_at "$1" "$2" "$dir" && ok "$1"
+    if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then ok "$1 already installed"; return; fi
+    vendor_copy "$2" "$dir" && ok "$1 (vendored)"
   }
-  clone_py VMProtect-devirtualization JonathanSalwan/VMProtect-devirtualization
-  clone_py vmp-lazy-unpack             x86rc/vmp-lazy-unpack
+  install_py_tree VMProtect-devirtualization tools/VMProtect-devirtualization
+  install_py_tree vmp-lazy-unpack             tools/vmp-lazy-unpack
 
   # vmp-lazy-unpack is a Python package: install it editable so `py -m unpack` works.
+  # Its dependencies come from the hash-pinned lock above, so --no-deps here.
   if [ -d "$ECHO_HOME/vmp-lazy-unpack" ]; then
-    ( cd "$ECHO_HOME/vmp-lazy-unpack" && $PIP install --quiet -e . >/dev/null 2>&1 ) \
-      && ok "vmp-lazy-unpack (pip -e)" || skip "vmp-lazy-unpack" "pip -e failed (Windows-only tool)"
+    ( cd "$ECHO_HOME/vmp-lazy-unpack" && $PIP install --quiet --no-deps -e . >/dev/null 2>&1 ) \
+      && ok "vmp-lazy-unpack (pip -e, deps hash-pinned)" || skip "vmp-lazy-unpack" "pip -e failed (Windows-only tool)"
   fi
 
   [ -x "$VENV/bin/python" ] && sub "use the venv: source $VENV/bin/activate"
@@ -489,23 +537,23 @@ have dotnet || pkg_install "dotnet SDK 8" dotnet-sdk-8.0 dotnet Microsoft.DotNet
 { have llvm-config || have opt; } || pkg_install LLVM llvm llvm LLVM.LLVM
 
 # VTIL-Core / NoVmp — C++ via CMake. NoVmp vendors VTIL-Core as a submodule.
-build_cmake() { # name repo submodules
-  local name="$1" repo="$2" subs="${3:-0}" dir="$ECHO_HOME/$1"
+build_cmake() { # name vendor-subpath
+  local name="$1" sub="$2" dir="$ECHO_HOME/$1"
   have cmake || { skip "$name" "cmake not found"; return; }
-  if [ ! -d "$dir/.git" ]; then
-    clone_at "$name" "$repo" "$dir" "$subs" || { fail "$name" "clone failed"; return; }
+  if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+    vendor_copy "$sub" "$dir" || return
   fi
   ( cd "$dir" && cmake -B build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 \
       && cmake --build build --config Release -j >/dev/null 2>&1 ) \
     && ok "$name" || skip "$name" "cmake build failed (needs a C++ toolchain)"
 }
-build_cmake VTIL-Core vtil-project/VTIL-Core
-build_cmake NoVmp     can1357/NoVmp        1
+build_cmake VTIL-Core tools/VTIL-Core
+build_cmake NoVmp     tools/NoVmp
 
 # vtil2 — .NET 8.
 if have dotnet; then
-  if [ ! -d "$ECHO_HOME/vtil2/.git" ]; then
-    clone_at vtil2 pop-rip/vtil2 "$ECHO_HOME/vtil2" >/dev/null 2>&1
+  if [ ! -d "$ECHO_HOME/vtil2" ] || [ -z "$(ls -A "$ECHO_HOME/vtil2" 2>/dev/null)" ]; then
+    vendor_copy tools/vtil2 "$ECHO_HOME/vtil2" >/dev/null 2>&1
   fi
   if [ -d "$ECHO_HOME/vtil2" ]; then
     ( cd "$ECHO_HOME/vtil2" && dotnet build -c Release >/dev/null 2>&1 ) \
@@ -522,9 +570,19 @@ fi
 say "Writing .mcp.json"
 GH_ENTRY="$ECHO_HOME/mcp-gamehacking/dist/index.js"
 AM_ENTRY="$ECHO_HOME/angel-menu-mcp/index.js"
-REA_ARG="rea-agents"
-REA_VER="$(lock_pin npm rea-agents)"
-[ -n "$REA_VER" ] && REA_ARG="rea-agents@$REA_VER"
+# rea-agents: installed from the vendored tarball with npm ci against the vendored
+# lockfile, so the MCP server is hash-pinned and needs no npx resolution at runtime.
+REA_ENTRY=""
+install_rea() {
+  local dir="$ECHO_HOME/rea" entry="$ECHO_HOME/rea/node_modules/rea-agents/scripts/rea.mjs"
+  if [ -f "$entry" ]; then REA_ENTRY="$entry"; ok "rea already installed"; return; fi
+  vendor_copy npm/rea "$dir" || return
+  ( cd "$dir" && npm ci --silent >/dev/null 2>&1 ) \
+    || { fail "rea" "npm ci failed"; return; }
+  [ -f "$entry" ] && { REA_ENTRY="$entry"; ok "rea-agents $(lock_pin npm rea-agents) (vendored, hash-pinned)"; } \
+    || fail "rea" "expected $entry"
+}
+have node && have npm && install_rea
 {
   printf '{\n  "mcpServers": {\n'
   first=1
@@ -535,7 +593,11 @@ REA_VER="$(lock_pin npm rea-agents)"
       "$1" "$2" "$3" "$4"
   }
   add_server gamehacking node "[\"$GH_ENTRY\"]" "mcp-gamehacking: 4100+ game hacking skills, 75 specialist agents, 19+ MCP tools"
-  add_server rea npx "[\"-y\",\"$REA_ARG\"]" "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, firmware"
+  if [ -n "$REA_ENTRY" ]; then
+    add_server rea node "[\"$REA_ENTRY\"]" "REA: Reverse Engineer Anything — Unity IL2CPP, Godot, native binaries, APK, WASM, firmware"
+  else
+    add_server rea npx "[\"-y\",\"rea-agents@$(lock_pin npm rea-agents)\"]" "REA: Reverse Engineer Anything — vendored install unavailable, falling back to npx"
+  fi
   add_server angel-menu node "[\"$AM_ENTRY\"]" "Echo overlay menu control: list_features, get_feature, set_feature, connection_status"
   add_server radare2 r2pm '["-r","r2mcp"]' "radare2 MCP: disasm, decompile, search, analysis (install: r2pm -Uci r2mcp)"
   add_server ida uvx '["ida-mcp","stdio","--agent=echo"]' "IDA Pro MCP: decompile, rename, xref, structs (requires IDA 9.4+ with idalib)"

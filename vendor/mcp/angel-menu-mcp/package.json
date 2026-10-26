@@ -1,0 +1,35 @@
+{
+  "name": "angel-menu-mcp",
+  "version": "1.0.0",
+  "description": "MCP server that lets an AI enumerate and toggle an Angel overlay's in-game menu over the /agent-ext WebSocket lane. For automated testing of ESP/aim/radar features.",
+  "type": "module",
+  "bin": {
+    "angel-menu-mcp": "index.js"
+  },
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "angel",
+    "overlay",
+    "esp",
+    "websocket",
+    "game-testing"
+  ],
+  "license": "MIT"
+}

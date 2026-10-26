@@ -15,6 +15,26 @@
       "author": {
         "name": "NetVar1337"
       }
+    },
+    {
+      "name": "ponytail",
+      "description": "Lazy senior dev mode \u2014 the simplest, shortest solution that works. Vendored from DietrichGebert/ponytail (MIT) so the install fetches nothing from a third-party marketplace.",
+      "source": "./vendor/plugins/ponytail",
+      "category": "development",
+      "author": {
+        "name": "Dietrich Gebert",
+        "url": "https://github.com/DietrichGebert"
+      }
+    },
+    {
+      "name": "andrej-karpathy-skills",
+      "description": "Coding-discipline guidelines as skills. Vendored from multica-ai/andrej-karpathy-skills so the install fetches nothing from a third-party marketplace.",
+      "source": "./vendor/plugins/andrej-karpathy-skills",
+      "category": "development",
+      "author": {
+        "name": "multica-ai",
+        "url": "https://github.com/multica-ai/andrej-karpathy-skills"
+      }
     }
   ]
 }

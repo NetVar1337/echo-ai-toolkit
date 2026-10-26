@@ -1,0 +1,3 @@
+# name url sha256
+# mcp-gamehacking: 18 GB tree / 3.1 GB packed — shipped as a release archive, not git.
+# Rebuild with scripts/vendor_archive.sh; install.sh verifies every part.
