@@ -113,7 +113,7 @@ A tool whose prerequisite cannot be satisfied is **skipped with a reason**, neve
 ### 📦 Vendored, not fetched
 
 Every tool, plugin, binary and reference doc above **lives in this repository** under
-[`vendor/`](vendor/) — 272 MB, 3783 files, each recorded by sha256 in `vendor/MANIFEST.json` along
+[`vendor/`](vendor/) — 272 MB, 3 700 files, each recorded by sha256 in `vendor/MANIFEST.json` along
 with its upstream repo, commit and license. A renamed, compromised or deleted upstream cannot
 change what you install.
 

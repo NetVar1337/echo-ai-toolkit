@@ -22,7 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync,
-  chmodSync, statSync, readdirSync, rmSync,
+  chmodSync, statSync, readdirSync, rmSync, renameSync, createWriteStream, createReadStream,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -294,11 +294,77 @@ function copyTree(src, dest) {
   }
 }
 
+// mcp-gamehacking is 3.1 GB of git, so it ships as a split archive in this repo's
+// releases. Same contract as the installer: verify every part, then extract.
+async function installArchive(vendor) {
+  const dir = join(ECHO_HOME, 'mcp-gamehacking');
+  if (existsSync(join(dir, 'dist', 'index.js'))) { ok('mcp-gamehacking already installed'); return; }
+  const meta = join(vendor, 'ARCHIVES');
+  if (!existsSync(meta)) { skip('mcp-gamehacking', 'vendor/ARCHIVES missing'); return; }
+  const parts = readFileSync(meta, 'utf8').split('\n')
+    .filter((l) => l.trim() && !l.trimStart().startsWith('#'))
+    .map((l) => l.trim().split(/\s+/))
+    .filter((f) => f[0] === 'mcp-gamehacking')
+    .map((f) => ({ url: f[1], sha: f[2] }));
+  if (!parts.length) { skip('mcp-gamehacking', 'no archive parts listed'); return; }
+
+  const tmp = join(ECHO_HOME, 'src', 'mcp-gamehacking');
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  const files = [];
+  for (const [i, part] of parts.entries()) {
+    sub(`downloading archive part ${i + 1} of ${parts.length}…`);
+    const out = join(tmp, `part${String(i + 1).padStart(2, '0')}`);
+    try {
+      const res = await fetch(part.url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      writeFileSync(out, Buffer.from(await res.arrayBuffer()));
+    } catch (e) {
+      fail('mcp-gamehacking', `part ${i + 1} download failed (${e.message})`);
+      return;
+    }
+    if (!verify(out, part.sha)) { fail('mcp-gamehacking', `part ${i + 1} checksum mismatch`); return; }
+    files.push(out);
+  }
+
+  const archive = join(tmp, 'archive.tar.gz');
+  const sink = createWriteStream(archive);
+  for (const f of files) {
+    await new Promise((res, rej) => {
+      const rs = createReadStream(f);
+      rs.on('data', (c) => { if (!sink.write(c)) { rs.pause(); sink.once('drain', () => rs.resume()); } });
+      rs.on('end', res);
+      rs.on('error', rej);
+    });
+  }
+  await new Promise((res) => sink.end(res));
+
+  if (run('tar', ['-xzf', archive, '-C', tmp], { inherit: false }).status !== 0) {
+    fail('mcp-gamehacking', 'extract failed');
+    return;
+  }
+  const top = readdirSync(tmp, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name.startsWith('mcp-gamehacking'))
+    .map((d) => join(tmp, d.name))[0];
+  if (!top) { fail('mcp-gamehacking', 'archive layout unexpected'); return; }
+  rmSync(dir, { recursive: true, force: true });
+  renameSync(top, dir);
+  sub('building mcp-gamehacking (npm ci + build)…');
+  if (run('npm', ['ci', '--silent'], { inherit: false, cwd: dir }).status !== 0) {
+    fail('mcp-gamehacking', 'npm ci failed');
+    return;
+  }
+  run('npm', ['run', 'build', '--silent'], { inherit: false, cwd: dir });
+  if (existsSync(join(dir, 'dist', 'index.js'))) ok('mcp-gamehacking (verified archive, built)');
+  else fail('mcp-gamehacking', 'missing dist/index.js after build');
+}
+
 async function updateTools() {
   say('Companion tools');
   const vendor = vendorDir();
   if (!vendor) { fail('vendor/', 'missing — clone the repo or run the installer'); return; }
   ok(`vendor/ ${vendor}`);
+  await installArchive(vendor);
 
   for (const [name, subPath] of Object.entries(VENDOR_SUB)) {
     if (name === 'mcp-gamehacking') continue; // release archive, see vendor/ARCHIVES

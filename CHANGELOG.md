@@ -23,6 +23,8 @@ Supply chain: the installer no longer fetches anything from a third party.
   `scripts/vendor_archive.sh` rebuilds the mirror.
 - The companion plugins are served by this repo's own marketplace from `vendor/plugins/`, so the
   installer no longer adds third-party marketplaces.
+- Upstream test suites are not vendored: `claude plugin test .` runs every `*.test.ts` under the
+  root, and the vendored ones exercise harnesses this repo does not provide.
 
 ### Dependency installs are hash-pinned
 
@@ -36,7 +38,8 @@ Supply chain: the installer no longer fetches anything from a third party.
 
 - `install.sh` / `install.ps1` install from `vendor/`; under `curl | bash` they fetch this repo's
   own tarball once and use that. Every `raw.githubusercontent.com` fetch is gone.
-- `echo update --tools` restores from `vendor/`; `echo update --lock` prints the maintainer steps;
+- `echo update --tools` restores from `vendor/` — including the split mcp-gamehacking archive, which
+  it verifies part by part and then builds; `echo update --lock` prints the maintainer steps;
   `echo doctor` gained `Vendored tools` and per-tree rows.
 - New CI job `vendor`: manifest match, expected trees present, and a host allowlist proving the
   installers reach nothing but this repo and pinned registries.
