@@ -193,9 +193,9 @@ say "MCP servers"
 have node && have npm || skip "MCP servers" "Node 18+ required"
 
 install_vendored_node() { # name vendor-subpath entry
-  local name="$1" sub="$2" entry="$3" dir="$ECHO_HOME/$1"
+  local name="$1" subpath="$2" entry="$3" dir="$ECHO_HOME/$1"
   if [ -f "$dir/$entry" ] && [ -d "$dir/node_modules" ]; then ok "$name already installed"; return; fi
-  vendor_copy "$sub" "$dir" || return
+  vendor_copy "$subpath" "$dir" || return
   sub "installing $name dependencies (npm ci, hash-pinned by the vendored lockfile)…"
   ( cd "$dir" && npm ci --omit=dev --silent >/dev/null 2>&1 ) \
     || { fail "$name" "npm ci failed"; return; }
@@ -539,10 +539,10 @@ have dotnet || pkg_install "dotnet SDK 8" dotnet-sdk-8.0 dotnet Microsoft.DotNet
 
 # VTIL-Core / NoVmp — C++ via CMake. NoVmp vendors VTIL-Core as a submodule.
 build_cmake() { # name vendor-subpath
-  local name="$1" sub="$2" dir="$ECHO_HOME/$1"
+  local name="$1" subpath="$2" dir="$ECHO_HOME/$1"
   have cmake || { skip "$name" "cmake not found"; return; }
   if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
-    vendor_copy "$sub" "$dir" || return
+    vendor_copy "$subpath" "$dir" || return
   fi
   ( cd "$dir" && cmake -B build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 \
       && cmake --build build --config Release -j >/dev/null 2>&1 ) \
